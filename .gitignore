@@ -1,0 +1,17 @@
+# Virtual environments
+.venv
+venv
+
+# Cache files
+*.pyc
+__pycache__/
+.ruff_cache/
+
+# Pycache files
+.idea
+
+# Requirements base file
+/requirements.in
+
+# Data folders
+/data/
