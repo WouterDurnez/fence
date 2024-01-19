@@ -2,7 +2,7 @@
 Base templates for the LLM that can be used to build more complex, modular prompts, Links and Chains.
 """
 
-BASE_TEMPLATE = '''
+BASE_TEMPLATE = """
 Review the following text according to the instructions that follow. Then return the reviewed text in triple backticks, like so:
 
 ```
@@ -49,9 +49,9 @@ Remember, the tone of the next text should be {{ recipe['flavor'] }}.
 {% if 'policy' in recipe %}
 As a final reminder, it is VITAL that you stick to EVERY POLICY : \n<policy>\n{{ recipe['policy'] }}\n</policy>\n\n
 {% endif %}
-'''
+"""
 
-FLAVOR_TEMPLATE = '''
+FLAVOR_TEMPLATE = """
 Rewrite the following text to sound more {{ recipe['flavor'] }}. Then return the reviewed text in triple backticks, like so:
 
 ```
@@ -74,9 +74,9 @@ Do not add any other tags, such as the <input> and </input> tags! Keep the text 
 Remember, the tone of the reviewed text should be {{ recipe['flavor'] }}.
 {% endif %}
 
-'''
+"""
 
-VERBOSITY_TEMPLATE = '''
+VERBOSITY_TEMPLATE = """
 Review the following text for better understanding. {% if recipe['verbosity'] == 'shorter' %}Strongly the number of sentences, while keeping the tone and meaning of the text intact as much as possible.{% elif recipe['verbosity'] == 'longer' %}Expand on the message and go into detail when possible.{% endif %}
 
 Then return the reviewed text in triple backticks, like so:
@@ -100,9 +100,9 @@ Do not add any other tags, such as the <input> and </input> tags!
 {% if 'flavor' in recipe %}
 Do not forget to make the reviewed text significantly {{ recipe['verbosity'] }}!
 {% endif %}
-'''
+"""
 
-POLICY_TEMPLATE = '''
+POLICY_TEMPLATE = """
 Review the following text to make it adhere to the policy or policies that follow. Then return the reviewed text in triple backticks, like so:
 
 ```
@@ -128,7 +128,7 @@ This is the reviewed text.
 Do not add any other tags, such as the <input> and </input> tags! Keep the text about the same length! Do not change the tone of the text!
 
 As a final reminder, it is VITAL that you stick to EVERY POLICY!
-'''
+"""
 
 SPELLING_TEMPLATE = '''
 Review the following text for spelling mistakes. If there are any, correct them. Return the corrected text AND the spelling mistakes in as TOML, delimited by triple backticks. The corrected text should be under an 'output' key, and the spelling mistakes should be under an 'errors' key. 

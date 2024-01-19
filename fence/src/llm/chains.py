@@ -1,15 +1,16 @@
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Iterable, Callable
+from typing import Callable, Iterable
 
-from lambdas.cook.lib.llm.models import LLM, ClaudeInstantLLM
-from lambdas.cook.lib.llm.parsers import Parser
-from lambdas.cook.lib.llm.templates import PromptTemplate
-from lambdas.cook.lib.utils.base import setup_logging
+from fence.src.llm.models import LLM, ClaudeInstantLLM
+from fence.src.llm.parsers import Parser
+from fence.src.llm.templates import PromptTemplate
+from fence.src.utils.base import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
 
 ################
 # Base classes #
@@ -21,7 +22,9 @@ class BaseLink(ABC):
     key.
     """
 
-    def __init__(self, input_keys: Iterable[str], output_key: str = "state", name: str = None):
+    def __init__(
+        self, input_keys: Iterable[str], output_key: str = "state", name: str = None
+    ):
         """
         Initialize the BaseLink object.
 
@@ -49,14 +52,17 @@ class BaseLink(ABC):
         :param kwargs: Additional keyword arguments for the LLM model.
         :return:
         """
-        raise NotImplementedError("Base class <BaseLink> `run` method must be implemented.")
+        raise NotImplementedError(
+            "Base class <BaseLink> `run` method must be implemented."
+        )
+
 
 class BaseChain(ABC):
     """
     BaseChain class that takes a list or set of Link objects, determines the order in which to run them, and does so.
     """
 
-    def __init__(self, links: Iterable[BaseLink], llm: LLM=None):
+    def __init__(self, links: Iterable[BaseLink], llm: LLM = None):
         """
         Initialize the BaseChain object.
 
@@ -79,9 +85,7 @@ class BaseChain(ABC):
         Required keys do not appear as output keys in any other chain.
         """
         input_keys_set = set(
-            input_variable
-            for link in self.links
-            for input_variable in link.input_keys
+            input_variable for link in self.links for input_variable in link.input_keys
         )
         output_keys = set(link.output_key for link in self.links)
         required_keys = input_keys_set - output_keys
@@ -104,15 +108,23 @@ class BaseChain(ABC):
         :param input_dict: Variables for the template.
         :return: Dictionary containing all the input and output variables.
         """
-        raise NotImplementedError("Base class <BaseChain> `run` method must be implemented.")
+        raise NotImplementedError(
+            "Base class <BaseChain> `run` method must be implemented."
+        )
+
 
 ################
 # Link classes #
 ################
 
-class TransformationLink(BaseLink):
 
-    def __init__(self, input_keys: Iterable[str], output_key: str = "output", function: Callable = None):
+class TransformationLink(BaseLink):
+    def __init__(
+        self,
+        input_keys: Iterable[str],
+        output_key: str = "output",
+        function: Callable = None,
+    ):
         """
         Initialize the TransformationLink object.
 
@@ -144,10 +156,11 @@ class TransformationLink(BaseLink):
         # We always return the output under the key 'output', but if the output key is different, we also return it
         # under that key. This allows us to track the output of a specific Link in a Chain, while still having a
         # consistent key for the output of the Link that allows subsequent Links to find the latest output.
-        response_dict = {'output': response}
-        if not self.output_key == 'output':
+        response_dict = {"output": response}
+        if not self.output_key == "output":
             response_dict[self.output_key] = response
         return response_dict
+
 
 class Link(BaseLink):
     """
@@ -156,8 +169,14 @@ class Link(BaseLink):
     variables for the template, and returns a dictionary with the output of the LLM model under the specified key.
     """
 
-    def __init__(self, template: PromptTemplate, output_key: str = "state", llm: LLM = None,
-                 name: str = None, parser: Parser = None):
+    def __init__(
+        self,
+        template: PromptTemplate,
+        output_key: str = "state",
+        llm: LLM = None,
+        name: str = None,
+        parser: Parser = None,
+    ):
         """
         Initialize the Link object.
 
@@ -188,8 +207,7 @@ class Link(BaseLink):
         :return:
         """
 
-        logger.info(f"Running Link: {self.name}")
-        logger.info(f"🔑Input keys: {self.input_keys}")
+        logger.info(f"🖇️ Executing Link: {self.name}")
 
         # Check if an LLM model was provided
         if self.llm is None and kwargs.get("llm") is None:
@@ -210,7 +228,7 @@ class Link(BaseLink):
         # Parse the response
         if self.parser is not None:
             response = self.parser.parse(response)
-            logger.info(f"Parsed response: {response}")
+            logger.debug(f"Parsed response: {response}")
 
         # Build the response dictionary #
         #################################
@@ -221,21 +239,24 @@ class Link(BaseLink):
 
         # If the response is a dictionary, we assume it contains the primary output under the key 'output'
         if isinstance(response, dict):
-            if not 'output' in response.keys():
-                logger.warning(f"Response is a dictionary, but does not contain the key 'state'. Using the full response as the state.")
-                response_dict = {'state': response}
+            if "output" not in response.keys():
+                logger.warning(
+                    "Response is a dictionary, but does not contain the key 'state'. Using the full response as the state."
+                )
+                response_dict = {"state": response}
             else:
-                response_dict = {'state': response['output']}
+                response_dict = {"state": response["output"]}
         elif isinstance(response, str):
-            response_dict = {'state': response}
+            response_dict = {"state": response}
         else:
-            raise TypeError(f"Response must be a dictionary or a string. Got {type(response)}.")
+            raise TypeError(
+                f"Response must be a dictionary or a string. Got {type(response)}."
+            )
 
         # If the output key is not 'output', we also return the *full* output under that key
-        if not self.output_key == 'state':
+        if not self.output_key == "state":
             response_dict[self.output_key] = response
 
-        logger.info(f"🔑 Output key: {list(response_dict.keys())}")
         return response_dict
 
     def __str__(self):
@@ -249,12 +270,13 @@ class Link(BaseLink):
 # Chain classes #
 #################
 
+
 class Chain(BaseChain):
     """
     Chain class that takes a list or set of Link objects, determines the order in which to run them, and does so.
     """
 
-    def __init__(self, links: Iterable[Link], llm: LLM=None):
+    def __init__(self, links: Iterable[Link], llm: LLM = None):
         """
         Initialize the Chain object.
 
@@ -345,7 +367,6 @@ class Chain(BaseChain):
 
         return sorted_links
 
-
     def __call__(self, *args, **kwargs):
         """
         Alias for the run method to allow calling an instance as a function.
@@ -369,7 +390,6 @@ class LinearChain(BaseChain):
         super().__init__(links=links, llm=llm)
 
     def run(self, input_dict):
-
         # Check if an LLM model was provided
         if self.llm is None and any(link.llm is None for link in self.links):
             raise ValueError("An LLM model must be provided.")
@@ -382,12 +402,14 @@ class LinearChain(BaseChain):
 
         # Iterate through Links in order
         for link in self.links:
-
-            logger.info(f"⚙️State keys going in link {link.name}: {list(state_dict.keys())}")
+            # Keep track of state keys
+            incoming_state_keys = set(state_dict.keys())
 
             # Check if state_dict contains all the input keys for the Link
             if not all(input_key in state_dict for input_key in link.input_keys):
-                raise ValueError(f"Input keys {link.input_keys} not found in state_dict.")
+                raise ValueError(
+                    f"Input keys {link.input_keys} not found in state_dict."
+                )
 
             # Run the Link with Chain's LLM model if the Link doesn't have one
             if link.llm is None:
@@ -398,9 +420,19 @@ class LinearChain(BaseChain):
             # Update the state_dict with the output of the Link
             state_dict.update(response_dict)
 
-            logger.info(f"⚙️State keys going out of link {link.name}: {list(state_dict.keys())}")
+            # New state keys
+            outgoing_state_keys = set(state_dict.keys())
+            # State keys that were added by the Link
+            new_state_keys = outgoing_state_keys - incoming_state_keys
+            # State keys removed by the Link
+            removed_state_keys = incoming_state_keys - outgoing_state_keys
+
+            logger.info(
+                f"🔑 State keys: {list(state_dict.keys())} (added: {list(new_state_keys)}, removed: {list(removed_state_keys)})"
+            )
 
         return state_dict
+
 
 if __name__ == "__main__":
     # Instantiate an LLM model
@@ -436,8 +468,12 @@ if __name__ == "__main__":
     print(result["output"])
 
     # Example ConcatLink
-    concatenate = lambda x,y: f"{x} {y}"
-    concat_link = TransformationLink(input_keys=["A", "B"], function=concatenate, output_key="C")
+    def concatenate(x, y):
+        return f"{x} {y}"
+
+    concat_link = TransformationLink(
+        input_keys=["A", "B"], function=concatenate, output_key="C"
+    )
     concat_link2 = TransformationLink(input_keys=["C", "D"], function=concatenate)
     concat_link3 = TransformationLink(input_keys=["X", "Y"], function=concatenate)
 
@@ -447,7 +483,9 @@ if __name__ == "__main__":
 
     # Let's try another one
     linear_chain = LinearChain(llm=claude, links=[link_a, link_b, concat_link3])
-    result_linear = linear_chain(input_dict={"A": "I am", "B": "a calm", "D": "hurricane"})
+    result_linear = linear_chain(
+        input_dict={"A": "I am", "B": "a calm", "D": "hurricane"}
+    )
 
     # Let's see what error a BaseLink run method raises
     base_link = BaseLink(input_keys=["A"], output_key="B")

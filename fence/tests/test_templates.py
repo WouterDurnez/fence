@@ -1,12 +1,14 @@
 import os
-import pytest
-from unittest.mock import Mock
 import tempfile
 
-from lambdas.cook.lib.llm.templates import PromptTemplate
+import pytest
+
+from fence.demo.lib.llm.templates import PromptTemplate
+
 
 def file_opener():
     return "test"
+
 
 def test_prompt_template_initialization():
     """
@@ -17,6 +19,7 @@ def test_prompt_template_initialization():
     assert template.input_variables == ["A"]
     assert template.separator == " "
 
+
 def test_prompt_template_call_alias_for_render():
     """
     Test the __call__ method as an alias for render.
@@ -24,6 +27,7 @@ def test_prompt_template_call_alias_for_render():
     template = PromptTemplate("{{A}}", ["A"])
     rendered = template(A="test")
     assert rendered == "test"
+
 
 def test_prompt_template_addition_of_same_type():
     """
@@ -35,6 +39,7 @@ def test_prompt_template_addition_of_same_type():
     assert merged.source == "{{A}} {{B}}"
     assert set(merged.input_variables) == {"A", "B"}
 
+
 def test_prompt_template_addition_raises_error_for_different_type():
     """
     Test that adding a non-PromptTemplate object raises TypeError.
@@ -42,6 +47,7 @@ def test_prompt_template_addition_raises_error_for_different_type():
     template = PromptTemplate("{{A}}", ["A"])
     with pytest.raises(TypeError):
         _ = template + "not a PromptTemplate"
+
 
 def test_prompt_template_render_with_all_variables_provided():
     """
@@ -51,6 +57,7 @@ def test_prompt_template_render_with_all_variables_provided():
     rendered = template.render(A="test", B="123")
     assert rendered == "test 123"
 
+
 def test_prompt_template_render_raises_error_for_missing_variables():
     """
     Test that rendering a template with missing variables raises ValueError.
@@ -58,6 +65,7 @@ def test_prompt_template_render_raises_error_for_missing_variables():
     template = PromptTemplate("{{A}} {{B}}", ["A", "B"])
     with pytest.raises(ValueError):
         _ = template.render(A="test")
+
 
 def test_prompt_template_equality():
     """
@@ -67,6 +75,7 @@ def test_prompt_template_equality():
     template2 = PromptTemplate("{{A}}", ["A"])
     assert template1 == template2
 
+
 def test_prompt_template_copy():
     """
     Test copying a PromptTemplate instance.
@@ -75,6 +84,7 @@ def test_prompt_template_copy():
     copy = template.copy()
     assert template == copy
     assert template is not copy
+
 
 @pytest.fixture
 def temp_template_file():
@@ -87,6 +97,7 @@ def temp_template_file():
     temp_file.close()
     yield temp_file.name
     os.unlink(temp_file.name)  # Remove the temporary file after the test
+
 
 def test_from_file(temp_template_file):
     """

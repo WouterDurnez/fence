@@ -14,7 +14,6 @@ class Parser(ABC):
 
 
 class TripleBacktickParser(Parser):
-
     def parse(self, input_string: str):
         """
         Parse a string containing triple backticks and return a dictionary.
@@ -27,6 +26,7 @@ class TripleBacktickParser(Parser):
         string = match.group(1).strip()
 
         return string
+
 
 class TOMLParser(Parser):
     def parse(self, input_string: str):

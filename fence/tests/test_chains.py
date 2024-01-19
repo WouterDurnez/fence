@@ -1,9 +1,18 @@
+from unittest.mock import Mock
 
 import pytest
-from unittest.mock import Mock
-from lambdas.cook.lib.llm.chains import BaseLink, BaseChain, TransformationLink, Link, Chain, LinearChain
-from lambdas.cook.lib.llm.models import LLM
-from lambdas.cook.lib.llm.templates import PromptTemplate
+
+from fence.demo.lib.llm.chains import (
+    BaseChain,
+    BaseLink,
+    Chain,
+    LinearChain,
+    Link,
+    TransformationLink,
+)
+from fence.demo.lib.llm.templates import PromptTemplate
+from fence.src.llm.models import LLM
+
 
 @pytest.fixture
 def llm():
@@ -16,6 +25,7 @@ def llm():
     mock_llm.return_value = "mocked response"
     return mock_llm
 
+
 def test_base_link_run_method_raises_error():
     """
     Test case for the run method of the BaseLink class.
@@ -27,6 +37,7 @@ def test_base_link_run_method_raises_error():
         base_link = BaseLink(input_keys=["A"], output_key="B")
         base_link.run(input_dict={"A": "test"})
 
+
 def test_base_chain_run_method_raises_error(llm):
     """
     Test case for the run method of the BaseChain class.
@@ -37,14 +48,18 @@ def test_base_chain_run_method_raises_error(llm):
         base_chain = BaseChain(links=[Mock(BaseLink)], llm=llm)
         base_chain.run(input_dict={"A": "test"})
 
+
 def test_transformation_link_run_method_returns_transformed_input():
     """
     Test case for the run method of the TransformationLink class.
     This test checks if the run method correctly transforms the input using the provided function.
     """
-    transformation_link = TransformationLink(input_keys=["A"], output_key="B", function=lambda x: x.upper())
+    transformation_link = TransformationLink(
+        input_keys=["A"], output_key="B", function=lambda x: x.upper()
+    )
     result = transformation_link.run(input_dict={"A": "test"})
     assert result["output"] == "TEST"
+
 
 def test_link_run_method_without_llm_raises_error():
     """
@@ -55,6 +70,7 @@ def test_link_run_method_without_llm_raises_error():
     with pytest.raises(ValueError):
         link.run(input_dict={"A": "test"})
 
+
 def test_link_run_method_with_llm_returns_mocked_response(llm):
     """
     Test case for the run method of the Link class with a provided LLM.
@@ -63,6 +79,7 @@ def test_link_run_method_with_llm_returns_mocked_response(llm):
     link = Link(template=PromptTemplate("{{A}}", ["A"]), output_key="B", llm=llm)
     result = link.run(input_dict={"A": "test"})
     assert result["output"] == "mocked response"
+
 
 def test_chain_run_method_without_llm_raises_error():
     """
@@ -74,6 +91,7 @@ def test_chain_run_method_without_llm_raises_error():
     with pytest.raises(ValueError):
         chain.run(input_dict={"A": "test"})
 
+
 def test_chain_run_method_with_llm_returns_mocked_response(llm):
     """
     Test case for the run method of the Chain class with a provided LLM.
@@ -84,6 +102,7 @@ def test_chain_run_method_with_llm_returns_mocked_response(llm):
     result = chain.run(input_dict={"A": "test"})
     assert result["output"] == "mocked response"
 
+
 def test_linear_chain_run_method_without_llm_raises_error():
     """
     Test case for the run method of the LinearChain class without providing an LLM.
@@ -93,6 +112,7 @@ def test_linear_chain_run_method_without_llm_raises_error():
     linear_chain = LinearChain(links=[link])
     with pytest.raises(ValueError):
         linear_chain.run(input_dict={"A": "test"})
+
 
 def test_linear_chain_run_method_with_llm_returns_mocked_response(llm):
     """
