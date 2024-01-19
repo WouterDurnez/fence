@@ -1,73 +1,106 @@
+import logging
 from pprint import pprint
-from tomllib import TOMLDecodeError
 
-from data.snippets import snippet
-from lambdas.cook.lib.base_templates import base_template
+from data.snippets import snippet_drunk, snippet
+from lambdas.cook.lib.llm.base_templates import BASE_TEMPLATE, FLAVOR_TEMPLATE, POLICY_TEMPLATE, VERBOSITY_TEMPLATE, SPELLING_TEMPLATE
+from lambdas.cook.lib.llm.chains import Link, LinearChain
 from lambdas.cook.lib.llm.models import ClaudeInstantLLM
+from lambdas.cook.lib.llm.parsers import TOMLParser, TripleBacktickParser
 from lambdas.cook.lib.llm.templates import PromptTemplate
-from lambdas.cook.lib.utils.base import parse_toml
+from lambdas.cook.lib.utils.base import setup_logging, validate_recipe
 
 claude_model = ClaudeInstantLLM(source="test-ai-message-composer")
 
+# Set up logging
+setup_logging(log_level='INFO')
+logger = logging.getLogger(__name__)
 
 def handler(event, context):
+    """
+    Handler for the cook lambda.
+    """
+
     # Parse event
     recipe = event["recipe"]
     input_text = event["input"]
 
-    # Build prompt
-    template = PromptTemplate(
-        template=base_template, input_variables=["input", "recipe"]
-    )
-    prompt = template.render(input=input_text, recipe=recipe)
+    # Validate recipe
+    validate_recipe(recipe)
 
-    # Invoke model
-    response = claude_model(prompt=prompt)
+    # Keys in recipe
+    keys = list(recipe.keys())
 
-    # Parse response
-    try:
-        response_dict = parse_toml(response)
-    except TOMLDecodeError as e:
-        return {
-            "statusCode": 500,
-            "body": {
-                "error": "Failed to parse TOML from LLM response",
-                "message": str(e),
-                "response": response,
-            },
-        }
+    # Potential keys are flavor, policy, verbosity, spelling
+    # We want to order them in this way:
+    # 1. verbosity
+    # 2. policy
+    # 3. flavor
+    # 4. spelling
 
-    # Calculate some metrics
-    response_dict["input_token_words"] = len(response_dict["input"].split())
-    response_dict["reviewed_token_words"] = len(response_dict["reviewed"].split())
+    keys = [key for key in ["verbosity", "policy", "flavor", "spelling"] if key in recipe]
 
-    # Build response
-    response = {
-        "statusCode": 200,
-        "body": response_dict,
+    # Build links for each key
+    spelling_link = Link(name='spelling_link', template=PromptTemplate(template=SPELLING_TEMPLATE, input_variables=["state", "recipe"]), llm=claude_model, parser=TOMLParser(), output_key="spelling_output")
+    policy_link = Link(name='policy_link', template=PromptTemplate(template=POLICY_TEMPLATE, input_variables=["state", "recipe"]), llm=claude_model, parser=TripleBacktickParser(), output_key="policy_output")
+    flavor_link = Link(name='flavor_link', template=PromptTemplate(template=FLAVOR_TEMPLATE, input_variables=["state", "recipe"]), llm=claude_model, parser=TripleBacktickParser(), output_key="flavor_output")
+    verbosity_link = Link(name = 'verbosity_link', template=PromptTemplate(template=VERBOSITY_TEMPLATE, input_variables=["state", "recipe"]), llm=claude_model, parser=TripleBacktickParser(), output_key="verbosity_output")
+
+    # Build chain of links, depending on keys
+    link_map = {
+        "spelling": spelling_link,
+        "policy": policy_link,
+        "flavor": flavor_link,
+        "verbosity": verbosity_link,
     }
 
-    return response
+    links = [link_map[key] for key in keys]
+    chain = LinearChain(links=links, llm=claude_model)
+
+    # Run chain
+    response = chain.run(input_dict={"state": input_text, "recipe": recipe})
+    pprint(response)
+
+    # Build response dict
+    response_dict = {
+        "input": input_text,
+        "reviewed": response,
+        "output": response["state"],
+    }
+
+    # Calculate some metrics
+    response_dict["input_words"] = len(response_dict["input"].split())
+    response_dict["output_words"] = len(response_dict["output"].split())
+
+    # Build response
+    response_dict = {
+        "statusCode": 200,
+        "body": response_dict,
+
+    }
+
+    return response_dict
 
 
 if __name__ == "__main__":
     # Some example recipes
     recipe = dict()
-    recipe |= {
-        "flavor": "severely depressed",
-        #'spelling': True,
-        # "verbosity": "shorter",
-    }
-    # recipe |= {
-    #     "policy": "- Commitment: Do not commit to anything. Do not use any words that could be interpreted as a commitment.\n"
-    #     "- Branding: Make sure to mention the company name - Showpad - at least once. Do not overdo it. Do not mention any other company names.\n"
-    # }
 
+    recipe |= {
+        "flavor": "sarcastic",
+        'spelling': True,
+        "verbosity": "shorter",
+        "policy": ["Commitment: Do not commit to anything. Do not use any words that could be interpreted as a commitment.",
+                     "Branding: Make sure to mention the company name - Showpad - at least once. Do not overdo it. Do not mention any other company names."]
+    }
+
+    # Call handler
     response = handler(
-        {
+        event={
             "recipe": recipe,
             "input": snippet,
         },
-        None,
+        context=None,
     )
-    pprint(response)
+
+    # Print response
+    #pprint(response)

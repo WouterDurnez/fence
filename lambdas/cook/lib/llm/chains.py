@@ -1,35 +1,176 @@
+import logging
+from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Iterable
+from typing import Iterable, Callable
 
-from lambdas.cook.lib.llm.models import ClaudeInstantLLM
+from lambdas.cook.lib.llm.models import LLM, ClaudeInstantLLM
+from lambdas.cook.lib.llm.parsers import Parser
 from lambdas.cook.lib.llm.templates import PromptTemplate
+from lambdas.cook.lib.utils.base import setup_logging
 
+setup_logging()
+logger = logging.getLogger(__name__)
 
-class Chain:
+################
+# Base classes #
+################
+class BaseLink(ABC):
     """
-    Chain class that takes an LLM model, and calls it using the prompt template. Base blocks for building more complex
-    chains. The Chain class is callable, and will call the run method. The run method takes a dictionary of input
+    BaseLink class is a simple input-output building block. It is callable, and will call the run method. The run method
+    takes a dictionary of input variables for the template, and returns a dictionary with the output under the specified
+    key.
+    """
+
+    def __init__(self, input_keys: Iterable[str], output_key: str = "state", name: str = None):
+        """
+        Initialize the BaseLink object.
+
+        :param input_keys: A list of input keys.
+        :param output_key: The output key.
+        """
+        self.llm = None
+        self.input_keys = input_keys if input_keys is not None else []
+        self.output_key = output_key
+        self.name = name
+
+    def __call__(self, **kwargs):
+        """
+        Alias for the run method to allow calling an instance as a function.
+        :param kwargs: Keyword arguments to be passed to the run method.
+        :return: Output of the run method.
+        """
+        return self.run(**kwargs)
+
+    @abstractmethod
+    def run(self, input_dict: dict, **kwargs):
+        """
+        Run the link.
+        :param input_dict: Values for the input variables.
+        :param kwargs: Additional keyword arguments for the LLM model.
+        :return:
+        """
+        raise NotImplementedError("Base class <BaseLink> `run` method must be implemented.")
+
+class BaseChain(ABC):
+    """
+    BaseChain class that takes a list or set of Link objects, determines the order in which to run them, and does so.
+    """
+
+    def __init__(self, links: Iterable[BaseLink], llm: LLM=None):
+        """
+        Initialize the BaseChain object.
+
+        :param links: A set of Link objects.
+        """
+        self.links = links
+        self.llm = llm
+
+    def __call__(self, *args, **kwargs):
+        """
+        Alias for the run method to allow calling an instance as a function.
+        :param kwargs: Keyword arguments to be passed to the run method.
+        :return: Output of the run method.
+        """
+        return self.run(*args, **kwargs)
+
+    def _find_and_validate_keys(self, input_keys):
+        """
+        Find all input and output keys in the chain set, determine which input keys are required, and validate the input keys.
+        Required keys do not appear as output keys in any other chain.
+        """
+        input_keys_set = set(
+            input_variable
+            for link in self.links
+            for input_variable in link.input_keys
+        )
+        output_keys = set(link.output_key for link in self.links)
+        required_keys = input_keys_set - output_keys
+
+        # Validate input keys
+        if input_keys is None:
+            raise ValueError(f"The following input keys are required: {required_keys}")
+        elif not isinstance(input_keys, Iterable):
+            raise TypeError("Input_keys must be an iterable")
+
+        # Check if all required keys are present
+        if not required_keys.issubset(input_keys):
+            raise ValueError(f"The following input keys are required: {required_keys}")
+
+    @abstractmethod
+    def run(self, input_dict):
+        """
+        Run the Links in the correct order based on the dependencies in the graph.
+
+        :param input_dict: Variables for the template.
+        :return: Dictionary containing all the input and output variables.
+        """
+        raise NotImplementedError("Base class <BaseChain> `run` method must be implemented.")
+
+################
+# Link classes #
+################
+
+class TransformationLink(BaseLink):
+
+    def __init__(self, input_keys: Iterable[str], output_key: str = "output", function: Callable = None):
+        """
+        Initialize the TransformationLink object.
+
+        :param input_keys: A list of input keys.
+        :param output_key: The output key.
+        :param function: The transformation function.
+        """
+        super().__init__(input_keys, output_key)
+        self.function = function
+
+    def run(self, input_dict: dict, **kwargs):
+        """
+        Run the link.
+        :param input_dict: Values for the input variables.
+        :param kwargs: Additional keyword arguments for the LLM model.
+        :return:
+        """
+
+        # Get the input variables
+        input_variables = [input_dict[input_key] for input_key in self.input_keys]
+
+        # Call the transformation function
+        response = self.function(*input_variables)
+        logger.debug(f"Response: {response}")
+
+        # Build the response dictionary #
+        #################################
+
+        # We always return the output under the key 'output', but if the output key is different, we also return it
+        # under that key. This allows us to track the output of a specific Link in a Chain, while still having a
+        # consistent key for the output of the Link that allows subsequent Links to find the latest output.
+        response_dict = {'output': response}
+        if not self.output_key == 'output':
+            response_dict[self.output_key] = response
+        return response_dict
+
+class Link(BaseLink):
+    """
+    Link class that takes an LLM model, and calls it using the prompt template. Base blocks for building more complex
+    chains. The Link class is callable, and will call the run method. The run method takes a dictionary of input
     variables for the template, and returns a dictionary with the output of the LLM model under the specified key.
     """
 
-    def __init__(
-        self,
-        template: PromptTemplate,
-        output_key: str = "output",
-        llm=None,
-        name: str = None,
-    ):
+    def __init__(self, template: PromptTemplate, output_key: str = "state", llm: LLM = None,
+                 name: str = None, parser: Parser = None):
         """
-        Initialize the Chain object.
+        Initialize the Link object.
 
-        :param name: Name of the chain.
+        :param name: Name of the Link.
         :param llm: An LLM model object.
         :param template: A PromptTemplate object.
         """
+        self.template = template
+        super().__init__(template.input_variables, output_key)
         self.name = name
         self.llm = llm
         self.template = template
-        self.output_key = output_key
+        self.parser = parser
 
     def __call__(self, **kwargs):
         """
@@ -41,67 +182,113 @@ class Chain:
 
     def run(self, input_dict: dict, **kwargs):
         """
-        Run the Chain.
+        Run the link.
         :param input_dict: Variables for the template.
         :param kwargs: Additional keyword arguments for the LLM model.
         :return:
         """
+
+        logger.info(f"Running Link: {self.name}")
+        logger.info(f"- Input keys: {self.input_keys}")
+
         # Check if an LLM model was provided
         if self.llm is None and kwargs.get("llm") is None:
             raise ValueError("An LLM model must be provided.")
 
+        # Render the template
         prompt = self.template(**input_dict)
+        logger.debug(f"Prompt: {prompt}")
+
+        # Determine if the LLM model is provided as a keyword argument,
+        # otherwise use the LLM model of the Link
         llm = kwargs.pop("llm", self.llm)
-        return {self.output_key: llm(prompt, **kwargs)}
+
+        # Call the LLM model
+        response = llm(prompt, **kwargs)
+        logger.debug(f"Response: {response}")
+
+        # Parse the response
+        if self.parser is not None:
+            response = self.parser.parse(response)
+            logger.debug(f"Parsed response: {response}")
+
+        # Build the response dictionary #
+        #################################
+
+        # We always return the output under the key 'output', but if the output key is different, we also return it
+        # under that key. This allows us to track the output of a specific Link in a Chain, while still having a
+        # consistent key for the output of the Link that allows subsequent Links to find the latest output.
+
+        # If the response is a dictionary, we assume it contains the primary output under the key 'output'
+        if isinstance(response, dict):
+            if not 'output' in response.keys():
+                logger.warning(f"Response is a dictionary, but does not contain the key 'state'. Using the full response as the state.")
+                response_dict = {'state': response}
+            else:
+                response_dict = {'state': response['output']}
+        elif isinstance(response, str):
+            response_dict = {'state': response}
+        else:
+            raise TypeError(f"Response must be a dictionary or a string. Got {type(response)}.")
+
+        # If the output key is not 'output', we also return the *full* output under that key
+        if not self.output_key == 'state':
+            response_dict[self.output_key] = response
+
+        logger.info(f" >>> Output key: {list(response_dict.keys())}")
+        return response_dict
 
     def __str__(self):
-        return f"Chain: {f'{self.name} ' if self.name else ''}<{self.template.input_variables}> -> <{self.output_key}>"
+        return f"Link: {f'{self.name} ' if self.name else ''}<{self.template.input_variables}> -> <{self.output_key}>"
 
     def __repr__(self):
         return str(self)
 
 
-class ChainSet:
+#################
+# Chain classes #
+#################
+
+class Chain(BaseChain):
     """
-    ChainSet class that takes a list or set of Chain objects, determines the order in which to run them, and does so.
+    Chain class that takes a list or set of Link objects, determines the order in which to run them, and does so.
     """
 
-    def __init__(self, chain_set: Iterable[Chain], llm=None):
+    def __init__(self, links: Iterable[Link], llm: LLM=None):
         """
-        Initialize the ChainSet object.
+        Initialize the Chain object.
 
-        :param chain_set: A set of Chain objects.
+        :param links: A set of Link objects.
         """
-        self.chain_set = chain_set
+        super().__init__(links=links, llm=llm)
         self.graph = defaultdict(list)
-        self.llm = llm
 
         # Build the graph
         self._build_graph()
 
     def _build_graph(self):
         """
-        Get the input and output variables of each Chain in the ChainSet, and build a graph of dependencies.
+        Get the input and output variables of each Link in the Chain, and build a graph of dependencies.
         """
-        for chain in self.chain_set:
-            current_output_key = chain.output_key
-            dependent_chains = [
-                other_chain
-                for other_chain in self.chain_set
-                if current_output_key in other_chain.template.input_variables
+        for link in self.links:
+            current_output_key = link.output_key
+            dependent_links = [
+                other_link
+                for other_link in self.links
+                if current_output_key in other_link.input_keys
             ]
-            self.graph[chain].extend(dependent_chains)
+            self.graph[link].extend(dependent_links)
 
     def run(self, input_dict):
         """
-        Run the chains in the correct order based on the dependencies in the graph.
+        Run the Links in the correct order based on the dependencies in the graph.
 
         :param input_dict: Variables for the template.
-        :return: Dictionary containing the output of each chain.
+        :return: Dictionary containing all the input and output variables.
         """
 
         # Check if an LLM model was provided
-        if self.llm is None and any(chain.llm is None for chain in self.chain_set):
+        if self.llm is None and any(link.llm is None for link in self.links):
             raise ValueError("An LLM model must be provided.")
 
         # Validate the input keys
@@ -110,65 +297,54 @@ class ChainSet:
         # Initialize the output dictionary with the input dictionary, which will be passed to the first chain
         output_dict = input_dict
 
-        # Iterate through chains in topological order
-        for chain in self._topological_sort():
-
-            # Run the chain with Set's LLM model if the chain doesn't have one
-            if chain.llm is None:
-                output_dict.update(chain.run(input_dict=output_dict, llm=self.llm))
+        # Iterate through Links in topological order
+        for link in self._topological_sort():
+            # Run the Link with Chain's LLM model if the Link doesn't have one
+            if link.llm is None:
+                output_dict.update(link.run(input_dict=output_dict, llm=self.llm))
             else:
-                output_dict.update(chain.run(input_dict=output_dict))
+                output_dict.update(link.run(input_dict=output_dict))
 
         return output_dict
 
     def _topological_sort(self):
         """
-        Perform topological sorting of the chains based on the dependencies in the graph.
+        Perform topological sorting of the Links based on the dependencies in the graph.
         """
         visited = set()
         stack = set()
-        result = []
+        sorted_links = []
 
-        def depth_first_search(chain):
-            nonlocal visited, stack, result
+        def depth_first_search(link: BaseLink):
+            """
+            Perform depth-first search on the graph.
+            :param link: Link to start the search from.
+            :return: None
+            """
+            nonlocal visited, stack, sorted_links
 
-            if chain in stack:
-                # Cycle detected
+            # If the link is already in the stack, we are revisiting it,
+            # which means there is a cycle
+            if link in stack:
                 raise ValueError("Cycle detected in the dependency graph.")
 
-            if chain not in visited:
-                visited.add(chain)
-                stack.add(chain)
+            # Move on to next unvisited link
+            if link not in visited:
+                visited.add(link)
+                stack.add(link)
 
-                for dependent_chain in self.graph[chain]:
-                    depth_first_search(dependent_chain)
+                # Recursively visit all dependent links
+                for dependent_link in self.graph[link]:
+                    depth_first_search(dependent_link)
 
-                stack.remove(chain)
-                result.insert(0, chain)
+                stack.remove(link)
+                sorted_links.insert(0, link)
 
-        for chain in self.chain_set:
-            depth_first_search(chain)
+        for link in self.links:
+            depth_first_search(link)
 
-        return result
+        return sorted_links
 
-    def _find_and_validate_keys(self, input_keys):
-        """
-        Find all input and output keys in the chain set, determine which input keys are required, and validate the input keys.
-        Required keys do not appear as output keys in any other chain.
-        """
-        input_keys_set = set(
-            input_variable
-            for chain in self.chain_set
-            for input_variable in chain.template.input_variables
-        )
-        output_keys = set(chain.output_key for chain in self.chain_set)
-        required_keys = input_keys_set - output_keys
-
-        # Validate input keys
-        if input_keys is None:
-            raise ValueError(f"The following input keys are required: {required_keys}")
-        elif not isinstance(input_keys, Iterable):
-            raise TypeError("Input_keys must be an iterable")
 
     def __call__(self, *args, **kwargs):
         """
@@ -179,37 +355,103 @@ class ChainSet:
         return self.run(*args, **kwargs)
 
 
+class LinearChain(BaseChain):
+    """
+    LinearChain class that takes a list or set of Link objects, and runs them in the order they are provided.
+    """
+
+    def __init__(self, links: Iterable[BaseLink], llm=None):
+        """
+        Initialize the LinearChain object.
+
+        :param links: A set of Link objects.
+        """
+        super().__init__(links=links, llm=llm)
+
+    def run(self, input_dict):
+
+        # Check if an LLM model was provided
+        if self.llm is None and any(link.llm is None for link in self.links):
+            raise ValueError("An LLM model must be provided.")
+
+        # Validate the input keys
+        self._find_and_validate_keys(input_dict)
+
+        # Initialize the output dictionary with the input dictionary, which will be passed to the first chain
+        state_dict = input_dict
+
+        # Iterate through Links in order
+        for link in self.links:
+
+            logger.info(f"⚙️State keys going in link {link.name}: {list(state_dict.keys())}")
+
+            # Check if state_dict contains all the input keys for the Link
+            if not all(input_key in state_dict for input_key in link.input_keys):
+                raise ValueError(f"Input keys {link.input_keys} not found in state_dict.")
+
+            # Run the Link with Chain's LLM model if the Link doesn't have one
+            if link.llm is None:
+                response_dict = link.run(input_dict=state_dict, llm=self.llm)
+            else:
+                response_dict = link.run(input_dict=state_dict)
+
+            # Update the state_dict with the output of the Link
+            state_dict.update(response_dict)
+
+            logger.info(f"⚙️State keys going out of link {link.name}: {list(state_dict.keys())}")
+
+        return state_dict
+
 if __name__ == "__main__":
+    # Instantiate an LLM model
     claude = ClaudeInstantLLM(source="test")
-    # template = PromptTemplate(
-    #     template="Can you define and describe the following to me: {{input}}.",
-    #     input_variables=["input"],
-    # )
-    # chain = Chain(llm=claude, template=template)
-    #
-    # print(chain.run(input_dict={"input": "Spanish inquisition"}))
 
     # Example chains
-    chain_x = Chain(
+    link_a = Link(
         template=PromptTemplate(
             "What's the opposite of {{A}}? Reply with one word.", ["A"]
         ),
         output_key="X",
     )
-    chain_a = Chain(
-        template=PromptTemplate("Write a very short story about {{B}}. Two sentences max.", ["B"]),
+    link_b = Link(
+        template=PromptTemplate(
+            "Write a very short story about {{B}}. Two sentences max.", ["B"]
+        ),
         output_key="Y",
     )
-    chain_b = Chain(
+    link_c = Link(
         template=PromptTemplate(
-            "Write a sarcastic poem using this as inspiration: '{{X}}' and '{{Y}}'", ["X", "Y"]
+            "Write a sarcastic poem using this as inspiration: '{{X}}' and '{{Y}}'",
+            ["X", "Y"],
         ),
         output_key="output",
     )
 
+    # Combine the chains into a set
+    chain = Chain(llm=claude, links=[link_a, link_b, link_c])
 
-    chain_set = ChainSet(llm=claude, chain_set=[chain_x, chain_a, chain_b])
-
-    result = chain_set(input_dict={"A": "calm", "B": "a hurricane"})
+    # Run the chain set
+    result = chain(input_dict={"A": "calm", "B": "a hurricane"})
 
     print(result["output"])
+
+    # Example ConcatLink
+    concatenate = lambda x,y: f"{x} {y}"
+    concat_link = TransformationLink(input_keys=["A", "B"], function=concatenate, output_key="C")
+    concat_link2 = TransformationLink(input_keys=["C", "D"], function=concatenate)
+    concat_link3 = TransformationLink(input_keys=["X", "Y"], function=concatenate)
+
+    # Example LinearChain
+    linear_chain = LinearChain(llm=claude, links=[concat_link, concat_link2])
+    result = linear_chain(input_dict={"A": "I am", "B": "a calm", "D": "hurricane"})
+
+    # Let's try another one
+    linear_chain = LinearChain(llm=claude, links=[link_a, link_b, concat_link3])
+    result_linear = linear_chain(input_dict={"A": "I am", "B": "a calm", "D": "hurricane"})
+
+    # Let's see what error a BaseLink run method raises
+    base_link = BaseLink(input_keys=["A"], output_key="B")
+    try:
+        base_link.run(input_dict={"A": "test"})
+    except Exception as e:
+        print(e)

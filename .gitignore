@@ -15,3 +15,9 @@ __pycache__/
 
 # Data folders
 /data/
+
+# Local env file
+/.env
+
+# Jupyter notebooks
+/notebooks/

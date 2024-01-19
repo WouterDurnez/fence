@@ -1,35 +1,74 @@
-import re
+import json
+import logging
+import os
+import time
 import tomllib
+from datetime import datetime
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+CONF_DIR = Path(__file__).resolve().parent.parent / "conf"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "WARNING")
+
+
+def setup_logging(
+    log_level: str = LOG_LEVEL,
+    format: str = "%(asctime)s [%(levelname)s] - %(message)s",
+):
+    # Convert log level string to uppercase
+    log_level_str = os.environ.get("LOG_LEVEL", log_level).upper()
+
+    # Set up logging with the specified log level
+    log_level = getattr(logging, log_level_str, None)
+    if not isinstance(log_level, int):
+        log_level_str = "WARNING"
+        log_level = logging.WARNING
+        logging.error(
+            "Invalid log level in environment variable, defaulting to WARNING"
+        )
+
+    # Set up logging with timestamped format
+    logging.basicConfig(level=log_level, format=format)
+    logging.root.setLevel(level=log_level)
+
+
+def time_it(f=None, threshold: int = 300):
+    """
+    Timer decorator: shows how long execution of function took.
+    :param f: function to measure
+    :param threshold: threshold for warning
+    :return: /
+    """
+    # Check if the decorator is used without parentheses
+    if f is None:
+        return lambda func: time_it(func, threshold=threshold)
+
+    setup_logging()
+    log = logging.getLogger(__name__)
+
+    def timed(*args, **kwargs):
+        t1 = time.time()
+        res = f(*args, **kwargs)
+        t2 = time.time()
+        duration = round(t2 - t1, 2)
+
+        message = f"Function <{f.__name__}> took {duration} s to execute."
+        if duration > threshold:
+            log.warning(message)
+        else:
+            log.info(message)
+
+        return res
+
+    return timed
+
 
 VALID_FLAVORS = ["sarcastic", "formal", "informal"]
 VALID_VERBOSITY = ["shorter", "longer"]
-
-
-def parse_toml(toml_string: str):
-    """
-    Parse a TOML string and return a dictionary.
-    :param toml_string: text string containing TOML
-    :return: dictionary containing the TOML data
-    """
-
-    # Extract the TOML string from within the triple backticks
-    pattern = re.compile(r"```([\s\S]*?)```")
-    match = pattern.search(toml_string)
-    toml_string = match.group(1)
-
-    # Strip the TOML string of the "toml" prefix
-    if toml_string.startswith("toml"):
-        toml_string = toml_string[4:]
-
-    # Load the TOML string into a dictionary
-    toml_dict = tomllib.loads(toml_string)
-
-    # Strip all string values of leading and trailing whitespace
-    for key, value in toml_dict.items():
-        if isinstance(value, str):
-            toml_dict[key] = value.strip()
-
-    return toml_dict
 
 
 def validate_recipe(recipe: dict):
@@ -56,6 +95,8 @@ def validate_recipe(recipe: dict):
         if not isinstance(recipe["spelling"], bool):
             raise ValueError(f"Invalid spelling: {recipe['spelling']}")
     if "policy" in recipe:
-        if not isinstance(recipe["policy"], str):
+        if not (isinstance(recipe["policy"], list) or isinstance(recipe["policy"], str)):
             raise ValueError(f"Invalid policy: {recipe['policy']}")
-    return True
+        if isinstance(recipe["policy"], str):
+            recipe["policy"] = [recipe["policy"]]
+    return recipe
