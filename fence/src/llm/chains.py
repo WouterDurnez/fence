@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Collection
 
 from fence.src.llm.models import LLM, ClaudeInstantLLM
 from fence.src.llm.parsers import Parser
@@ -45,7 +45,7 @@ class BaseLink(ABC):
         return self.run(**kwargs)
 
     @abstractmethod
-    def run(self, input_dict: dict, **kwargs):
+    def run(self, input_dict: dict = None, **kwargs):
         """
         Run the link.
         :param input_dict: Values for the input variables.
@@ -62,7 +62,7 @@ class BaseChain(ABC):
     BaseChain class that takes a list or set of Link objects, determines the order in which to run them, and does so.
     """
 
-    def __init__(self, links: Iterable[BaseLink], llm: LLM = None):
+    def __init__(self, links: Collection[BaseLink], llm: LLM = None):
         """
         Initialize the BaseChain object.
 
@@ -90,15 +90,19 @@ class BaseChain(ABC):
         output_keys = set(link.output_key for link in self.links)
         required_keys = input_keys_set - output_keys
 
+        # For more than one link, we do not require a state key, as one is always provided by the previous link
+        if len(self.links) > 1:
+            required_keys.discard('state')
+
         # Validate input keys
         if input_keys is None:
             raise ValueError(f"The following input keys are required: {required_keys}")
-        elif not isinstance(input_keys, Iterable):
-            raise TypeError("Input_keys must be an iterable")
+        elif not isinstance(input_keys, Collection):
+            raise TypeError("Input_keys must be a Collection.")
 
         # Check if all required keys are present
         if not required_keys.issubset(input_keys):
-            raise ValueError(f"The following input keys are required: {required_keys}")
+            raise ValueError(f"The following input keys are required: {required_keys}. Missing: {required_keys - set(input_keys)}")
 
     @abstractmethod
     def run(self, input_dict):
@@ -122,7 +126,7 @@ class TransformationLink(BaseLink):
     def __init__(
         self,
         input_keys: Iterable[str],
-        output_key: str = "output",
+        output_key: str = "state",
         function: Callable = None,
     ):
         """
@@ -135,7 +139,7 @@ class TransformationLink(BaseLink):
         super().__init__(input_keys, output_key)
         self.function = function
 
-    def run(self, input_dict: dict, **kwargs):
+    def run(self, input_dict: dict = None, **kwargs):
         """
         Run the link.
         :param input_dict: Values for the input variables.
@@ -156,8 +160,8 @@ class TransformationLink(BaseLink):
         # We always return the output under the key 'output', but if the output key is different, we also return it
         # under that key. This allows us to track the output of a specific Link in a Chain, while still having a
         # consistent key for the output of the Link that allows subsequent Links to find the latest output.
-        response_dict = {"output": response}
-        if not self.output_key == "output":
+        response_dict = {"state": response}
+        if not self.output_key == "state":
             response_dict[self.output_key] = response
         return response_dict
 
@@ -199,7 +203,7 @@ class Link(BaseLink):
         """
         return self.run(**kwargs)
 
-    def run(self, input_dict: dict, **kwargs):
+    def run(self, input_dict: dict = None, **kwargs):
         """
         Run the link.
         :param input_dict: Variables for the template.
@@ -207,11 +211,17 @@ class Link(BaseLink):
         :return:
         """
 
-        logger.info(f"🖇️ Executing Link: {self.name}")
+        logger.info(f"🖇️ Executing Link: {self.name} with input: {input_dict}")
 
         # Check if an LLM model was provided
         if self.llm is None and kwargs.get("llm") is None:
             raise ValueError("An LLM model must be provided.")
+
+        # Check if the input_dict contains all the input keys for the Link
+        if not all(input_key in input_dict for input_key in self.input_keys):
+            raise ValueError(
+                f"Input keys {self.input_keys} not found in input_dict: {input_dict}"
+            )
 
         # Render the template
         prompt = self.template(**input_dict)
@@ -257,6 +267,8 @@ class Link(BaseLink):
         if not self.output_key == "state":
             response_dict[self.output_key] = response
 
+        logger.info(f"🧐 Current state: {response_dict['state']}")
+
         return response_dict
 
     def __str__(self):
@@ -276,7 +288,7 @@ class Chain(BaseChain):
     Chain class that takes a list or set of Link objects, determines the order in which to run them, and does so.
     """
 
-    def __init__(self, links: Iterable[Link], llm: LLM = None):
+    def __init__(self, links: Collection[Link], llm: LLM = None):
         """
         Initialize the Chain object.
 
@@ -321,6 +333,7 @@ class Chain(BaseChain):
 
         # Iterate through Links in topological order
         for link in self._topological_sort():
+
             # Run the Link with Chain's LLM model if the Link doesn't have one
             if link.llm is None:
                 output_dict.update(link.run(input_dict=output_dict, llm=self.llm))
@@ -443,12 +456,14 @@ if __name__ == "__main__":
         template=PromptTemplate(
             "What's the opposite of {{A}}? Reply with one word.", ["A"]
         ),
+        name = 'opposite',
         output_key="X",
     )
     link_b = Link(
         template=PromptTemplate(
-            "Write a very short story about {{B}}. Two sentences max.", ["B"]
+            "What's a superlative version of {{B}}. Reply with one word.", ["B"],
         ),
+        name='superlative',
         output_key="Y",
     )
     link_c = Link(
@@ -456,6 +471,7 @@ if __name__ == "__main__":
             "Write a sarcastic poem using this as inspiration: '{{X}}' and '{{Y}}'",
             ["X", "Y"],
         ),
+        name='sarcastic_poem',
         output_key="output",
     )
 
@@ -463,33 +479,33 @@ if __name__ == "__main__":
     chain = Chain(llm=claude, links=[link_a, link_b, link_c])
 
     # Run the chain set
-    result = chain(input_dict={"A": "calm", "B": "a hurricane"})
+    result = chain(input_dict={"A": "calm", "B": "a storm"})
 
-    print(result["output"])
-
-    # Example ConcatLink
-    def concatenate(x, y):
-        return f"{x} {y}"
-
-    concat_link = TransformationLink(
-        input_keys=["A", "B"], function=concatenate, output_key="C"
-    )
-    concat_link2 = TransformationLink(input_keys=["C", "D"], function=concatenate)
-    concat_link3 = TransformationLink(input_keys=["X", "Y"], function=concatenate)
-
-    # Example LinearChain
-    linear_chain = LinearChain(llm=claude, links=[concat_link, concat_link2])
-    result = linear_chain(input_dict={"A": "I am", "B": "a calm", "D": "hurricane"})
-
-    # Let's try another one
-    linear_chain = LinearChain(llm=claude, links=[link_a, link_b, concat_link3])
-    result_linear = linear_chain(
-        input_dict={"A": "I am", "B": "a calm", "D": "hurricane"}
-    )
-
-    # Let's see what error a BaseLink run method raises
-    base_link = BaseLink(input_keys=["A"], output_key="B")
-    try:
-        base_link.run(input_dict={"A": "test"})
-    except Exception as e:
-        print(e)
+    # print(result["output"])
+    #
+    # # Example ConcatLink
+    # def concatenate(x, y):
+    #     return f"{x} {y}"
+    #
+    # concat_link = TransformationLink(
+    #     input_keys=["A", "B"], function=concatenate, output_key="C"
+    # )
+    # concat_link2 = TransformationLink(input_keys=["C", "D"], function=concatenate)
+    # concat_link3 = TransformationLink(input_keys=["X", "Y"], function=concatenate)
+    #
+    # # Example LinearChain
+    # linear_chain = LinearChain(llm=claude, links=[concat_link, concat_link2])
+    # result = linear_chain(input_dict={"A": "I am", "B": "a calm", "D": "hurricane"})
+    #
+    # # Let's try another one
+    # linear_chain = LinearChain(llm=claude, links=[link_a, link_b, concat_link3])
+    # result_linear = linear_chain(
+    #     input_dict={"A": "I am", "B": "a calm", "D": "hurricane"}
+    # )
+    #
+    # # Let's see what error a BaseLink run method raises
+    # try:
+    #     base_link = BaseLink(input_keys=["A"], output_key="B")
+    #     base_link.run(input_dict={"A": "test"})
+    # except Exception as e:
+    #     print('Gave this error:', e)

@@ -72,7 +72,7 @@ class PromptTemplate:
                     f"Variable {variable} not found in template: {template}"
                 )
 
-    def render(self, **kwargs):
+    def render(self, input_dict: dict=None, **kwargs):
         """
         Render the template with the provided variables.
 
@@ -82,6 +82,9 @@ class PromptTemplate:
 
         :raises ValueError: If any required variable is missing.
         """
+        if input_dict:
+            kwargs.update(input_dict)
+
         missing_variables = [
             variable for variable in self.input_variables if variable not in kwargs
         ]
