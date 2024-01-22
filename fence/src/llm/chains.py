@@ -211,7 +211,7 @@ class Link(BaseLink):
         :return:
         """
 
-        logger.info(f"🖇️ Executing Link: {self.name} with input: {input_dict}")
+        logger.info(f"🖇️ Executing {(f'<{self.name}>') if self.name else ''} Link with input: {input_dict}")
 
         # Check if an LLM model was provided
         if self.llm is None and kwargs.get("llm") is None:
