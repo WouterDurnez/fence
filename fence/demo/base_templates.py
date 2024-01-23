@@ -38,7 +38,7 @@ This is the reviewed text.
 
 Do not add any other tags, such as the <input> and </input> tags!
 
-{% if 'flavor' in recipe %}
+{% if 'verbosity' in recipe %}
 Do not forget to {{ recipe['verbosity'] }} the text as much as possible!
 {% endif %}
 
@@ -68,7 +68,10 @@ Again, your response should be in triple backticks, like so:
 This is the reviewed text.
 ```
 
-Do not add any other tags, such as the <input> and </input> tags! Keep the text about the same length!
+
+Additional guidelines:
+- You must keep the text around the same length! You will be penalized for adding or removing too many words!
+- Do not add any other tags, such as the <input> and </input> tags! 
 
 {% if 'flavor' in recipe %}
 Remember, the tone of the reviewed text should be {{ recipe['flavor'] }}.
@@ -95,7 +98,10 @@ Again, your response should be in triple backticks, like so:
 This is the reviewed text.
 ```
 
-Do not add any other tags, such as the <input> and </input> tags!
+Additional guidelines:
+- You must keep the tone of the text intact! You will be penalized for changing the tone too much!
+- Do not add any other tags, such as the <input> and </input> tags! 
+
 
 {% if 'flavor' in recipe %}
 Do not forget to make the reviewed text significantly {{ recipe['verbosity'] }}!
@@ -125,7 +131,12 @@ Again, your response should be in triple backticks, like so:
 This is the reviewed text.
 ```
 
-Do not add any other tags, such as the <input> and </input> tags! Keep the text about the same length! Do not change the tone of the text!
+
+Additional guidelines:
+- You must keep the text around the same length! You will be penalized for adding or removing too many words!
+- You must keep the tone of the text intact! You will be penalized for changing the tone too much!
+- Do not add any other tags, such as the <input> and </input> tags! 
+
 
 As a final reminder, it is VITAL that you stick to EVERY POLICY!
 """
@@ -160,7 +171,10 @@ output= """*the reviewed text*"""
 errors = [*list of spelling mistakes*]
 ```
 
-Do not add any other tags, such as the <input> and </input> tags!
+Additional guidelines:
+- You must keep the text around the same length! You will be penalized for adding or removing too many words!
+- You must keep the tone of the text intact! You will be penalized for changing the tone too much!
+- Do not add any other tags, such as the <input> and </input> tags!
 '''
 
 BASE_TEMPLATE_TOML = '''

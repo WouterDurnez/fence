@@ -1,5 +1,4 @@
 import logging
-from typing import Dict
 
 from data.snippets import snippet
 from fence.demo.utils import build_links, validate_recipe
@@ -58,10 +57,11 @@ if __name__ == "__main__":
     recipe |= {
         "flavor": "sarcastic",
         "spelling": True,
-        "verbosity": "longer",
+        "verbosity": "shorter",
         "policy": [
             "Commitment: Do not commit to anything. Do not use any words that could be interpreted as a commitment.",
-            "Branding: Make sure to mention the company name - Showpad - at least once. Do not overdo it. Do not mention any other company names.",
+            "Branding: Make sure to mention the company name - Showpad - at least once. Do not overdo it. Do not "
+            "mention any other company names.",
         ],
     }
 

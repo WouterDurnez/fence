@@ -72,7 +72,7 @@ class PromptTemplate:
                     f"Variable {variable} not found in template: {template}"
                 )
 
-    def render(self, input_dict: dict=None, **kwargs):
+    def render(self, input_dict: dict = None, **kwargs):
         """
         Render the template with the provided variables.
 

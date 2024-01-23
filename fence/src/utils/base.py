@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
-from rich.logging import RichHandler, Console
+from rich.logging import Console, RichHandler
 
 load_dotenv()
 
@@ -15,7 +15,8 @@ LOGGING_FORMAT = "%(message)s"
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOG_LEVEL = getattr(logging, LOG_LEVEL)
 
-def setup_logging(log_level: int = LOG_LEVEL):
+
+def setup_logging(log_level: str = LOG_LEVEL):
     # Set up rich logging
     logging.basicConfig(
         level=log_level,
@@ -26,8 +27,6 @@ def setup_logging(log_level: int = LOG_LEVEL):
     logger = logging.getLogger("rich")
     logger.setLevel(log_level)
     return logger
-
-
 
 
 def time_it(f=None, threshold: int = 300):

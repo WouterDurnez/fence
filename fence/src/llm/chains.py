@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Callable, Iterable, Collection
+from typing import Callable, Collection, Iterable
 
 from fence.src.llm.models import LLM, ClaudeInstantLLM
 from fence.src.llm.parsers import Parser
@@ -92,7 +92,7 @@ class BaseChain(ABC):
 
         # For more than one link, we do not require a state key, as one is always provided by the previous link
         if len(self.links) > 1:
-            required_keys.discard('state')
+            required_keys.discard("state")
 
         # Validate input keys
         if input_keys is None:
@@ -102,7 +102,9 @@ class BaseChain(ABC):
 
         # Check if all required keys are present
         if not required_keys.issubset(input_keys):
-            raise ValueError(f"The following input keys are required: {required_keys}. Missing: {required_keys - set(input_keys)}")
+            raise ValueError(
+                f"The following input keys are required: {required_keys}. Missing: {required_keys - set(input_keys)}"
+            )
 
     @abstractmethod
     def run(self, input_dict):
@@ -211,7 +213,9 @@ class Link(BaseLink):
         :return:
         """
 
-        logger.info(f"🖇️ Executing {(f'<{self.name}>') if self.name else ''} Link with input: {input_dict}")
+        logger.info(
+            f"🖇️ Executing {(f'<{self.name}>') if self.name else ''} Link with input: {input_dict}"
+        )
 
         # Check if an LLM model was provided
         if self.llm is None and kwargs.get("llm") is None:
@@ -333,7 +337,6 @@ class Chain(BaseChain):
 
         # Iterate through Links in topological order
         for link in self._topological_sort():
-
             # Run the Link with Chain's LLM model if the Link doesn't have one
             if link.llm is None:
                 output_dict.update(link.run(input_dict=output_dict, llm=self.llm))
@@ -456,14 +459,15 @@ if __name__ == "__main__":
         template=PromptTemplate(
             "What's the opposite of {{A}}? Reply with one word.", ["A"]
         ),
-        name = 'opposite',
+        name="opposite",
         output_key="X",
     )
     link_b = Link(
         template=PromptTemplate(
-            "What's a superlative version of {{B}}. Reply with one word.", ["B"],
+            "What's a superlative version of {{B}}. Reply with one word.",
+            ["B"],
         ),
-        name='superlative',
+        name="superlative",
         output_key="Y",
     )
     link_c = Link(
@@ -471,7 +475,7 @@ if __name__ == "__main__":
             "Write a sarcastic poem using this as inspiration: '{{X}}' and '{{Y}}'",
             ["X", "Y"],
         ),
-        name='sarcastic_poem',
+        name="sarcastic_poem",
         output_key="output",
     )
 
