@@ -1,5 +1,5 @@
 from fence import LLM, Link, PromptTemplate
-from fence.demo.base_templates import (
+from fence.demo_cook.prompt_templates import (
     FLAVOR_TEMPLATE,
     POLICY_TEMPLATE,
     SPELLING_TEMPLATE,

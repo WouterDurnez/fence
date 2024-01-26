@@ -1,7 +1,10 @@
 import logging
+import sys
 
-from data.snippets import snippet
-from fence.demo.utils import build_links, validate_recipe
+sys.path.extend(['/Users/wouter.durnez/Documents/Repositories/test-ai-message-composer'])
+
+from fence.data.snippets import snippet
+from fence.demo_cook.utils import build_links, validate_recipe
 from fence.src.llm.chains import LinearChain
 from fence.src.llm.models import ClaudeInstantLLM
 from fence.src.utils.base import setup_logging
@@ -15,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def handler(event: dict, context: any) -> dict:
     """
-    Handler for the demo lambda.
+    Handler for the demo_cook lambda.
     """
 
     logger.info("👋 Let's rock!")
@@ -51,6 +54,7 @@ def handler(event: dict, context: any) -> dict:
 
 
 if __name__ == "__main__":
+
     # Some example recipes
     recipe = dict()
 

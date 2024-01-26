@@ -2,8 +2,10 @@ import re
 import tomllib
 from abc import ABC, abstractmethod
 
+################
+# Base classes #
+################
 
-# Parser base class
 class Parser(ABC):
     def __init__(self):
         pass
@@ -12,6 +14,9 @@ class Parser(ABC):
     def parse(self, input_string: str):
         pass
 
+#####################
+# Parser subclasses #
+#####################
 
 class TripleBacktickParser(Parser):
     def parse(self, input_string: str):
@@ -54,3 +59,5 @@ class TOMLParser(Parser):
                 toml_dict[key] = value.strip()
 
         return toml_dict
+
+

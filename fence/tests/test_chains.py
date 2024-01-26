@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from fence.demo.lib.llm.chains import (
+from fence.demo_cook.lib.llm.chains import (
     BaseChain,
     BaseLink,
     Chain,
@@ -10,7 +10,7 @@ from fence.demo.lib.llm.chains import (
     Link,
     TransformationLink,
 )
-from fence.demo.lib.llm.templates import PromptTemplate
+from fence.demo_cook.lib.llm.templates import PromptTemplate
 from fence.src.llm.models import LLM
 
 

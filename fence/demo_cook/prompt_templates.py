@@ -80,7 +80,7 @@ Remember, the tone of the reviewed text should be {{ recipe['flavor'] }}.
 """
 
 VERBOSITY_TEMPLATE = """
-Review the following text for better understanding. {% if recipe['verbosity'] == 'shorter' %}Strongly the number of sentences, while keeping the tone and meaning of the text intact as much as possible.{% elif recipe['verbosity'] == 'longer' %}Expand on the message and go into detail when possible.{% endif %}
+Review the following text for better understanding. {% if recipe['verbosity'] == 'shorter' %}Strongly reduce the number of sentences, while keeping the tone and meaning of the text intact as much as possible.{% elif recipe['verbosity'] == 'longer' %}Expand on the message and go into detail when possible.{% endif %}
 
 Then return the reviewed text in triple backticks, like so:
 

@@ -3,7 +3,7 @@ import tempfile
 
 import pytest
 
-from fence.demo.lib.llm.templates import PromptTemplate
+from fence.demo_cook.lib.llm.templates import PromptTemplate
 
 
 def file_opener():
