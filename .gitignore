@@ -13,8 +13,5 @@ __pycache__/
 # Requirements base file
 /requirements.in
 
-# Data folders
-/fence/data/
-
 # Local env file
 /.env
