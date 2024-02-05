@@ -1,7 +1,9 @@
 import logging
 import sys
 
-sys.path.extend(['/Users/wouter.durnez/Documents/Repositories/test-ai-message-composer'])
+sys.path.extend(
+    ["/Users/wouter.durnez/Documents/Repositories/test-ai-message-composer"]
+)
 
 from fence.data.snippets import snippet
 from fence.demo_cook.utils import build_links, validate_recipe
@@ -54,7 +56,6 @@ def handler(event: dict, context: any) -> dict:
 
 
 if __name__ == "__main__":
-
     # Some example recipes
     recipe = dict()
 

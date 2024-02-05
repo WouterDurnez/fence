@@ -1,3 +1,8 @@
+######################
+# LLM output parsers #
+######################
+
+
 import re
 import tomllib
 from abc import ABC, abstractmethod
@@ -6,17 +11,20 @@ from abc import ABC, abstractmethod
 # Base classes #
 ################
 
+
 class Parser(ABC):
     def __init__(self):
         pass
 
     @abstractmethod
     def parse(self, input_string: str):
-        pass
+        raise NotImplementedError
+
 
 #####################
 # Parser subclasses #
 #####################
+
 
 class TripleBacktickParser(Parser):
     def parse(self, input_string: str):
@@ -34,17 +42,19 @@ class TripleBacktickParser(Parser):
 
 
 class TOMLParser(Parser):
-    def parse(self, input_string: str):
+    def parse(self, input_string: str, triple_backticks: bool = True):
         """
         Parse a TOML string and return a dictionary.
         :param input_string: text string containing TOML
         :return: dictionary containing the TOML data
         """
 
-        # Extract the TOML string from within the triple backticks
-        pattern = re.compile(r"```([\s\S]*?)```")
-        match = pattern.search(input_string)
-        toml_string = match.group(1).strip()
+        # If requested, extract the TOML string from within the triple backticks
+        toml_string = (
+            TripleBacktickParser().parse(input_string)
+            if triple_backticks
+            else input_string
+        )
 
         # Strip the TOML string of the "toml" prefix
         if toml_string.startswith("toml"):
@@ -59,5 +69,3 @@ class TOMLParser(Parser):
                 toml_dict[key] = value.strip()
 
         return toml_dict
-
-

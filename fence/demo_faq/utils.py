@@ -10,6 +10,7 @@ from fence.demo_faq.prompt_templates import FAQ_TEMPLATE, SUMMARY_TEMPLATE
 setup_logging()
 logger = logging.getLogger(__name__)
 
+
 def get_approximate_chunk_size(text: str, chunk_size: int) -> int:
     """
     Get approximate chunk size for a given text and chunk size
@@ -37,10 +38,16 @@ def split_text(text: str, chunk_size: int, overlap: float | None = 0.05) -> list
 
     # Calculate chunk size that best fits the target chunk size, targeting equal chunk sizes
     # Core chunk size + overlap should be as close to target chunk size as possible
-    core_chunk_size = get_approximate_chunk_size(text=text, chunk_size=int(chunk_size / (1 + overlap)))
+    core_chunk_size = get_approximate_chunk_size(
+        text=text, chunk_size=int(chunk_size / (1 + overlap))
+    )
 
     # Add overlap to chunk size if overlap is specified
-    chunk_size_with_overlap = (core_chunk_size + int(core_chunk_size * overlap)) if overlap else core_chunk_size
+    chunk_size_with_overlap = (
+        (core_chunk_size + int(core_chunk_size * overlap))
+        if overlap
+        else core_chunk_size
+    )
 
     logger.debug(
         f"Chunking {len(text)} characters into {chunk_size=}-sized chunks with : {core_chunk_size=}, {chunk_size_with_overlap=}"
@@ -71,8 +78,7 @@ def split_text(text: str, chunk_size: int, overlap: float | None = 0.05) -> list
     return chunks
 
 
-
-def build_links(llm:LLM):
+def build_links(llm: LLM):
     """
     Build links for the FAQ chain
     :param llm: LLM model
@@ -81,9 +87,7 @@ def build_links(llm:LLM):
 
     faq_link = Link(
         name="faq_link",
-        template=PromptTemplate(
-            template=FAQ_TEMPLATE, input_variables=["state"]
-        ),
+        template=PromptTemplate(template=FAQ_TEMPLATE, input_variables=["state"]),
         llm=llm,
         parser=TOMLParser(),
         output_key="faq_output",
@@ -99,7 +103,4 @@ def build_links(llm:LLM):
         output_key="summary_output",
     )
 
-    return {
-        'faq': faq_link,
-        'summary': summary_link
-    }
+    return {"faq": faq_link, "summary": summary_link}

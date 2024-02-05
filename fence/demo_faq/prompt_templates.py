@@ -46,11 +46,15 @@ Now please generate a new summary that covers the essence of the summaries above
 Return the summary in triple backticks. I will tip generously if you make it sound like a standalone text.
 """
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     from fence.src.llm.templates import PromptTemplate
 
-    summary_template = PromptTemplate(template=SUMMARY_TEMPLATE, input_variables=['summaries'])
+    summary_template = PromptTemplate(
+        template=SUMMARY_TEMPLATE, input_variables=["summaries"]
+    )
 
-    print(summary_template.render({'summaries': ['This is the first summary.', 'This is the second summary.']}))
-
+    print(
+        summary_template.render(
+            {"summaries": ["This is the first summary.", "This is the second summary."]}
+        )
+    )

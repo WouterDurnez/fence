@@ -1,3 +1,8 @@
+#################
+# Model classes #
+#################
+
+from abc import ABC, abstractmethod
 import json
 import math
 from typing import Tuple
@@ -6,10 +11,11 @@ import boto3
 from datadog_lambda.metric import lambda_metric
 
 
-class LLM:
+class LLM(ABC):
     def __call__(self, prompt: str, **kwargs) -> str:
         return self.invoke(prompt, **kwargs)
 
+    @abstractmethod
     def invoke(self, prompt: str, **kwargs) -> str:
         raise NotImplementedError
 
@@ -59,9 +65,18 @@ class ClaudeInstantLLM(LLM):
 
         return token_words, token_characters
 
-    def send_word_and_character_token_metrics(
-        self, metric_suffix: str, token_words: int, token_characters: int
-    ) -> None:
+    def send_token_metrics(self, metric_suffix: str, text: str) -> None:
+        """
+        Send word and character token metrics to Datadog
+        :param metric_suffix: metric suffix to concatenate to the metric name
+        :param token_words: number of token words
+        :param token_characters: number of token characters
+        :return:
+        """
+
+        # Calculate token metrics
+        token_words, token_characters = ClaudeInstantLLM.calculate_token_metrics(text)
+
         metric_prefix = "showpad.data_science.llm.tokens"
         metric_name = f"{metric_prefix}.{metric_suffix}"
         tags = [
@@ -77,34 +92,41 @@ class ClaudeInstantLLM(LLM):
         )
 
     def invoke(self, prompt: str, bare_bones: str = False) -> str:
+        """
+        Call the model with the given prompt
+        :param prompt: text to feed the model
+        :param bare_bones: whether to use the 'Human: ... Assistant: ...' formatting
+        :return: response
+        """
+
+        # Format response
         claude_prompt = prompt if bare_bones else f"\n\nHuman: {prompt}\n\nAssistant: "
 
-        token_words, token_characters = ClaudeInstantLLM.calculate_token_metrics(
-            claude_prompt
-        )
-        self.send_word_and_character_token_metrics(
-            "input", token_words, token_characters
-        )
+        # Call the model
+        response = self._invoke(prompt=claude_prompt)
 
-        response = self._invoke(claude_prompt)
-
-        token_words, token_characters = ClaudeInstantLLM.calculate_token_metrics(
-            response
-        )
-        self.send_word_and_character_token_metrics(
-            "output", token_words, token_characters
-        )
+        # Calculate token metrics for the response and send them to Datadog
+        self.send_token_metrics(metric_suffix="input", text=prompt)
+        self.send_token_metrics(metric_suffix="output", text=response)
 
         return response
 
     def _invoke(self, prompt: str) -> str:
-        input_body = {**self.model_kwargs}
-        input_body["prompt"] = prompt
+        """
+        Handle the API request to the service
+        :param prompt: text to feed the model
+        :return: response completion
+        """
 
+        # Payload for post request to bedrock
+        input_body = {**self.model_kwargs, "prompt": prompt}
         body = json.dumps(input_body)
+
+        # Headers
         accept = "application/json"
         contentType = "application/json"
 
+        # Send request
         try:
             response = self.client.invoke_model(
                 body=body,
