@@ -72,6 +72,8 @@ protobuf==4.25.2
     #   ddtrace
 pygments==2.17.2
     # via rich
+pypdf2==3.0.1
+    # via -r requirements.in
 pyproject-hooks==1.0.0
     # via build
 pytest==7.4.4

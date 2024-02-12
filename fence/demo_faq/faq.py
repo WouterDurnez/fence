@@ -8,6 +8,9 @@ from PyPDF2 import PdfReader
 
 from fence import ClaudeInstantLLM, LinearChain
 from fence.demo_faq.utils import split_text, build_links
+from fence.src.utils.base import setup_logging
+
+setup_logging(log_level='DEBUG')
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +18,8 @@ logger = logging.getLogger(__name__)
 claude_model = ClaudeInstantLLM(source="test-faq")
 
 NUMBER_OF_QUESTIONS = 2
-
+ADD_SUMMARY = True
+CHUNK_SIZE = 30000
 
 def handler(event, context):
     logger.info("👋 Let's rock!")
@@ -26,10 +30,10 @@ def handler(event, context):
 
     # Chunk the input text
     logger.info("🔪 Chunking input text...")
-    chunks = split_text(text=input_text, chunk_size=30000, overlap=0.1)
+    chunks = split_text(text=input_text, chunk_size=CHUNK_SIZE, overlap=0.1)
 
     logger.info(
-        f"🔪 Chunked input text into {len(chunks)} chunks of approximately 10k characters each"
+        f"🔪 Chunked input text into {len(chunks)} chunks of approximately {CHUNK_SIZE} characters each"
     )
 
     # Create chain
@@ -37,8 +41,8 @@ def handler(event, context):
 
     # Run chain for each chunk
     faq_results = []
-    for chunk in chunks[:]:
-        logger.info(f"🔗 Running chain for chunk: {chunk}")
+    for index, chunk in enumerate(chunks[:]):
+        logger.info(f"🔗 Running chain for chunk {index}")
         faq_results.append(
             links["faq"].run(
                 input_dict={"state": chunk, "number_of_questions": NUMBER_OF_QUESTIONS}
@@ -49,8 +53,17 @@ def handler(event, context):
     summaries = [result["summary"] for result in faq_results]
     question_answers = [qa for result in faq_results for qa in result["qa_pairs"]]
 
-    # Get a meta summary
-    meta_summary = links["summary"].run(input_dict={"summaries": summaries})["state"]
+    # If a summary questions is requested, add it to the list of questions
+    meta_summary = None
+    if ADD_SUMMARY:
+
+        # Get a meta summary
+        meta_summary = links["summary"].run(input_dict={"summaries": summaries})["state"]
+        question_answers.insert(0, {"question": "What is the essence of this document?", "answer": meta_summary})
+
+    # Remove context from question_answers
+    question_answers = [{k: v for k, v in qa.items() if k != "context"} for qa in question_answers]
+
 
     # Build response
     return {

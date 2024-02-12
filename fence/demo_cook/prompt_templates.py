@@ -142,21 +142,21 @@ As a final reminder, it is VITAL that you stick to EVERY POLICY!
 """
 
 SPELLING_TEMPLATE = '''
-Review the following text for spelling mistakes. If there are any, correct them. Return the corrected text AND the spelling mistakes in as TOML, delimited by triple backticks. The corrected text should be under an 'output' key, and the spelling mistakes should be under an 'errors' key. 
+Review the following text for spelling mistakes. If there are any, correct them. Return the corrected text AND the spelling mistakes in as TOML, delimited by triple backticks. The corrected text should be under a 'state' key, and the spelling mistakes should be under an 'errors' key. 
 
 Make sure to put the corrected text in triple quotes, even if it is only one line long. This makes it easier to copy-paste the text into the TOML response. 
 
 For example, if the input was: "Thsi is the orignal text.", the output should be:
 
 ```
-output = """This is the original text."""
+state = """This is the original text."""
 errors = ["Thsi", "orignal"]
 ```
 
 If the input has no spelling mistakes, for instance in the case of "This is the original text.", the output should be:
 
 ```
-output = """This is the original text."""
+state = """This is the original text."""
 errors = []
 ```
 
@@ -167,7 +167,7 @@ This is the text to be reviewed:
 Again, your response should be valid TOML in triple backticks, like so:
 
 ```
-output= """*the reviewed text*"""
+state = """*the reviewed text*"""
 errors = [*list of spelling mistakes*]
 ```
 
