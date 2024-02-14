@@ -43,11 +43,15 @@ def handler(event, context):
     faq_results = []
     for index, chunk in enumerate(chunks[:]):
         logger.info(f"🔗 Running chain for chunk {index}")
-        faq_results.append(
-            links["faq"].run(
-                input_dict={"state": chunk, "number_of_questions": NUMBER_OF_QUESTIONS}
-            )["state"]
-        )
+        try:
+            faq_results.append(
+                links["faq"].run(
+                    input_dict={"state": chunk, "number_of_questions": NUMBER_OF_QUESTIONS}
+                )["state"]
+            )
+        except Exception as e:
+            logger.error(f"Error running chain for chunk {index}: {e}")
+
 
     # Extract output from chain
     summaries = [result["summary"] for result in faq_results]
