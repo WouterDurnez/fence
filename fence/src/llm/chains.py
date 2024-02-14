@@ -7,7 +7,7 @@ from fence.src.llm.links import Link, BaseLink
 
 from fence.src.llm.models import LLM, ClaudeInstantLLM
 from fence.src.llm.templates import PromptTemplate
-from fence.src.utils.base import setup_logging
+from fence.src.utils.base import setup_logging, time_it
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -40,16 +40,21 @@ class BaseChain(ABC):
         """
         return self.run(*args, **kwargs)
 
+    @time_it
     def _find_and_validate_keys(self, input_keys):
         """
         Find all input and output keys in the chain set, determine which input keys are required, and validate the input keys.
         Required keys do not appear as output keys in any other chain.
         """
+
+        # Find all input and output keys
         input_keys_set = set(
             input_variable for link in self.links for input_variable in link.input_keys
         )
         output_keys = set(link.output_key for link in self.links)
         required_keys = input_keys_set - output_keys
+        logger.debug(f"Input keys: {input_keys_set}"
+                     f"Output keys: {set(link.output_key for link in self.links)}")
 
         # For more than one link, we do not require a state key, as one is always provided by the previous link
         if len(self.links) > 1:

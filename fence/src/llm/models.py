@@ -10,6 +10,8 @@ from typing import Tuple
 import boto3
 from datadog_lambda.metric import lambda_metric
 
+from fence.src.utils.base import time_it
+
 
 class LLM(ABC):
     def __call__(self, prompt: str, **kwargs) -> str:
@@ -111,6 +113,7 @@ class ClaudeInstantLLM(LLM):
 
         return response
 
+    @time_it
     def _invoke(self, prompt: str) -> str:
         """
         Handle the API request to the service

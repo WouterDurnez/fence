@@ -1,4 +1,4 @@
-FAQ_TEMPLATE = FAQ_TEMPLATE = '''You are a helpful assistant, in charge of generating FAQs that can easily be parsed to be used in an online platform.
+FAQ_TEMPLATE = '''You are a helpful assistant, in charge of generating FAQs that can easily be parsed to be used in an online platform.
 
 Below, delimited by triple backticks, is a text. Summarize the text in 2 or more sentences. Do not add newlines or bullet points.
 

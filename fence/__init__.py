@@ -1,5 +1,5 @@
 from fence.src.llm.chains import Chain, LinearChain  # noqa
-from fence.src.llm.links import TransformationLink, Link
+from fence.src.llm.links import TransformationLink, Link, transform_func # noqa
 from fence.src.llm.models import LLM, ClaudeInstantLLM  # noqa
 from fence.src.llm.templates import PromptTemplate  # noqa
 
@@ -9,4 +9,7 @@ __all__ = [
     "LLM",
     "ClaudeInstantLLM",
     "PromptTemplate",
+    "Link",
+    "TransformationLink",
+    "transform_func",
 ]  # noqa

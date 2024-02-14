@@ -49,7 +49,10 @@ def time_it(f=None, threshold: int = 300):
         t2 = time.time()
         duration = round(t2 - t1, 2)
 
-        message = f"Function <{f.__name__}> took {duration} s to execute."
+        class_name = args[0].__class__.__name__  # Get the class name from the first argument
+        object_name = args[0].name if hasattr(args[0], "name") else None
+        method_name = f.__name__
+        message = f"Method <{class_name}{(f'[{object_name}]' if object_name else '')}.{method_name}> took {duration} s to execute."
         if duration > threshold:
             log.warning(message)
         else:

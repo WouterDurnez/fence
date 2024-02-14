@@ -61,7 +61,10 @@ class TOMLParser(Parser):
             toml_string = toml_string[4:]
 
         # Load the TOML string into a dictionary
-        toml_dict = tomllib.loads(toml_string)
+        try:
+            toml_dict = tomllib.loads(toml_string)
+        except Exception as e:
+            raise ValueError(f"Error parsing TOML: {e}")
 
         # Strip all string values of leading and trailing whitespace
         for key, value in toml_dict.items():

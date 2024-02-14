@@ -5,7 +5,7 @@ from typing import Iterable, Callable
 from fence.src.llm.templates import PromptTemplate
 from fence.src.llm.models import LLM
 from fence.src.llm.parsers import Parser
-from fence.src.utils.base import setup_logging
+from fence.src.utils.base import setup_logging, time_it
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -33,6 +33,9 @@ class BaseLink(ABC):
         """
         self.llm = None
         self.input_keys = input_keys if input_keys is not None else []
+        if isinstance(self.input_keys, str):
+            self.input_keys = [self.input_keys]
+            logger.warning("Input keys should be a list of strings. Automatically converted to a list.")
         self.output_key = output_key
         self.name = name
 
@@ -56,17 +59,44 @@ class BaseLink(ABC):
             "Base class <BaseLink> `run` method must be implemented."
         )
 
+    def __str__(self):
+        return f"Link: {f'{self.name} ' if self.name else ''}<{self.input_keys}> -> <{self.output_key}>"
+
+    def __repr__(self):
+        return str(self)
+
+    def _validate_input(self, input_dict: dict):
+        """
+        Validate the input dictionary. Input dictionary should contain all the input keys for the Link.
+        :param input_dict: Input dictionary.
+        :return: True if the input dictionary is valid, False otherwise.
+        """
+        # Check if the input_dict contains all the input keys for the Link
+        if not all(input_key in input_dict for input_key in self.input_keys):
+            raise ValueError(
+                f"Input keys {self.input_keys} not found in input_dict: {input_dict}"
+            )
 
 ###################
 # Implementations #
 ###################
 
+def transform_func(func):
+    """
+    Decorator to validate the input data for the transformation function.
+    """
+    def wrapper(data):
+        if not isinstance(data, dict):
+            raise ValueError(f"Input data must be a dictionary. Got {type(data)}")
+        return func(data)
+    return wrapper
 
 class TransformationLink(BaseLink):
     def __init__(
         self,
         input_keys: Iterable[str],
         output_key: str = "state",
+        name: str = None,
         function: Callable = None,
     ):
         """
@@ -76,9 +106,10 @@ class TransformationLink(BaseLink):
         :param output_key: The output key.
         :param function: The transformation function.
         """
-        super().__init__(input_keys, output_key)
+        super().__init__(input_keys=input_keys, output_key=output_key, name=name)
         self.function = function
 
+    @time_it
     def run(self, input_dict: dict = None, **kwargs):
         """
         Run the link.
@@ -86,12 +117,13 @@ class TransformationLink(BaseLink):
         :param kwargs: Additional keyword arguments for the LLM model.
         :return:
         """
+        logger.info(f"Executing {(f'<{self.name}>') if self.name else ''} Link")
 
-        # Get the input variables
-        input_variables = [input_dict[input_key] for input_key in self.input_keys]
+        # Validate the input dictionary
+        self._validate_input(input_dict)
 
         # Call the transformation function
-        response = self.function(*input_variables)
+        response = self.function(input_dict)
         logger.debug(f"Response: {response}")
 
         # Build the response dictionary #
@@ -129,8 +161,7 @@ class Link(BaseLink):
         :param template: A PromptTemplate object.
         """
         self.template = template
-        super().__init__(template.input_variables, output_key)
-        self.name = name
+        super().__init__(input_keys=template.input_variables, output_key=output_key, name=name)
         self.llm = llm
         self.template = template
         self.parser = parser
@@ -143,6 +174,7 @@ class Link(BaseLink):
         """
         return self.run(**kwargs)
 
+    @time_it
     def run(self, input_dict: dict = None, **kwargs):
         """
         Run the link.
@@ -151,19 +183,14 @@ class Link(BaseLink):
         :return:
         """
 
-        logger.debug(
-            f"🖇️ Executing {(f'<{self.name}>') if self.name else ''} Link with input: {input_dict}"
-        )
+        logger.info(f"Executing {(f'<{self.name}>') if self.name else ''} Link")
 
         # Check if an LLM model was provided
         if self.llm is None and kwargs.get("llm") is None:
             raise ValueError("An LLM model must be provided.")
 
-        # Check if the input_dict contains all the input keys for the Link
-        if not all(input_key in input_dict for input_key in self.input_keys):
-            raise ValueError(
-                f"Input keys {self.input_keys} not found in input_dict: {input_dict}"
-            )
+        # Validate the input dictionary
+        self._validate_input(input_dict)
 
         # Render the template
         prompt = self.template(**input_dict)
@@ -213,8 +240,3 @@ class Link(BaseLink):
 
         return response_dict
 
-    def __str__(self):
-        return f"Link: {f'{self.name} ' if self.name else ''}<{self.template.input_variables}> -> <{self.output_key}>"
-
-    def __repr__(self):
-        return str(self)
