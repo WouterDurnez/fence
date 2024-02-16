@@ -60,6 +60,12 @@ class TOMLParser(Parser):
         if toml_string.startswith("toml"):
             toml_string = toml_string[4:]
 
+        # Define a regular expression to match non-printable characters
+        non_printable_regex = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\r]')
+
+        # Use the regular expression to replace non-printable characters with an empty string
+        toml_string = non_printable_regex.sub('', toml_string)
+
         # Load the TOML string into a dictionary
         try:
             toml_dict = tomllib.loads(toml_string)
