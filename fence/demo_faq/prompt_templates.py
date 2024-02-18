@@ -1,6 +1,6 @@
 FAQ_TEMPLATE = '''You are a helpful assistant, in charge of generating FAQs that can easily be parsed to be used in an online platform.
 
-Below, delimited by triple backticks, is a text. Summarize the text in 2 or more sentences. Do not add newlines or bullet points.
+Below, delimited by triple backticks, is a text. Summarize the text in a few sentences. Do not add newlines or bullet points.
 
 Next, formulate {{ number_of_questions }} open and general question about the given text above. The questions will be used in an FAQ section.
 
@@ -77,6 +77,25 @@ Here are the summaries:
 
 Now please generate a new summary that covers the essence of the summaries above. You are not allowed to exceed 3 sentences! You will be penalized for adding more.
  
+Return the summary in triple backticks. I will tip generously if you make it sound like a standalone text.
+"""
+
+DESCRIPTION_TEMPLATE = """You are a helpful assistant in charge of generating file descriptions, on the basis of one or more summaries.
+
+The original file has a {{ extension }} extension. The file is a {{ file_type }} file.
+
+Below, delimited by triple backticks, is a a series of summaries, generated over consecutive chunks of text. Your task is to generate a file description that covers all the information in the summaries below. Make it sound as a standalone text. You will be penalized for anything that makes it sound like the new text is a summary of a larger text. Return the summary in triple backticks.
+
+Here are the summaries:
+
+```
+{% for summary in summaries %}
+{{ summary }}
+{% endfor %}
+```
+
+Now please generate a file description that covers the essence of the summaries above. Be concise, but don't be afraid to add detail where warranted.
+
 Return the summary in triple backticks. I will tip generously if you make it sound like a standalone text.
 """
 

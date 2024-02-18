@@ -1,21 +1,16 @@
 import logging
-import os
-from math import ceil
-from pathlib import Path
 from pprint import pprint
-from typing import Any, Dict, List, Optional
-from PyPDF2 import PdfReader
 
-from fence import ClaudeInstantLLM, LinearChain, Chain
+
+from fence import Chain, ClaudeInstantLLM
 from fence.demo_test.utils import build_links
 from fence.src.utils.base import setup_logging
 
-setup_logging(log_level='INFO')
+setup_logging(log_level="INFO")
 
 logger = logging.getLogger(__name__)
 
 claude_model = ClaudeInstantLLM(source="test-faq")
-
 
 
 def handler(event, context):
@@ -33,14 +28,10 @@ def handler(event, context):
     chain_output = chain.run(input_dict={"highlight": input_text})
 
     # Build response
-    return {
-        "statusCode": 200,
-        "body": chain_output
-    }
+    return {"statusCode": 200, "body": chain_output}
 
 
 if __name__ == "__main__":
-
     # Text snippet
     snippet = """Telecommunication with photorealistic avatars in virtual or augmented reality is a promising path for achieving authentic face-to-face communication in 3D over remote physical distances. In this work, we present the Pixel Codec Avatars (PiCA): a deep generative model of 3D human faces that achieves state of the art reconstruction performance while being computationally efficient and adaptive to the rendering conditions during execution. Our model combines two core ideas: (1) a fully convolutional architecture for decoding spatially varying features, and (2) a rendering-adaptive per-pixel decoder. Both techniques are integrated via a dense surface representation that is learned in a weakly-supervised manner from low-topology mesh tracking over training images. We demonstrate that PiCA improves reconstruction over existing techniques across testing expressions and views on persons of different gender and skin tone. Importantly, we show that the PiCA model is much smaller than the state-of-art baseline model, and makes multi-person telecommunication possible: on a single Oculus Quest 2 mobile VR headset, 5 avatars are rendered in realtime in the same scene.    """
 
@@ -51,13 +42,12 @@ if __name__ == "__main__":
         "Recently, deep learning models, particularly convolutional neural networks (CNN), surpassed traditional computer vision methods for semantic segmentation. In contrast to the conventional approach based on hand-crafted features, CNNs are able to automatically learn high-level fea- tures adapted specifically to the task of brain tumor segmentation. Currently, the vast majority of effective CNNs for medical image segmentation are based on a U-Net [23] architecture with millions of trainable parameters. However, such complex models can be highly prone to over- fitting especially in cases where the amount of training data is insufficient, which is usually the case for medical imaging. In this work, we introduce a new layer, called low-rank convolution, in which low-rank constraints are imposed to regularize weights and thus reduce overfitting. We make use of a 3D U-Net [5] architecture with residual modules [10] and further improve it by replacing ordinary convolution layers with low-rank ones, achieving models with several times fewer parameters than the initial ones. This leads to significantly better performance especially because the amount of training data is limited.",
         "Affective Computing has emerged to fulfill this gap by converging technology and emotions into HCI. It aims to model emotional interactions between a human and a computer by measuring the emotional state of a user [2]. A persons inner emotional state may become apparent by subjective experiences (how the person feels), internal/in- ward expressions (physiological signals), and external/out- ward expressions (audio/visual signals) [3]. Subjective self- reports about how the person is feeling can provide valuable information but there are issues with validity and corrobo- ration [4]. Participants may not answer exactly how they are feeling but rather as they feel others would answer. Physiological signals can assist in obtaining a better understanding of the participants underlying responses expressed at the time of the observations. These correspond to multichannel recordings from both the central and the au- tonomic nervous systems. The central nervous system com- prises the brain and spinal cord, while the autonomic ner- vous system is a control system that acts unconsciously and regulates bodily functions such as the heart rate, pupillary response, and sexual arousal. The signals commonly used to measure emotions are the Galvanic Skin Response (GSR), which increases linearly with a persons level of arousal; Electromyography (EMG) (frequency of muscle tension), which is correlated with negatively valenced emotions; Heart Rate (HR), which increases with negatively valenced emotions such as fear; and Respiration Rate (RR) (how deep and fast the breath is), which becomes irregular with more aroused emotions like anger. Measurements recorded over the brain also enable the observation of the emotions felt [3].",
         "In an attempt to address this shortcoming, Jia, Shi, Zang and Mu ̈ller (2013) conducted a series of bimodal TOJ experiments, in which participants judged the order of audio-tactile stimulus pairs. Results showed that the prior presentation of affectively salient pictures—at a location independent of the audio-tactile stimuli—was capable of shifting attention towards the somatosensory modality, resulting in the quicker perception of tactile stimuli com- pared to concomitant auditory stimuli. Notably, this effect was only found when stimuli from different modalities were also separated in space. Prioritization effects were found for both positive (e.g., an erotic couple) and negative (e.g., a spider) high-arousal imagery. When disentangling the effects of physically threatening contexts with regard to the locus of threat, prioritization of somatosensory stimuli only occurred when the visual cue represented a near-body threat (e.g., a snake), and not when it depicted remote threat (e.g., a car accident). A limitation of the aforemen- tioned studies (Jia et al., 2013; Van Damme et al., 2009) is that only visual threat cues were used. Effects of the actual anticipation of pain thus remain open to investigation.",
-        "TO TELL YOU the truth, it was a long time ago and I didn't really spend much time with them. It's pushing it to say I knew them at all, really. It was just a job, you see. A well paid commission between my more serious works. I never expected it to become... well, the thing I am most famous for. I doubt any of them remember me. I honestly doubt any of them are alive any more. It's been sixty years since the hive war on Verghast, and Imperial Guardsman is not a career with long-term prospects. No, they're probably all long dead by now. If so, may the Emperor of Mankind rest them, every one. I had a friend who worked in the Munitorium at NorthCol who was kind enough to pass me copies of Imperial dispatches so I could follow their movements and fortunes. For a few years, it pleased me to keep track of them. When I read of their successes on Hagia and Phantine, I poured a glass of joiliq and sat in my studio, toasting their name."
+        "TO TELL YOU the truth, it was a long time ago and I didn't really spend much time with them. It's pushing it to say I knew them at all, really. It was just a job, you see. A well paid commission between my more serious works. I never expected it to become... well, the thing I am most famous for. I doubt any of them remember me. I honestly doubt any of them are alive any more. It's been sixty years since the hive war on Verghast, and Imperial Guardsman is not a career with long-term prospects. No, they're probably all long dead by now. If so, may the Emperor of Mankind rest them, every one. I had a friend who worked in the Munitorium at NorthCol who was kind enough to pass me copies of Imperial dispatches so I could follow their movements and fortunes. For a few years, it pleased me to keep track of them. When I read of their successes on Hagia and Phantine, I poured a glass of joiliq and sat in my studio, toasting their name.",
     ]
 
-    for snippet in academic_snippets[:1]:
-
+    for snippet in academic_snippets[:3]:
         # Call the handler
         response = handler({"input_text": snippet}, None)
 
         # Print response
-        pprint(response['body']['clean_question'])
+        pprint(response["body"]["clean_question"])

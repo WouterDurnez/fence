@@ -2,9 +2,9 @@
 # Model classes #
 #################
 
-from abc import ABC, abstractmethod
 import json
 import math
+from abc import ABC, abstractmethod
 from typing import Tuple
 
 import boto3
@@ -113,7 +113,7 @@ class ClaudeInstantLLM(LLM):
 
         return response
 
-    @time_it
+    @time_it(threshold=30, only_warn=True)
     def _invoke(self, prompt: str) -> str:
         """
         Handle the API request to the service

@@ -3,8 +3,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Collection, Iterable
 
-from fence.src.llm.links import Link, BaseLink
-
+from fence.src.llm.links import BaseLink, Link
 from fence.src.llm.models import LLM, ClaudeInstantLLM
 from fence.src.llm.templates import PromptTemplate
 from fence.src.utils.base import setup_logging, time_it
@@ -53,8 +52,10 @@ class BaseChain(ABC):
         )
         output_keys = set(link.output_key for link in self.links)
         required_keys = input_keys_set - output_keys
-        logger.debug(f"Input keys: {input_keys_set}"
-                     f"Output keys: {set(link.output_key for link in self.links)}")
+        logger.debug(
+            f"Input keys: {input_keys_set}"
+            f"Output keys: {set(link.output_key for link in self.links)}"
+        )
 
         # For more than one link, we do not require a state key, as one is always provided by the previous link
         if len(self.links) > 1:

@@ -1,18 +1,26 @@
 import json
 import logging
-import tomllib
-from copy import deepcopy
-from pprint import pprint
 import re
-from fence import LinearChain, LLM, Link, PromptTemplate, Chain, TransformationLink, ClaudeInstantLLM, transform_func
-from fence.src.llm.parsers import TOMLParser, TripleBacktickParser
-from fence.src.utils.base import setup_logging
+from copy import deepcopy
+
+from fence import (
+    LLM,
+    Chain,
+    ClaudeInstantLLM,
+    Link,
+    PromptTemplate,
+    TransformationLink,
+    transform_func,
+)
 from fence.demo_test.prompt_templates import TEST_TEMPLATE, VERIFICATION_TEMPLATE
+from fence.src.llm.parsers import TOMLParser
+from fence.src.utils.base import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
-claude_instant_model = ClaudeInstantLLM(source='test', temperature=.5)
+claude_instant_model = ClaudeInstantLLM(source="test", temperature=0.5)
+
 
 @transform_func
 def clean_question(input_dict: dict) -> dict:
@@ -38,16 +46,15 @@ def clean_question(input_dict: dict) -> dict:
     question["question"] = parsed
 
     # Clean up responses
-    for response in question['responses']:
-
+    for response in question["responses"]:
         # Responses should be capitalized
-        response['text'] = response['text'].capitalize()
+        response["text"] = response["text"].capitalize()
 
         # Remove the reasoning key: that was just to get the LLM to think a little harder
         response.pop("reason", None)
 
-
     return question
+
 
 @transform_func
 def strip_question(input_dict: dict) -> dict:
@@ -96,6 +103,7 @@ def strip_question(input_dict: dict) -> dict:
 
     return question
 
+
 @transform_func
 def verify_answer(input_dict: dict) -> dict:
     """
@@ -133,6 +141,7 @@ def verify_answer(input_dict: dict) -> dict:
     else:
         return {"verification": True}
 
+
 def build_links(llm: LLM):
     """
     Build links for the FAQ chain
@@ -149,17 +158,17 @@ def build_links(llm: LLM):
     )
 
     clean_link = TransformationLink(
-        name='clean_link',
+        name="clean_link",
         function=clean_question,
-        input_keys=['full_question'],
-        output_key='clean_question'
+        input_keys=["full_question"],
+        output_key="clean_question",
     )
 
     strip_link = TransformationLink(
-        name='strip_link',
+        name="strip_link",
         function=strip_question,
-        input_keys=['clean_question'],
-        output_key="question_stripped"
+        input_keys=["clean_question"],
+        output_key="question_stripped",
     )
 
     verification_link = Link(
@@ -173,16 +182,16 @@ def build_links(llm: LLM):
     )
 
     check_link = TransformationLink(
-        name='check_link',
+        name="check_link",
         function=verify_answer,
-        input_keys=['full_question', 'answered_question'],
-        output_key='verification'
+        input_keys=["full_question", "answered_question"],
+        output_key="verification",
     )
 
     return [test_link, clean_link, strip_link, verification_link, check_link]
 
-if __name__ == '__main__':
 
+if __name__ == "__main__":
     # Build test chain
     links = build_links(llm=claude_instant_model)
     chain = Chain(links=links)

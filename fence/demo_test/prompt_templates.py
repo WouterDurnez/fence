@@ -45,9 +45,7 @@ TEST_TEMPLATE = """
             - You must wrap all values in triple quotes, even if they are single words or numbers. This helps to ensure that the output is valid TOML, and that the parser can handle the output. 
             """
 
-test_template = PromptTemplate(
-    template=TEST_TEMPLATE, input_variables=["highlight"]
-)
+test_template = PromptTemplate(template=TEST_TEMPLATE, input_variables=["highlight"])
 
 VERIFICATION_TEMPLATE = """
             You are an instructor in charge of verifying the quality of exam questions.
@@ -74,10 +72,12 @@ verification_template = PromptTemplate(
     template=VERIFICATION_TEMPLATE, input_variables=["highlight", "question_stripped"]
 )
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     # Test the prompt templates
     print(test_template(highlight="This is a test question."))
-    print(verification_template(highlight="This is a test question.", question_stripped="This is a test question."))
-
-
+    print(
+        verification_template(
+            highlight="This is a test question.",
+            question_stripped="This is a test question.",
+        )
+    )

@@ -1,10 +1,10 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Iterable, Callable
+from typing import Callable, Iterable
 
-from fence.src.llm.templates import PromptTemplate
 from fence.src.llm.models import LLM
 from fence.src.llm.parsers import Parser
+from fence.src.llm.templates import PromptTemplate
 from fence.src.utils.base import setup_logging, time_it
 
 setup_logging()
@@ -35,7 +35,9 @@ class BaseLink(ABC):
         self.input_keys = input_keys if input_keys is not None else []
         if isinstance(self.input_keys, str):
             self.input_keys = [self.input_keys]
-            logger.warning("Input keys should be a list of strings. Automatically converted to a list.")
+            logger.warning(
+                "Input keys should be a list of strings. Automatically converted to a list."
+            )
         self.output_key = output_key
         self.name = name
 
@@ -77,19 +79,24 @@ class BaseLink(ABC):
                 f"Input keys {self.input_keys} not found in input_dict: {input_dict}"
             )
 
+
 ###################
 # Implementations #
 ###################
+
 
 def transform_func(func):
     """
     Decorator to validate the input data for the transformation function.
     """
+
     def wrapper(data):
         if not isinstance(data, dict):
             raise ValueError(f"Input data must be a dictionary. Got {type(data)}")
         return func(data)
+
     return wrapper
+
 
 class TransformationLink(BaseLink):
     def __init__(
@@ -161,7 +168,9 @@ class Link(BaseLink):
         :param template: A PromptTemplate object.
         """
         self.template = template
-        super().__init__(input_keys=template.input_variables, output_key=output_key, name=name)
+        super().__init__(
+            input_keys=template.input_variables, output_key=output_key, name=name
+        )
         self.llm = llm
         self.template = template
         self.parser = parser
@@ -174,7 +183,7 @@ class Link(BaseLink):
         """
         return self.run(**kwargs)
 
-    @time_it
+    @time_it(threshold=30, only_warn=True)
     def run(self, input_dict: dict = None, **kwargs):
         """
         Run the link.
@@ -239,4 +248,3 @@ class Link(BaseLink):
         logger.debug(f"🧐 Current state: {response_dict['state']}")
 
         return response_dict
-
