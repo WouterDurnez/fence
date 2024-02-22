@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class TextChunker:
-    def __init__(self, text: str, chunk_size: int, overlap: float | None = 0.05):
+    def __init__(self, text: str, chunk_size: int, overlap: float | None = 0.01):
         self.text = text
         self.chunk_size = chunk_size
         self.overlap = overlap

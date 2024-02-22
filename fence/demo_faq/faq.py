@@ -18,7 +18,7 @@ NUMBER_OF_QUESTIONS = 3
 ADD_SUMMARY = True
 ADD_DESCRIPTION = True
 CHUNK_SIZE = 8_500
-TRUNCATION_LIMIT = 25_000
+TRUNCATION_LIMIT = 30_000
 MAX_RETRIES = 3
 NUMBER_OF_WORKERS = 4
 
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     # Responses
     responses = {}
 
-    for TOPIC in topics[:]:
+    for TOPIC in topics[2:3]:
         # Load pdf file content
         file_path = Path(__file__).parent.parent / "data" / f"{TOPIC}.pdf"
         reader = PdfReader(file_path)

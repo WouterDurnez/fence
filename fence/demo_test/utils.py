@@ -137,9 +137,9 @@ def verify_answer(input_dict: dict) -> dict:
 
     # Print correct and selected answer if they are not the same
     if not selected_answer_idx == correct_answer_idx:
-        return {"verification": False}
+        return False
     else:
-        return {"verification": True}
+        return True
 
 
 def build_links(llm: LLM):

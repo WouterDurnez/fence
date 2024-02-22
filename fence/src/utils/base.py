@@ -5,6 +5,7 @@ import queue
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
+from typing import Callable
 
 from dotenv import load_dotenv
 from rich.logging import Console, RichHandler
@@ -20,6 +21,9 @@ LOG_LEVEL = getattr(logging, LOG_LEVEL)
 
 
 def setup_logging(log_level: str = LOG_LEVEL):
+    """
+    Utility function to set up logging in various parts of the code.
+    """
     # Set up rich logging
     logging.basicConfig(
         level=log_level,
@@ -45,7 +49,7 @@ def time_it(f=None, threshold: int = 300, only_warn: bool = True):
     """
     # Check if the decorator is used without parentheses
     if f is None:
-        return lambda func: time_it(func, threshold=threshold)
+        return lambda func: time_it(func, threshold=threshold, only_warn=only_warn)
 
     setup_logging()
     log = logging.getLogger(__name__)
@@ -66,7 +70,7 @@ def time_it(f=None, threshold: int = 300, only_warn: bool = True):
             )
             object_name = args[0].name if hasattr(args[0], "name") else None
         method_name = f.__name__
-        message = f"Method <{class_name if class_name else ''}{(f'[{object_name}]' if object_name else '')}{'.' if any([class_name,object_name]) else ''}{method_name}> took {duration} s to execute."
+        message = f"Method <{class_name if class_name else ''}{(f'[{object_name}]' if object_name else '')}{'.' if any([class_name, object_name]) else ''}{method_name}> took {duration} s to execute."
         if duration > threshold:
             log.warning(message)
         elif not only_warn:
@@ -79,113 +83,124 @@ def time_it(f=None, threshold: int = 300, only_warn: bool = True):
     return timed
 
 
-def retry(max_retries: int = 3, delay: float = 0.2):
+################
+# Optimization #
+################
+
+
+def retry(f=None, max_retries=3, delay=0.2):
     """
     Retry decorator: retries a function if it fails.
     :param max_retries: maximum number of retries
     :param delay: delay between retries
     """
 
-    def wrapper_retry(func):
+    # Check if the decorator is used without parentheses
+    if f is None or not callable(f):
+        # ...if so, return a lambda function that takes the function as an argument
+        return lambda func: retry(func, max_retries=max_retries, delay=delay)
+
+    @functools.wraps(f)
+    def wrapper_retry(*args, **kwargs):
         """
         Wrapper function for the retry decorator. We need this to pass the function to the decorator.
         """
 
-        @functools.wraps(func)  # This is necessary to preserve the function's metadata
         def decorated_function(*args, **kwargs):
             """
             Decorated function that retries the function if it fails.
             """
-            # Start the retries
             retries = 0
             while retries < max_retries:
                 try:
-                    return func(*args, **kwargs)
+                    return f(*args, **kwargs)  # Pass received args and kwargs to the original function
                 except Exception as e:
                     retries += 1
-                    error_message = f"Error in {func.__name__}, attempt {retries}/{max_retries}: {e}"
+                    error_message = f"Error in {f.__name__}, attempt {retries}/{max_retries}: {e}"
                     logger.warning(error_message)
-                    time.sleep(delay)  # Adjust the sleep duration between retries
-            raise RuntimeError(f"Maximum retries reached for {func.__name__}")
+                    time.sleep(delay)
+            raise RuntimeError(f"Maximum retries reached for {f.__name__}")
 
-        return decorated_function
+        return decorated_function(*args, **kwargs)  # Call the decorated function with the received args and kwargs
 
     return wrapper_retry
 
 
-def parallelize(max_workers: int = 4):
+def parallelize(f: Callable = None, max_workers: int = 4):
     """
     Parallelize decorator: runs a function in parallel.
+    :param f: function to run in parallel
     :param max_workers: maximum number of workers
     """
 
-    def decorator(func):
+    # Check if the decorator is used without parentheses
+    if f is None:
+
+        # ...if so, return a lambda function that takes the function as an argument
+        return lambda func: parallelize(func, max_workers=max_workers)
+
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
         """
-        Decorator function for the parallelize decorator. We need this to pass the function to the decorator.
+        Wrapper function for the parallelize decorator. We need this to pass the function's arguments to the decorator.
         """
+        # Create a queue to store the results. We do not use a list because doing so is, in principle, not thread-safe.
+        # It probably could be, due to the GIL, but it's better to be safe than sorry.
+        results_queue = queue.Queue()
 
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            """
-            Wrapper function for the parallelize decorator. We need this to pass the function's arguments to the decorator.
-            """
-            # Create a queue to store the results. We do not use a list because doing so is, in principle, not thread-safe.
-            # It probably could be, due to the GIL, but it's better to be safe than sorry.
-            results_queue = queue.Queue()
+        # Define the function to run in parallel
+        def run_func(index, *args, **kwargs):
+            logger.debug(f"[Thread {index}] Running function {f.__name__}")
+            result = f(index, *args, **kwargs)
+            results_queue.put(result)
+            logger.debug(f"[Thread {index}] Function {f.__name__} completed")
 
-            # Define the function to run in parallel
-            def run_func(index, *args, **kwargs):
-                logger.debug(f"[Thread {index}] Running function {func.__name__}")
-                result = func(index, *args, **kwargs)
-                results_queue.put(result)
-                logger.debug(f"[Thread {index}] Function {func.__name__} completed")
+        # Use ThreadPoolExecutor to run the functions in parallel
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(run_func, index, *args, **kwargs)
+                for index, args in enumerate(zip(*args))
+            ]
 
-            # Use ThreadPoolExecutor to run the functions in parallel
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = [
-                    executor.submit(run_func, index, *args, **kwargs)
-                    for index, args in enumerate(zip(*args))
-                ]
+        # Wait for all tasks to complete
+        wait(futures)
 
-            # Wait for all tasks to complete
-            wait(futures)
+        # Convert the queue to a list
+        results = list(results_queue.queue)
 
-            # Convert the queue to a list
-            results = list(results_queue.queue)
+        return results
 
-            return results
-
-        return wrapper
-
-    return decorator
+    return wrapper
 
 
 if __name__ == "__main__":
 
-    def test_retry():
-        @retry(max_retries=3, delay=0.2)
-        def test_function():
-            print("Testing function")
-            raise Exception("This is a test exception")
 
-        test_function()
+    # @retry(max_retries=3, delay=1)
+    # def test_retry():
+    #     print("Testing function")
+    #     raise Exception("This is a test exception")
+    #
+    #
+    # try:
+    #     test_retry()
+    # except Exception as e:
+    #     print("Final exception: ", e)
 
-    try:
-        test_retry()
-    except Exception as e:
-        print("Final exception: ", e)
 
     # Test the time_it decorator
-    @time_it
+    @time_it(only_warn=False)
     def test_time_it():
         print("Testing time_it")
-        time.sleep(1)
+
 
     test_time_it()
 
-    # Test the threaded_execution decorator
-    @threaded_execution
-    def test_threaded_execution(iterable: list[int]):
-        logger.critical(f"Testing threaded_execution: thread {iterable}")
 
-    test_threaded_execution([1, 2, 3, 4])
+    # # Test the threaded_execution decorator
+    # @parallelize
+    # def test_threaded_execution(index: int, item: str):
+    #     logger.critical(f"Testing threaded_execution: thread {item}")
+    #
+    #
+    # test_threaded_execution(zip([1, 2, 3, 4], ["this", "is", "a", "test"]))
