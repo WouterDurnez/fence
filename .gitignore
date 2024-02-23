@@ -15,3 +15,5 @@ __pycache__/
 
 # Local env file
 /.env
+/fence/data/search/paper_db/
+/fence/data/search/random_db
