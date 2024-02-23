@@ -1,4 +1,5 @@
 import logging
+import os
 from abc import ABC, abstractmethod
 from typing import Callable, Iterable
 
@@ -7,8 +8,10 @@ from fence.src.llm.parsers import Parser
 from fence.src.llm.templates import PromptTemplate
 from fence.src.utils.base import setup_logging, time_it
 
-setup_logging()
-logger = logging.getLogger(__name__)
+from dotenv import load_dotenv
+load_dotenv()
+
+logger = setup_logging(os.environ.get("LOG_LEVEL", "INFO"))
 
 ################
 # Base classes #

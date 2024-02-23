@@ -12,8 +12,8 @@ from rich.logging import Console, RichHandler
 
 load_dotenv()
 
-CONF_DIR = Path(__file__).resolve().parent.parent / "conf"
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
+DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 LOGGING_FORMAT = "%(message)s"
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
