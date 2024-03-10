@@ -1,10 +1,8 @@
 from fence import LLM, Link, PromptTemplate
 import re
-from fence.demo.demo_cook.prompt_templates import (
-    FLAVOR_TEMPLATE,
+from fence.demo.demo_label.prompt_templates import (
     POLICY_TEMPLATE,
-    SPELLING_TEMPLATE,
-    VERBOSITY_TEMPLATE,
+
 )
 from fence.src.llm.parsers import TOMLParser, TripleBacktickParser
 
@@ -56,9 +54,17 @@ class FilenameProcessor:
         self.date_location = date_location
         self.truncation_limit = truncation_limit
         self.remove_special_characters = remove_special_characters
+
+        # Regex patterns
+        self._special_character_pattern = re.compile(r"[^a-zA-Z0-9-_]+")
         self._camel_case_pattern = re.compile("([a-z])([A-Z])")
-        # Separators and special characters
-        self._separator_pattern = re.compile("[_\\-./*@#&]")
+        self._separator_pattern = re.compile("[_\\-./]")
+
+    def _remove_special_characters(self):
+        """
+        Replace special characters with a single separator.
+        """
+        self.filename = self._special_character_pattern.sub(self.separator, self.filename)
 
     def _split_camel_case(self):
         """
@@ -91,12 +97,6 @@ class FilenameProcessor:
         """
         self.filename_components = self.filename.split(" ")
 
-    def _remove_special_characters(self):
-        """
-        Remove special characters from the filename.
-        """
-        self.filename_components = [re.sub(r"[^a-zA-Z0-9]+", "", component) for component in self.filename_components]
-
     def _convert_to_desired_case(self):
         """
         Convert the filename to the desired case.
@@ -124,7 +124,10 @@ class FilenameProcessor:
         else:
             self.filename = self.filename[:self.truncation_limit]
 
-        # If the last character is a separator, remove it
+    def _finish_up(self):
+        """
+        If the final character is a separator, remove it.
+        """
         if self.filename[-1] in self.separator:
             self.filename = self.filename[:-1]
 
@@ -139,13 +142,24 @@ class FilenameProcessor:
         self._split_by_separators()
         self._split_by_spaces()
         self._remove_spaces()
+
+
+        # String to list #
+
         self._split_into_components()
         if self.capitalisation:
             self._convert_to_desired_case()
-        if self.remove_special_characters:
-            self._remove_special_characters()
+
+        # List to string #
+
         self._join_components()
+
+        # Date, truncation, special characters #
+
         self._truncate_and_add_date()
+        if self.remove_special_characters:
+            self._remove_special_characters() # Potentially: Replace special characters with SINGLE separator
+        self._finish_up()
         return self.filename
 
 if __name__ == '__main__':

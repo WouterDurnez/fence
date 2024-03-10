@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from datetime import datetime
 
@@ -17,7 +18,7 @@ from fence.src.utils.base import setup_logging
 claude_model = ClaudeInstantLLM(source="test-ai-message-composer")
 
 # Set up logging
-setup_logging(log_level="INFO")
+logger = setup_logging(log_level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -54,7 +55,11 @@ def handler(event: dict, context: any) -> dict:
 
     # If date is not None, add a custom policy
     if date:
-        policy.append(f"No dates: Strip the filename of any date information. Do not change ANYTHING else, just remove the date format.")
+        policy.append(f"No dates: Strip the filename of any date information. Do not change ANYTHING else, just remove the date format."
+                      f""
+                      f"Example 1: 'filename_2021-10-01' -> 'filename'"
+                      f"Example 2: '2021-10-01_filename' -> 'filename'"
+                      f"Example 3: 'something.v1.march24' -> 'something.v1'")
 
     # If there are no policies, skip the LLM interaction
     processed_filename = None
@@ -66,6 +71,9 @@ def handler(event: dict, context: any) -> dict:
 
         # Run chain
         processed_filename = chain.run(input_dict={"state": input_text, "recipe": recipe})['state']
+
+        # Copy for output
+        llm_output = processed_filename
 
     # Initialize FilenameProcessor
     if any([capitalisation, separator, remove_special_characters, date]):
@@ -92,6 +100,7 @@ def handler(event: dict, context: any) -> dict:
     # Build response dict
     response_dict = {
         "input": input_text,
+        "llm_output": llm_output,
         "output": processed_filename,
     }
 
@@ -108,8 +117,9 @@ if __name__ == "__main__":
         "anotherFile.v1",
         "file1",
         "file2.loadsofnumbers1234567890",
-        "filen@#ame_with_sp*cial_characters!@#$%^&*()_+",
-        "a_screenshot_of_something_idk"
+        "filen@me_with_sp*cial_characters!@#$%^&*()_+",
+        "a_screenshot_of_something_idk",
+        "my_file_april-1st",
     ]
 
     # Some example recipes
@@ -140,5 +150,8 @@ if __name__ == "__main__":
         )
 
         # Print response
-        logger.critical(f"Recevied input: {filename} \t--> Output: {response['body']['output']}")
+        logger.critical(f"Received input: \t{filename}"
+                        f"\nLLM output: \t\t{response['body']['llm_output']}"
+                        f"\nTransformed output: \t{response['body']['output']}")
+        print()
 

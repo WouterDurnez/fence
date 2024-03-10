@@ -9,9 +9,10 @@ from fence.src.llm.templates import PromptTemplate
 from fence.src.utils.base import setup_logging, time_it
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 
-logger = setup_logging(os.environ.get("LOG_LEVEL", "WARNING"))
+log_level = os.environ.get("LOG_LEVEL", "WARNING")
+logger = setup_logging(log_level=log_level)
 
 ################
 # Base classes #
