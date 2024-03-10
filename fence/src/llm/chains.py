@@ -1,4 +1,5 @@
 import logging
+import os
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Collection, Iterable
@@ -8,8 +9,7 @@ from fence.src.llm.models import LLM, ClaudeInstantLLM
 from fence.src.llm.templates import PromptTemplate
 from fence.src.utils.base import setup_logging, time_it
 
-setup_logging()
-logger = logging.getLogger(__name__)
+logger = setup_logging(log_level=os.environ.get("LOG_LEVEL", "WARNING"))
 
 
 ################

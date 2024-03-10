@@ -11,7 +11,7 @@ from fence.src.utils.base import setup_logging, time_it
 from dotenv import load_dotenv
 load_dotenv()
 
-logger = setup_logging(os.environ.get("LOG_LEVEL", "INFO"))
+logger = setup_logging(os.environ.get("LOG_LEVEL", "WARNING"))
 
 ################
 # Base classes #

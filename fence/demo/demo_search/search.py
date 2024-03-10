@@ -18,7 +18,7 @@ logger = setup_logging(os.environ.get("LOG_LEVEL", "INFO"))
 NUMBER_OF_WORKERS = 5
 MAX_RETRIES = 3
 
-VECTOR_DB_PATH = DATA_DIR / "search" / "paper_db"
+VECTOR_DB_PATH = DATA_DIR / "search" / "random_db"
 
 
 @time_it(threshold=0)
@@ -94,6 +94,10 @@ if __name__ == "__main__":
     responses = []
     questions = [
         "What is the traveling salesman problem?",
+        "What is MMA?",
+        "What is the capital of France?",
+        "What is Tropical Storm Brenda?",
+        "What is the shape of the earth?",
     ]
 
     for question in questions:
