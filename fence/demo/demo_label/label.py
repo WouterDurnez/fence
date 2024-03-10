@@ -123,6 +123,20 @@ if __name__ == "__main__":
         "20241001_Valid_Filename_Idempotence_Check",
     ]
 
+    expected_outputs = [
+        "20241001_This_Is_A_Filename",
+        "20241001_Example_Some_Really_Long_Filenamealso_Sep",
+        "20241001_Some_New_Files_Dk",
+        "20241001_Another_File_V1",
+        "20241001_File1",
+        "20241001_File2_Loadsofnumbers1234567890",
+        "20241001_Filen_Me_With_Sp_Cial_Characters",
+        "20241001_A_Image_Of_Something_Idk",
+        "20241001_My_File",
+        "20241001_Valid_Filename_Idempotence_Check",
+        ]
+
+
     # Some example recipes
     recipe = dict()
 
@@ -137,11 +151,11 @@ if __name__ == "__main__":
         "separator": "_",
         "truncation_limit": 50,
         "remove_special_characters": True,
-        "policy": ["Do not use the word 'screenshot', but use 'image' instead."],
+        "policy": ["Do not use the word 'screenshot', but use 'image' instead. Do not change anything else."],
     }
 
     # Call handler for each filename
-    for filename in filenames:
+    for filename, expected in zip(filenames, expected_outputs):
         response = handler(
             event={
                 "recipe": recipe,
@@ -153,6 +167,8 @@ if __name__ == "__main__":
         # Print response
         logger.critical(f"Received input: \t{filename}"
                         f"\nLLM output: \t\t{response['body']['llm_output']}"
-                        f"\nTransformed output: \t{response['body']['output']}")
-        print()
+                        f"\nTransformed output: \t{response['body']['output']}"
+                        f"\nExpected output: \t{expected}"
+                        f"\nCorrect? \t\t{response['body']['output'] == expected}"
+                        f"\n")
 

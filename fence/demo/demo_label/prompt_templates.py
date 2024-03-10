@@ -3,10 +3,10 @@ Base templates for the LLM that can be used to build more complex, modular promp
 """
 
 POLICY_TEMPLATE = """
-Review the following text to make it adhere to the policy or policies that follow. Then return the reviewed text in triple backticks, like so:
+Review the following filename to make it adhere to the policy or policies that follow. Then return the reviewed filename in triple backticks, like so:
 
 ```
-This is the reviewed text.
+*reviewed_filename*
 ```
 
 These are the policies you need to adhere to:
@@ -15,21 +15,13 @@ These are the policies you need to adhere to:
     - {{ policy }}
 {% endfor %}
 
-This is the text to be reviewed:
+Additional guidelines:
+- Be conservative with your changes. Only make the necessary changes to the filename.
+
+As a final reminder, it is VITAL that you stick to EVERY POLICY!
+
+This is the filename to be reviewed:
 
 ```{{ state }}```
 
-Again, your response should be in triple backticks, like so:
-
-```
-This is the reviewed text.
-```
-
-
-Additional guidelines:
-- You must keep the text around the same length! You will be penalized for adding or removing too many words!
-- You must keep the tone of the text intact! You will be penalized for changing the tone too much!
-
-
-As a final reminder, it is VITAL that you stick to EVERY POLICY!
 """
