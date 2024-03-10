@@ -120,6 +120,7 @@ if __name__ == "__main__":
         "filen@me_with_sp*cial_characters!@#$%^&*()_+",
         "a_screenshot_of_something_idk",
         "my_file_april-1st",
+        "20241001_Valid_Filename_Idempotence_Check",
     ]
 
     # Some example recipes

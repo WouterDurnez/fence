@@ -171,6 +171,7 @@ if __name__ == '__main__':
         "file1",
         "file2.loadsofnumbers1234567890",
         "filen@#ame_with_sp*cial_characters!@#$%^&*()_+",
+        "20241001_Valid_Filename_Idempotence_Check",
 
     ]
 
