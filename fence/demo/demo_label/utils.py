@@ -115,12 +115,12 @@ class FilenameProcessor:
         Truncate the filename if it is too long and add the date.
         """
         if self.date:
-            file_name = self.filename[: self.truncation_limit - len(self.date) - 1]
+            file_name = self.filename[: self.truncation_limit - len(self.date) - len(self.separator)]
 
             if self.date_location == "end":
-                self.filename = f"{file_name}_{self.date}"
+                self.filename = f"{file_name}{self.separator}{self.date}"
             else:
-                self.filename = f"{self.date}_{file_name}"
+                self.filename = f"{self.date}{self.separator}{file_name}"
         else:
             self.filename = self.filename[:self.truncation_limit]
 

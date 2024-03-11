@@ -149,7 +149,7 @@ if __name__ == "__main__":
             },
         "capitalisation": "title",
         "separator": "_",
-        "truncation_limit": 50,
+        "truncation_limit": 20,
         "remove_special_characters": True,
         "policy": ["Do not use the word 'screenshot', but use 'image' instead. Do not change anything else."],
     }
@@ -169,6 +169,7 @@ if __name__ == "__main__":
                         f"\nLLM output: \t\t{response['body']['llm_output']}"
                         f"\nTransformed output: \t{response['body']['output']}"
                         f"\nExpected output: \t{expected}"
+                        f"\nOutput length: \t\t{len(response['body']['output'])} characters"
                         f"\nCorrect? \t\t{response['body']['output'] == expected}"
                         f"\n")
 
