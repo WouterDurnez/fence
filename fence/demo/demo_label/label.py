@@ -41,6 +41,7 @@ def handler(event: dict, context: any) -> dict:
     date = recipe.get("date", {}).get("value", None)
     date_format = recipe.get("date", {}).get("format", None)
     date_position = recipe.get("date", {}).get("location", "prefix")
+    date_replace = recipe.get("date", {}).get("replace", False)
     capitalisation = recipe.get("capitalisation", None)
     separator = recipe.get("separator", None)
     truncation_limit = recipe.get("truncation_limit", 50)
@@ -54,7 +55,7 @@ def handler(event: dict, context: any) -> dict:
     logger.info(f"📥 Received remove_special_characters: {remove_special_characters}")
 
     # If date is not None, add a custom policy
-    if date:
+    if date and date_replace:
         policy.append(f"No dates: Strip the filename of any date information. Do not change ANYTHING else, just remove the date format."
                       f""
                       f"Example 1: 'filename_2021-10-01' -> 'filename'"
@@ -62,7 +63,7 @@ def handler(event: dict, context: any) -> dict:
                       f"Example 3: 'something.v1.march24' -> 'something.v1'")
 
     # If there are no policies, skip the LLM interaction
-    processed_filename = None
+    processed_filename = input_text
     if policy:
 
         # Build links and chain
@@ -121,6 +122,7 @@ if __name__ == "__main__":
         "a_screenshot_of_something_idk",
         "my_file_april-1st",
         "20241001_Valid_Filename_Idempotence_Check",
+        "cool Screenshot 2024 - 01 - 12 at 12.29.34",
     ]
 
     expected_outputs = [
@@ -134,6 +136,7 @@ if __name__ == "__main__":
         "20241001_A_Image_Of_Something_Idk",
         "20241001_My_File",
         "20241001_Valid_Filename_Idempotence_Check",
+        "20241001_Cool_Image_At_12_29_34",
         ]
 
 
@@ -146,16 +149,17 @@ if __name__ == "__main__":
                 'value': '2024-10-01',
                 'format': '%Y%m%d',
                 'location': 'suffix',
+                'replace': True,
             },
         "capitalisation": "title",
         "separator": "_",
-        "truncation_limit": 20,
+        "truncation_limit": 50,
         "remove_special_characters": True,
         "policy": ["Do not use the word 'screenshot', but use 'image' instead. Do not change anything else."],
     }
 
     # Call handler for each filename
-    for filename, expected in zip(filenames, expected_outputs):
+    for filename, expected in list(zip(filenames, expected_outputs))[-1:]:
         response = handler(
             event={
                 "recipe": recipe,

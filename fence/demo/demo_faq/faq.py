@@ -17,6 +17,7 @@ claude_model = ClaudeInstantLLM(source="test-faq")
 NUMBER_OF_QUESTIONS = 3
 ADD_SUMMARY = True
 ADD_DESCRIPTION = True
+ADD_TAGS = True
 CHUNK_SIZE = 8_500
 TRUNCATION_LIMIT = 30_000
 MAX_RETRIES = 3
@@ -85,6 +86,11 @@ def handler(event, context):
             },
         )
 
+    # If tags are requested, generate them
+    tags = None
+    if ADD_TAGS:
+        tags = links["tags"].run(input_dict={"summaries": summaries})["state"]
+
     # If a description question is requested, initialize the description
     description = None
     if ADD_DESCRIPTION:
@@ -114,6 +120,7 @@ def handler(event, context):
         "body": {
             "summary": meta_summary,
             "summaries": summaries,
+            "tags": tags,
             "question_answers": question_answers,
             "description": description,
         },
@@ -122,14 +129,14 @@ def handler(event, context):
 
 if __name__ == "__main__":
     # Set the topic
-    topics = ["mma", "brenda", "hallucination", "gpt4"]
+    topics = ["mma",]
 
     # Responses
     responses = {}
 
-    for TOPIC in topics[2:3]:
+    for TOPIC in topics[:]:
         # Load pdf file content
-        file_path = Path(__file__).parent.parent / "data" / f"{TOPIC}.pdf"
+        file_path = Path(__file__).parent.parent.parent / "data" / f"{TOPIC}.pdf"
         reader = PdfReader(file_path)
 
         # Extract all text from all pages

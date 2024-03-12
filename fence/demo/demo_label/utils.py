@@ -44,7 +44,7 @@ class FilenameProcessor:
     }
 
     def __init__(self, capitalisation: str = None, separator: str = None, remove_special_characters: bool = None,
-                 date: str = None, date_location: str = "end", truncation_limit: int = 50):
+                 date: str = None, date_location: str = "suffix", truncation_limit: int = 50):
         """
         Initialize the FilenameProcessor with the given parameters.
         """
@@ -117,7 +117,7 @@ class FilenameProcessor:
         if self.date:
             file_name = self.filename[: self.truncation_limit - len(self.date) - len(self.separator)]
 
-            if self.date_location == "end":
+            if self.date_location == "suffix":
                 self.filename = f"{file_name}{self.separator}{self.date}"
             else:
                 self.filename = f"{self.date}{self.separator}{file_name}"
@@ -177,7 +177,7 @@ if __name__ == '__main__':
 
     processor = FilenameProcessor()
     processor_with_prefixed_date = FilenameProcessor(date="2021-01-01", date_location="start")
-    processor_with_suffixed_date_and_title = FilenameProcessor(date="2021-01-01", date_location="end", capitalisation="title")
+    processor_with_suffixed_date_and_title = FilenameProcessor(date="2021-01-01", date_location="suffix", capitalisation="title")
     processor_with_uppercase = FilenameProcessor(capitalisation="upper")
     processor_with_lower_limit = FilenameProcessor(truncation_limit=10)
     processor_no_special_characters = FilenameProcessor(remove_special_characters=True)
