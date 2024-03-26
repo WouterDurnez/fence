@@ -113,15 +113,22 @@ def retry(f=None, max_retries=3, delay=0.2):
             retries = 0
             while retries < max_retries:
                 try:
-                    return f(*args, **kwargs)  # Pass received args and kwargs to the original function
+                    return f(
+                        *args, **kwargs
+                    )  # Pass received args and kwargs to the original function
                 except Exception as e:
                     retries += 1
-                    error_message = f"Error in {f.__name__}, attempt {retries}/{max_retries}: {e}"
+                    error_message = (
+                        f"Error in {f.__name__}, attempt {retries}/{max_retries}: {e}"
+                    )
                     logger.warning(error_message)
                     time.sleep(delay)
+            logger.warning(f"Maximum retries reached for {f.__name__}")
             raise RuntimeError(f"Maximum retries reached for {f.__name__}")
 
-        return decorated_function(*args, **kwargs)  # Call the decorated function with the received args and kwargs
+        return decorated_function(
+            *args, **kwargs
+        )  # Call the decorated function with the received args and kwargs
 
     return wrapper_retry
 
@@ -135,7 +142,6 @@ def parallelize(f: Callable = None, max_workers: int = 4):
 
     # Check if the decorator is used without parentheses
     if f is None:
-
         # ...if so, return a lambda function that takes the function as an argument
         return lambda func: parallelize(func, max_workers=max_workers)
 
@@ -152,7 +158,9 @@ def parallelize(f: Callable = None, max_workers: int = 4):
         def run_func(index, *args, **kwargs):
             logger.debug(f"[Thread {index}] Running function {f.__name__}")
             result = f(index, *args, **kwargs)
-            results_queue.put(result)
+
+            # Put the result in the queue, along with the index to keep track of the order
+            results_queue.put((index, result))
             logger.debug(f"[Thread {index}] Function {f.__name__} completed")
 
         # Use ThreadPoolExecutor to run the functions in parallel
@@ -168,9 +176,13 @@ def parallelize(f: Callable = None, max_workers: int = 4):
         # Convert the queue to a list
         results = list(results_queue.queue)
 
+        # Sort the results by index and remove the index
+        results = [result[1] for result in sorted(results, key=lambda x: x[0])]
+
         return results
 
     return wrapper
+
 
 
 if __name__ == "__main__":
@@ -189,18 +201,22 @@ if __name__ == "__main__":
 
 
     # Test the time_it decorator
-    @time_it(only_warn=False)
-    def test_time_it():
-        print("Testing time_it")
-
-
-    test_time_it()
-
-
-    # # Test the threaded_execution decorator
-    # @parallelize
-    # def test_threaded_execution(index: int, item: str):
-    #     logger.critical(f"Testing threaded_execution: thread {item}")
+    # @time_it(only_warn=False)
+    # def test_time_it():
+    #     print("Testing time_it")
     #
     #
-    # test_threaded_execution(zip([1, 2, 3, 4], ["this", "is", "a", "test"]))
+    # test_time_it()
+
+
+    # Test the threaded_execution decorator
+    import random as rnd
+    @parallelize
+    def test_threaded_execution(index: int, item: str):
+        time.sleep(rnd.uniform(0,3))
+        logger.critical(f"Testing threaded_execution: thread {item}")
+
+        return index
+
+
+    results = test_threaded_execution(zip([1, 2, 3, 4], ["this", "is", "a", "test"]))
