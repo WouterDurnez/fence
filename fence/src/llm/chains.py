@@ -1,15 +1,15 @@
-import logging
 import os
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Collection, Iterable
 
 from fence.src.llm.links import BaseLink, Link
-from fence.src.llm.models import LLM, ClaudeInstantLLM
-from fence.src.llm.templates import PromptTemplate
+from fence.src.llm.models.base import LLM
+from fence.src.llm.models.claude import ClaudeInstant
+from fence.src.llm.templates import StringTemplate
 from fence.src.utils.base import setup_logging, time_it
 
-logger = setup_logging(log_level=os.environ.get("LOG_LEVEL", "WARNING"))
+logger = setup_logging(__name__)
 
 
 ################
@@ -256,18 +256,18 @@ class LinearChain(BaseChain):
 
 if __name__ == "__main__":
     # Instantiate an LLM model
-    claude = ClaudeInstantLLM(source="test")
+    claude = ClaudeInstant(source="test")
 
     # Example chains
     link_a = Link(
-        template=PromptTemplate(
+        template=StringTemplate(
             "What's the opposite of {{A}}? Reply with one word.", ["A"]
         ),
         name="opposite",
         output_key="X",
     )
     link_b = Link(
-        template=PromptTemplate(
+        template=StringTemplate(
             "What's a superlative version of {{B}}. Reply with one word.",
             ["B"],
         ),
@@ -275,7 +275,7 @@ if __name__ == "__main__":
         output_key="Y",
     )
     link_c = Link(
-        template=PromptTemplate(
+        template=StringTemplate(
             "Write a sarcastic poem using this as inspiration: '{{X}}' and '{{Y}}'",
             ["X", "Y"],
         ),

@@ -6,11 +6,10 @@ from copy import deepcopy
 from fence import (
     LLM,
     Chain,
-    ClaudeInstantLLM,
+    ClaudeInstant,
     Link,
-    PromptTemplate,
+    StringTemplate,
     TransformationLink,
-    transform_func,
 )
 from fence.demo.demo_test.prompt_templates import TEST_TEMPLATE, VERIFICATION_TEMPLATE
 from fence.src.llm.parsers import TOMLParser
@@ -19,10 +18,9 @@ from fence.src.utils.base import setup_logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-claude_instant_model = ClaudeInstantLLM(source="test", temperature=0.5)
+claude_instant_model = ClaudeInstant(source="test", temperature=0.5)
 
 
-@transform_func
 def clean_question(input_dict: dict) -> dict:
     """
     Clean the question:
@@ -56,7 +54,6 @@ def clean_question(input_dict: dict) -> dict:
     return question
 
 
-@transform_func
 def strip_question(input_dict: dict) -> dict:
     """
     Strip the correctness from the responses
@@ -104,7 +101,6 @@ def strip_question(input_dict: dict) -> dict:
     return question
 
 
-@transform_func
 def verify_answer(input_dict: dict) -> dict:
     """
     Verify the answer. Returns True if the answer is correct, False otherwise.
@@ -151,7 +147,7 @@ def build_links(llm: LLM):
 
     test_link = Link(
         name="test_link",
-        template=PromptTemplate(template=TEST_TEMPLATE, input_variables=["highlight"]),
+        template=StringTemplate(source=TEST_TEMPLATE),
         llm=llm,
         parser=TOMLParser(),
         output_key="full_question",
@@ -173,8 +169,8 @@ def build_links(llm: LLM):
 
     verification_link = Link(
         name="verification_link",
-        template=PromptTemplate(
-            template=VERIFICATION_TEMPLATE, input_variables=["question_stripped"]
+        template=StringTemplate(
+            source=VERIFICATION_TEMPLATE
         ),
         llm=llm,
         parser=None,

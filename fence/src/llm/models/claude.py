@@ -5,7 +5,9 @@
 import json
 
 import boto3
-from base import LLM
+from datadog_lambda.metric import lambda_metric
+
+from fence.src.llm.models.base import LLM
 
 
 class ClaudeBase(LLM):
@@ -59,12 +61,12 @@ class ClaudeBase(LLM):
             f"inference_type:{self.inference_type}",
         ]
 
-        # lambda_metric(metric_name=f"{metric_name}_words", value=word_count, tags=tags)
-        # lambda_metric(
-        #     metric_name=f"{metric_name}_characters", value=token_count, tags=tags
-        # )
+        lambda_metric(metric_name=f"{metric_name}_words", value=word_count, tags=tags)
+        lambda_metric(
+            metric_name=f"{metric_name}_characters", value=token_count, tags=tags
+        )
 
-    def invoke(self, prompt: str, bare_bones: str = False) -> str:
+    def invoke(self, prompt: str, **kwargs) -> str:
         """
         Call the model with the given prompt
         :param prompt: text to feed the model
@@ -73,7 +75,7 @@ class ClaudeBase(LLM):
         """
 
         # Format response
-        claude_prompt = prompt if bare_bones else f"\n\nHuman: {prompt}\n\nAssistant: "
+        claude_prompt = f"\n\nHuman: {prompt}\n\nAssistant: "
 
         # Call the model
         response = self._invoke(prompt=claude_prompt)
@@ -173,7 +175,7 @@ class ClaudeV2(ClaudeBase):
         self.llm_name = "ClaudeV2"
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     # Initialize Claude Instant model
     claude = ClaudeInstant(source="test")

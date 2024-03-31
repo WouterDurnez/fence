@@ -1,18 +1,22 @@
-import logging
 import os
 from abc import ABC, abstractmethod
 from typing import Callable, Iterable
 
-from fence.src.llm.models import LLM
+from dotenv import load_dotenv
+from pydantic import parse_obj_as
+
+from fence.src.llm.models.base import LLM
+from fence.src.llm.models.claude3 import Claude3Base, ClaudeHaiku
 from fence.src.llm.parsers import Parser
-from fence.src.llm.templates import PromptTemplate
+from fence.src.llm.templates import MessagesTemplate, StringTemplate
+from fence.src.llm.templates.models import Message, Messages
 from fence.src.utils.base import setup_logging, time_it
 
-from dotenv import load_dotenv
 load_dotenv(override=True)
 
 log_level = os.environ.get("LOG_LEVEL", "WARNING")
-logger = setup_logging(log_level=log_level)
+logger = setup_logging(name=__name__)
+
 
 ################
 # Base classes #
@@ -26,9 +30,7 @@ class BaseLink(ABC):
     key.
     """
 
-    def __init__(
-        self, input_keys: Iterable[str], output_key: str = "state", name: str = None
-    ):
+    def __init__(self, output_key: str = "state", name: str = None):
         """
         Initialize the BaseLink object.
 
@@ -36,12 +38,7 @@ class BaseLink(ABC):
         :param output_key: The output key.
         """
         self.llm = None
-        self.input_keys = input_keys if input_keys is not None else []
-        if isinstance(self.input_keys, str):
-            self.input_keys = [self.input_keys]
-            logger.warning(
-                "Input keys should be a list of strings. Automatically converted to a list."
-            )
+        self.input_keys = None
         self.output_key = output_key
         self.name = name
 
@@ -65,41 +62,34 @@ class BaseLink(ABC):
             "Base class <BaseLink> `run` method must be implemented."
         )
 
-    def __str__(self):
-        return f"Link: {f'{self.name} ' if self.name else ''}<{self.input_keys}> -> <{self.output_key}>"
-
-    def __repr__(self):
-        return str(self)
-
     def _validate_input(self, input_dict: dict):
         """
         Validate the input dictionary. Input dictionary should contain all the input keys for the Link.
         :param input_dict: Input dictionary.
         :return: True if the input dictionary is valid, False otherwise.
         """
-        # Check if the input_dict contains all the input keys for the Link
-        if not all(input_key in input_dict for input_key in self.input_keys):
-            raise ValueError(
-                f"Input keys {self.input_keys} not found in input_dict: {input_dict}"
-            )
+        # Find both missing and superfluous variables
+        missing_variables = [
+            variable for variable in self.input_keys if variable not in input_dict
+        ]
+        superfluous_variables = [
+            variable for variable in input_dict if variable not in self.input_keys
+        ]
+        if missing_variables:
+            raise ValueError(f"Missing variables: {missing_variables}")
+        if superfluous_variables:
+            logger.debug(f"Superfluous variables: {superfluous_variables}")
+
+    def __str__(self):
+        return f"Link: {f'{self.name} ' if self.name else ''}<{self.input_keys}> -> <{self.output_key}>"
+
+    def __repr__(self):
+        return str(self)
 
 
 ###################
 # Implementations #
 ###################
-
-
-def transform_func(func):
-    """
-    Decorator to validate the input data for the transformation function.
-    """
-
-    def wrapper(data):
-        if not isinstance(data, dict):
-            raise ValueError(f"Input data must be a dictionary. Got {type(data)}")
-        return func(data)
-
-    return wrapper
 
 
 class TransformationLink(BaseLink):
@@ -117,7 +107,8 @@ class TransformationLink(BaseLink):
         :param output_key: The output key.
         :param function: The transformation function.
         """
-        super().__init__(input_keys=input_keys, output_key=output_key, name=name)
+        super().__init__(output_key=output_key, name=name)
+        self.input_keys = input_keys
         self.function = function
 
     @time_it
@@ -128,7 +119,7 @@ class TransformationLink(BaseLink):
         :param kwargs: Additional keyword arguments for the LLM model.
         :return:
         """
-        logger.info(f"Executing {(f'<{self.name}>') if self.name else ''} Link")
+        logger.info(f"Executing {f'<{self.name}> ' if self.name else ''}Link")
 
         # Validate the input dictionary
         self._validate_input(input_dict)
@@ -158,7 +149,7 @@ class Link(BaseLink):
 
     def __init__(
         self,
-        template: PromptTemplate,
+        template: StringTemplate | MessagesTemplate,
         output_key: str = "state",
         llm: LLM = None,
         name: str = None,
@@ -172,11 +163,19 @@ class Link(BaseLink):
         :param template: A PromptTemplate object.
         """
         self.template = template
-        super().__init__(
-            input_keys=template.input_variables, output_key=output_key, name=name
-        )
+        super().__init__(output_key=output_key, name=name)
         self.llm = llm
         self.template = template
+
+        # If the template is a MessagesTemplate, we only accept Claude3 type models
+        if isinstance(template, MessagesTemplate):
+            if not isinstance(llm, Claude3Base):
+                raise ValueError(
+                    f"MessagesTemplate can only be used with Claude3 models. Got {llm.model_name}."
+                )
+
+        # Get the input keys from the template
+        self.input_keys = template.input_variables
         self.parser = parser
 
     def __call__(self, **kwargs):
@@ -196,7 +195,12 @@ class Link(BaseLink):
         :return:
         """
 
-        logger.info(f"Executing {(f'<{self.name}>') if self.name else ''} Link")
+        logger.info(f"Executing {f'<{self.name}>' if self.name else 'unnamed'} Link")
+
+        # Update the input dictionary with the keyword arguments
+        if input_dict is None:
+            input_dict = {}
+        input_dict.update(kwargs)
 
         # Check if an LLM model was provided
         if self.llm is None and kwargs.get("llm") is None:
@@ -206,7 +210,7 @@ class Link(BaseLink):
         self._validate_input(input_dict)
 
         # Render the template
-        prompt = self.template(**input_dict)
+        prompt = self.template.render(input_dict=input_dict)
         logger.debug(f"Prompt: {prompt}")
 
         # Determine if the LLM model is provided as a keyword argument,
@@ -214,7 +218,7 @@ class Link(BaseLink):
         llm = kwargs.pop("llm", self.llm)
 
         # Call the LLM model
-        response = llm(prompt, **kwargs)
+        response = llm.invoke(prompt=prompt)
         logger.debug(f"Response: {response}")
 
         # Parse the response
@@ -252,3 +256,63 @@ class Link(BaseLink):
         logger.debug(f"🧐 Current state: {response_dict['state']}")
 
         return response_dict
+
+
+if __name__ == "__main__":
+
+    # Create a MessagesTemplate object
+    template = MessagesTemplate(
+        source=Messages(
+            system="You are a helpful travel assistant.",
+            messages=[
+                Message(
+                    role="user",
+                    content="I would like to book a flight to {{destination}}.",
+                ),
+                Message(
+                    role="assistant", content="Sure! When would you like to travel?"
+                ),
+                Message(role="user", content="I would like to travel on {{date}}."),
+            ],
+        )
+    )
+
+    # Create the same template using a dictionary
+    messages_dict = {
+        "system": "You are a helpful travel assistant.",
+        "messages": [
+            {
+                "role": "user",
+                "content": "I would like to book a flight to {{destination}}.",
+            },
+            {"role": "assistant", "content": "Sure! When would you like to travel?"},
+            {"role": "user", "content": "I would like to travel on {{date}}."},
+        ],
+    }
+    messages_from_dict = parse_obj_as(Messages, messages_dict)
+    template_from_dict = MessagesTemplate(source=messages_from_dict)
+
+    # Render the template (though the Link class does this automatically)
+    rendered_template = template.render(
+        input_dict={"destination": "Paris", "date": "tomorrow"}
+    )
+
+    # Render the template from the dictionary
+    rendered_template_from_dict = template_from_dict.render(
+        input_dict={"destination": "Paris", "date": "tomorrow"}
+    )
+
+    # Check if the rendered templates are the same
+    assert rendered_template == rendered_template_from_dict
+
+    # Create a Claude3 model object
+    claude3 = ClaudeHaiku(source="test", region="us-east-1")
+
+    # Test call the model
+    response = claude3.invoke(prompt="Hi, my name is Marc.")
+    print(response)
+
+    # Try with the template
+    link = Link(template=template, llm=claude3)
+    response = link(destination="Paris", date="tomorrow")
+    print(response)

@@ -1,4 +1,11 @@
-from fence.src.llm.templates import PromptTemplate
+# Add parent path to sys.path to import from src
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+print(sys.path)
+
+from fence.src.llm.templates.string import StringTemplate
 
 TEST_TEMPLATE = """
             You are an instructor in charge of creating exam questions.
@@ -45,7 +52,7 @@ TEST_TEMPLATE = """
             - You must wrap all values in triple quotes, even if they are single words or numbers. This helps to ensure that the output is valid TOML, and that the parser can handle the output. 
             """
 
-test_template = PromptTemplate(template=TEST_TEMPLATE, input_variables=["highlight"])
+test_template = StringTemplate(source=TEST_TEMPLATE)
 
 VERIFICATION_TEMPLATE = """
             You are an instructor in charge of verifying the quality of exam questions.
@@ -68,11 +75,15 @@ VERIFICATION_TEMPLATE = """
             Out of the options provided, the correct response index is (integer only):
             """
 
-verification_template = PromptTemplate(
-    template=VERIFICATION_TEMPLATE, input_variables=["highlight", "question_stripped"]
+verification_template = StringTemplate(
+    source=VERIFICATION_TEMPLATE
 )
 
 if __name__ == "__main__":
+
+
+
+
     # Test the prompt templates
     print(test_template(highlight="This is a test question."))
     print(

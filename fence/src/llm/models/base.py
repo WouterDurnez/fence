@@ -4,6 +4,7 @@
 
 import math
 from abc import ABC, abstractmethod
+
 from datadog_lambda.metric import lambda_metric
 
 
@@ -20,7 +21,7 @@ class LLM(ABC):
         return self.invoke(prompt, **kwargs)
 
     @abstractmethod
-    def invoke(self, prompt: str|list, **kwargs) -> str:
+    def invoke(self, prompt: str | list) -> str:
         raise NotImplementedError
 
     def invocation_logging(self):

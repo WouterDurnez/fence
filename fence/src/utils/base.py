@@ -16,28 +16,44 @@ CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 LOGGING_FORMAT = "%(message)s"
-LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
-LOG_LEVEL = getattr(logging, LOG_LEVEL)
 
 
-def setup_logging(log_level: str = LOG_LEVEL):
+def setup_logging(name: str = "root"):
     """
-    Utility function to set up logging in various parts of the code.
+    Setup logging for use in lambdas.
+    :param name: name of the logger
+    :return: logger instance
     """
-    # Set up rich logging
+    # Set the default log level to INFO if not provided in the environment variable
+    log_level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_str, None)
+
+    # Validate and fallback to WARNING if an invalid log level is provided
+    if not isinstance(log_level, int):
+        log_level = logging.WARNING
+        logging.error(
+            "Invalid log level in environment variable, defaulting to WARNING"
+        )
+
+    # Set the root logger level
+    logging.root.setLevel(log_level)
+
+    # Configure the basic logging settings
     logging.basicConfig(
         level=log_level,
         format=LOGGING_FORMAT,
         datefmt="[%X]",
         handlers=[RichHandler(console=Console(width=160))],
     )
-    logger = logging.getLogger("rich")
-    logger.setLevel(log_level)
+
+    # Create a logger with the specified name
+    logger = logging.getLogger(name=name)
+    logger.setLevel(level=log_level)
+
     return logger
 
 
-setup_logging()
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__)
 
 
 def time_it(f=None, threshold: int = 300, only_warn: bool = True):
@@ -184,9 +200,7 @@ def parallelize(f: Callable = None, max_workers: int = 4):
     return wrapper
 
 
-
 if __name__ == "__main__":
-
 
     # @retry(max_retries=3, delay=1)
     # def test_retry():
@@ -199,7 +213,6 @@ if __name__ == "__main__":
     # except Exception as e:
     #     print("Final exception: ", e)
 
-
     # Test the time_it decorator
     # @time_it(only_warn=False)
     # def test_time_it():
@@ -208,15 +221,14 @@ if __name__ == "__main__":
     #
     # test_time_it()
 
-
     # Test the threaded_execution decorator
     import random as rnd
+
     @parallelize
     def test_threaded_execution(index: int, item: str):
-        time.sleep(rnd.uniform(0,3))
+        time.sleep(rnd.uniform(0, 3))
         logger.critical(f"Testing threaded_execution: thread {item}")
 
         return index
-
 
     results = test_threaded_execution(zip([1, 2, 3, 4], ["this", "is", "a", "test"]))

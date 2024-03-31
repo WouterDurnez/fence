@@ -1,15 +1,13 @@
 import logging
 from pprint import pprint
 
-from fence import Chain, ClaudeInstantLLM
+from fence import Chain, ClaudeInstant
 from fence.demo.demo_test.utils import build_links
 from fence.src.utils.base import setup_logging
 
-setup_logging(log_level="INFO")
+logger = setup_logging(__name__)
 
-logger = logging.getLogger(__name__)
-
-claude_model = ClaudeInstantLLM(source="test-faq")
+claude_model = ClaudeInstant(source="test-faq")
 
 
 def handler(event, context):

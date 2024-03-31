@@ -3,13 +3,19 @@
 ########################
 
 import json
-from datadog_lambda.metric import lambda_metric
-import boto3
-from fence.src.llm.base import LLM
 
+import boto3
+from datadog_lambda.metric import lambda_metric
+
+from fence.src.llm.models.base import LLM
+from fence.src.llm.templates.models import Messages
+from fence.src.utils.base import setup_logging
 
 MODEL_ID_SONNET = "anthropic.claude-3-sonnet-20240229-v1:0"
 MODEL_ID_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
+
+logger = setup_logging(__name__)
+
 
 class Claude3Base(LLM):
     """Base class for Claude (gen 3) models"""
@@ -18,7 +24,7 @@ class Claude3Base(LLM):
     llm_name = None
     inference_type = "bedrock"
 
-    def __init__(self, source: str, full_response:bool=False, **kwargs):
+    def __init__(self, source: str, full_response: bool = False, **kwargs):
         """
         Initialize a Claude model
 
@@ -39,26 +45,40 @@ class Claude3Base(LLM):
         self.client = boto3.client("bedrock-runtime", self.region)
 
     @staticmethod
-    def count_words_in_messages(messages: list[dict]):
+    def count_words_in_messages(messages: Messages):
         """
         Count the number of words in a list of messages. Takes all roles into account. Type must be 'text'
         :param messages: list of messages
         :return: word count (int)
         """
 
+        # Get user and assistant messages
+        user_assistant_messages = messages.messages
+
+        # Get system message
+        system_messages = messages.system
+
+        # Initialize word count
         word_count = 0
 
         # Loop through messages
-        for message in messages:
+        for message in user_assistant_messages:
 
             # Get content
-            content = message.get("content", [])
+            content = message.content
 
-            # Count words in content if type is 'text'
-            for item in content:
-                if item.get("type") == "text":
-                    text = item.get("text", "")
-                    word_count += len(text.split())
+            # Content is either a string, or a list of content objects
+            if isinstance(content, str):
+                word_count += len(content.split())
+            elif isinstance(content, list):
+                for content_object in content:
+                    if content_object.type == "text":
+                        word_count += len(content_object.text.split())
+
+        # Add system message to word count
+        if system_messages:
+            word_count += len(system_messages.split())
+
         return word_count
 
     def send_token_metrics(
@@ -86,23 +106,22 @@ class Claude3Base(LLM):
             metric_name=f"{metric_name}_characters", value=token_count, tags=tags
         )
 
-    def invoke(self, prompt: str | list, **kwargs) -> str:
+    def invoke(self, prompt: str | Messages) -> str:
         """
         Call the model with the given prompt
         :param prompt: text to feed the model
-        :param bare_bones: whether to use the 'Human: ... Assistant: ...' formatting
         :return: response
         """
 
         # Call the model
-        response = self._invoke(prompt=prompt, **kwargs)
+        response = self._invoke(prompt=prompt)
 
         # Get response completion
         response_body = json.loads(response.get("body").read().decode())
 
         # Get token counts
-        input_token_count = response_body['usage']['input_tokens']
-        output_token_count = response_body['usage']['output_tokens']
+        input_token_count = response_body["usage"]["input_tokens"]
+        output_token_count = response_body["usage"]["output_tokens"]
 
         # Get completion
         completion = response_body["content"][0]["text"]
@@ -110,10 +129,12 @@ class Claude3Base(LLM):
         # Get input and output word count
         if isinstance(prompt, str):
             input_word_count = len(prompt.split())
-        elif isinstance(prompt, list):
+        elif isinstance(prompt, Messages):
             input_word_count = self.count_words_in_messages(prompt)
         else:
-            raise ValueError("Prompt must be a string or a list of messages")
+            raise ValueError(
+                f"Prompt must be a string or a list of messages. Got {type(prompt)}"
+            )
         output_word_count = len(completion.split())
 
         # Calculate token metrics for the response and send them to Datadog
@@ -130,7 +151,7 @@ class Claude3Base(LLM):
 
         return completion
 
-    def _invoke(self, prompt: str|list, **kwargs) -> dict:
+    def _invoke(self, prompt: str | Messages) -> dict:
         """
         Handle the API request to the service
         :param prompt: text to feed the model
@@ -139,30 +160,33 @@ class Claude3Base(LLM):
 
         # Format prompt: Claude3 models expect a list of messages, with content, roles, etc.
         # However, if we receive a string, we will format it as a single user message for ease of use.
-        if isinstance(prompt, list):
-            messages = prompt
+        if isinstance(prompt, Messages):
+            messages = prompt.model_dump(exclude_none=True)
         elif isinstance(prompt, str):
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt,
-                        }
-                    ],
-                }
-            ]
+            messages = {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt,
+                            }
+                        ],
+                    }
+                ]
+            }
         else:
             raise ValueError("Prompt must be a string or a list of messages")
 
         # Build request body
         request_body = {
             "anthropic_version": "bedrock-2023-05-31",
-            "messages": messages,
+            **messages,
             **self.model_kwargs,
-            **kwargs
         }
+
+        logger.info(f"Request body: {request_body}")
 
         # Send request
         try:
@@ -170,7 +194,7 @@ class Claude3Base(LLM):
                 modelId=self.model_id,
                 contentType="application/json",
                 accept="application/json",
-                body=json.dumps(request_body)
+                body=json.dumps(request_body),
             )
 
             # Log invocation
@@ -197,6 +221,7 @@ class ClaudeHaiku(Claude3Base):
         self.model_id = MODEL_ID_HAIKU
         self.llm_name = "ClaudeHaiku"
 
+
 class ClaudeSonnet(Claude3Base):
     """Claude Sonnet model class"""
 
@@ -213,31 +238,24 @@ class ClaudeSonnet(Claude3Base):
         self.llm_name = "ClaudeSonnet"
 
 
-
-
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     # Create an instance of the ClaudeHaiku class
-    claude_haiku = ClaudeHaiku(source='test', region='us-east-1')
+    claude_haiku = ClaudeHaiku(source="test", region="us-east-1")
 
     # Call the invoke method with a prompt
-    response = claude_haiku.invoke(prompt='The sun is shining brightly')
+    response = claude_haiku.invoke(prompt="The sun is shining brightly")
 
     # Create an instance of the ClaudeSonnet class
-    claude_sonnet = ClaudeSonnet(source='test', region='us-east-1')
+    claude_sonnet = ClaudeSonnet(source="test", region="us-east-1")
 
     # Call the invoke method with a prompt
     prompt = [
         {
             "role": "user",
             "content": [
-                {
-                    "type": "text",
-                    "text": "Shall I compare thee to a summer's day?"
-                }
-            ]
+                {"type": "text", "text": "Shall I compare thee to a summer's day?"}
+            ],
         }
     ]
     response2 = claude_sonnet.invoke(prompt=prompt)
