@@ -26,7 +26,6 @@ class BaseTemplate(ABC):
         self.source = source
         self.type = type(source)
         self.input_variables = []
-        print(f"typeof source: {self.type}")
         # We have no time for anything other than strings or Messages
         if self.type not in [str, Messages]:
             raise TypeError("Template must be a string or a Messages object.")
