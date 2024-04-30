@@ -5,7 +5,7 @@ import queue
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 
 from dotenv import load_dotenv
 from rich.logging import Console, RichHandler
@@ -179,12 +179,24 @@ def parallelize(f: Callable = None, max_workers: int = 4):
             results_queue.put((index, result))
             logger.debug(f"[Thread {index}] Function {f.__name__} completed")
 
+        # Check if first argument is an iterable, if not, split the args into a list
+        first_arg_iterable = isinstance(args[0], Iterable)
+        if not first_arg_iterable:
+            self_arg = args[0]
+            args = args[1:]
+
         # Use ThreadPoolExecutor to run the functions in parallel
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                executor.submit(run_func, index, *args, **kwargs)
-                for index, args in enumerate(zip(*args))
-            ]
+            if not first_arg_iterable:
+                futures = [
+                    executor.submit(run_func, index, self_arg, *args, **kwargs)
+                    for index, args in enumerate(zip(*args))
+                ]
+            else:
+                futures = [
+                    executor.submit(run_func, index, *args, **kwargs)
+                    for index, args in enumerate(zip(*args))
+                ]
 
         # Wait for all tasks to complete
         wait(futures)
