@@ -173,7 +173,7 @@ def parallelize(f: Callable = None, max_workers: int = 4):
         # Define the function to run in parallel
         def run_func(index, *args, **kwargs):
             logger.debug(f"[Thread {index}] Running function {f.__name__}")
-            result = f(index, *args, **kwargs)
+            result = f(*args, **kwargs)
 
             # Put the result in the queue, along with the index to keep track of the order
             results_queue.put((index, result))
@@ -225,10 +225,25 @@ if __name__ == "__main__":
     import random as rnd
 
     @parallelize
-    def test_threaded_execution(index: int, item: str):
+    def test_threaded_execution(item: str, other_kw_arg='test'):
         time.sleep(rnd.uniform(0, 3))
-        logger.critical(f"Testing threaded_execution: thread {item}")
+        logger.critical(f"Testing threaded_execution: thread {item} with kw arg {other_kw_arg}")
 
-        return index
+        return item
 
-    results = test_threaded_execution(zip([1, 2, 3, 4], ["this", "is", "a", "test"]))
+    results = test_threaded_execution(["this", "is", "a", "test"], other_kw_arg='test')
+
+    # Test with a class method
+    class TestClass:
+        def __init__(self):
+            pass
+
+        @parallelize
+        def test_threaded_execution(self, item: str, other_kw_arg='test'):
+            time.sleep(rnd.uniform(0, 3))
+            logger.critical(f"Testing threaded_execution: thread {item} with kw arg {other_kw_arg}")
+
+            return item
+
+    test_class = TestClass()
+    results = test_class.test_threaded_execution(["this", "is", "a", "test"], other_kw_arg='test')
