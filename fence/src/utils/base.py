@@ -6,7 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Callable, Iterable
-
+from inspect import ismethod, isbuiltin
 from dotenv import load_dotenv
 from rich.logging import Console, RichHandler
 
@@ -184,6 +184,10 @@ def parallelize(f: Callable = None, max_workers: int = 4):
         if not first_arg_iterable:
             self_arg = args[0]
             args = args[1:]
+            logger.debug(f"First argument is not an iterable. Using {self_arg} as self.")
+        else:
+            self_arg = None
+            logger.debug(f"First argument is an iterable. Not using self.")
 
         # Use ThreadPoolExecutor to run the functions in parallel
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
