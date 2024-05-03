@@ -75,14 +75,9 @@ VERIFICATION_TEMPLATE = """
             Out of the options provided, the correct response index is (integer only):
             """
 
-verification_template = StringTemplate(
-    source=VERIFICATION_TEMPLATE
-)
+verification_template = StringTemplate(source=VERIFICATION_TEMPLATE)
 
 if __name__ == "__main__":
-
-
-
 
     # Test the prompt templates
     print(test_template(highlight="This is a test question."))

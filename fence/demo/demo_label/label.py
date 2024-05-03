@@ -5,9 +5,7 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-sys.path.extend(
-    ["/Users/wouter.durnez/Documents/Repositories/showpad_personal/fence"]
-)
+sys.path.extend(["/Users/wouter.durnez/Documents/Repositories/showpad_personal/fence"])
 
 from fence.data.snippets import snippet
 from fence.demo.demo_label.utils import build_links, FilenameProcessor
@@ -22,6 +20,7 @@ logger = setup_logging(log_level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
 
 def handler(event: dict, context: any) -> dict:
     """
@@ -56,11 +55,13 @@ def handler(event: dict, context: any) -> dict:
 
     # If date is not None, add a custom policy
     if date and date_replace:
-        policy.append(f"No dates: Strip the filename of any date information. Do not change ANYTHING else, just remove the date format."
-                      f""
-                      f"Example 1: 'filename_2021-10-01' -> 'filename'"
-                      f"Example 2: '2021-10-01_filename' -> 'filename'"
-                      f"Example 3: 'something.v1.march24' -> 'something.v1'")
+        policy.append(
+            f"No dates: Strip the filename of any date information. Do not change ANYTHING else, just remove the date format."
+            f""
+            f"Example 1: 'filename_2021-10-01' -> 'filename'"
+            f"Example 2: '2021-10-01_filename' -> 'filename'"
+            f"Example 3: 'something.v1.march24' -> 'something.v1'"
+        )
 
     # If there are no policies, skip the LLM interaction
     processed_filename = input_text
@@ -71,7 +72,9 @@ def handler(event: dict, context: any) -> dict:
         chain = LinearChain(links=links, llm=claude_model)
 
         # Run chain
-        processed_filename = chain.run(input_dict={"state": input_text, "recipe": recipe})['state']
+        processed_filename = chain.run(
+            input_dict={"state": input_text, "recipe": recipe}
+        )["state"]
 
         # Copy for output
         llm_output = processed_filename
@@ -84,7 +87,6 @@ def handler(event: dict, context: any) -> dict:
 
             # Format date
             date = datetime.strptime(date, "%Y-%m-%d").strftime(date_format)
-
 
         filename_processor = FilenameProcessor(
             capitalisation=capitalisation,
@@ -137,25 +139,25 @@ if __name__ == "__main__":
         "20241001_My_File",
         "20241001_Valid_Filename_Idempotence_Check",
         "20241001_Cool_Image_At_12_29_34",
-        ]
-
+    ]
 
     # Some example recipes
     recipe = dict()
 
     recipe |= {
-        "date":
-            {
-                'value': '2024-10-01',
-                'format': '%Y%m%d',
-                'location': 'suffix',
-                'replace': True,
-            },
+        "date": {
+            "value": "2024-10-01",
+            "format": "%Y%m%d",
+            "location": "suffix",
+            "replace": True,
+        },
         "capitalisation": "title",
         "separator": "_",
         "truncation_limit": 50,
         "remove_special_characters": True,
-        "policy": ["Do not use the word 'screenshot', but use 'image' instead. Do not change anything else."],
+        "policy": [
+            "Do not use the word 'screenshot', but use 'image' instead. Do not change anything else."
+        ],
     }
 
     # Call handler for each filename
@@ -169,11 +171,12 @@ if __name__ == "__main__":
         )
 
         # Print response
-        logger.critical(f"Received input: \t{filename}"
-                        f"\nLLM output: \t\t{response['body']['llm_output']}"
-                        f"\nTransformed output: \t{response['body']['output']}"
-                        f"\nExpected output: \t{expected}"
-                        f"\nOutput length: \t\t{len(response['body']['output'])} characters"
-                        f"\nCorrect? \t\t{response['body']['output'] == expected}"
-                        f"\n")
-
+        logger.critical(
+            f"Received input: \t{filename}"
+            f"\nLLM output: \t\t{response['body']['llm_output']}"
+            f"\nTransformed output: \t{response['body']['output']}"
+            f"\nExpected output: \t{expected}"
+            f"\nOutput length: \t\t{len(response['body']['output'])} characters"
+            f"\nCorrect? \t\t{response['body']['output'] == expected}"
+            f"\n"
+        )

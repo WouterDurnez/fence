@@ -127,6 +127,7 @@ def retry(f=None, max_retries=3, delay=0.2):
             Decorated function that retries the function if it fails.
             """
             retries = 0
+            final_error = None
             while retries < max_retries:
                 try:
                     return f(
@@ -138,9 +139,10 @@ def retry(f=None, max_retries=3, delay=0.2):
                         f"Error in {f.__name__}, attempt {retries}/{max_retries}: {e}"
                     )
                     logger.warning(error_message)
+                    final_error = e
                     time.sleep(delay)
             logger.warning(f"Maximum retries reached for {f.__name__}")
-            raise RuntimeError(f"Maximum retries reached for {f.__name__}")
+            raise RuntimeError(f"Maximum retries reached for {f.__name__}. Final error: {final_error}")
 
         return decorated_function(
             *args, **kwargs
@@ -184,7 +186,9 @@ def parallelize(f: Callable = None, max_workers: int = 4):
         if not first_arg_iterable:
             self_arg = args[0]
             args = args[1:]
-            logger.debug(f"First argument is not an iterable. Using {self_arg} as self.")
+            logger.debug(
+                f"First argument is not an iterable. Using {self_arg} as self."
+            )
         else:
             self_arg = None
             logger.debug(f"First argument is an iterable. Not using self.")
@@ -241,13 +245,15 @@ if __name__ == "__main__":
     import random as rnd
 
     @parallelize
-    def test_threaded_execution(item: str, other_kw_arg='test'):
+    def test_threaded_execution(item: str, other_kw_arg="test"):
         time.sleep(rnd.uniform(0, 3))
-        logger.critical(f"Testing threaded_execution: thread {item} with kw arg {other_kw_arg}")
+        logger.critical(
+            f"Testing threaded_execution: thread {item} with kw arg {other_kw_arg}"
+        )
 
         return item
 
-    results = test_threaded_execution(["this", "is", "a", "test"], other_kw_arg='test')
+    results = test_threaded_execution(["this", "is", "a", "test"], other_kw_arg="test")
 
     # Test with a class method
     class TestClass:
@@ -255,11 +261,15 @@ if __name__ == "__main__":
             pass
 
         @parallelize
-        def test_threaded_execution(self, item: str, other_kw_arg='test'):
+        def test_threaded_execution(self, item: str, other_kw_arg="test"):
             time.sleep(rnd.uniform(0, 3))
-            logger.critical(f"Testing threaded_execution: thread {item} with kw arg {other_kw_arg}")
+            logger.critical(
+                f"Testing threaded_execution: thread {item} with kw arg {other_kw_arg}"
+            )
 
             return item
 
     test_class = TestClass()
-    results = test_class.test_threaded_execution(["this", "is", "a", "test"], other_kw_arg='test')
+    results = test_class.test_threaded_execution(
+        ["this", "is", "a", "test"], other_kw_arg="test"
+    )

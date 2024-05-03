@@ -26,6 +26,33 @@ class Parser(ABC):
 #####################
 
 
+class BoolParser(Parser):
+    """
+    A class to parse a string containing a boolean value. Returns a boolean.
+
+    Example:
+    "true"
+
+    returns:
+    True
+    """
+
+    def parse(self, input_string: str):
+        """
+        Parse a string containing a boolean value and return a boolean.
+
+        :param input_string: text string containing a boolean value
+        :return: boolean value
+        """
+        input_string = input_string.strip().lower()
+        if input_string in ["true", "t", "yes", "y", "1"]:
+            return True
+        elif input_string in ["false", "f", "no", "n", "0"]:
+            return False
+        else:
+            raise ValueError(f"Invalid boolean value: {input_string}")
+
+
 class TripleBacktickParser(Parser):
     def parse(self, input_string: str):
         """

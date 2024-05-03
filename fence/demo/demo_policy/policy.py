@@ -13,12 +13,11 @@ from fence.src.llm.models import ClaudeInstantLLM
 from fence.src.llm.claude3 import ClaudeHaiku
 from fence.src.utils.base import setup_logging
 
-#claude_model = ClaudeInstantLLM(source="test-ai-message-composer")
+# claude_model = ClaudeInstantLLM(source="test-ai-message-composer")
 claude_model = ClaudeHaiku(source="test-ai-message-composer", region="us-east-1")
 
 # Set up logging
 logger = setup_logging(log_level="INFO")
-
 
 
 def handler(event: dict, context: any) -> dict:
@@ -63,9 +62,7 @@ if __name__ == "__main__":
     # Some example recipes
     recipe = dict()
 
-    recipe |= {
-        "policy": presets
-    }
+    recipe |= {"policy": presets}
 
     # Loop through test cases
     for test_case in test_cases:

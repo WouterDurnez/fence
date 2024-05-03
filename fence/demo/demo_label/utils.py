@@ -2,7 +2,6 @@ from fence import LLM, Link, PromptTemplate
 import re
 from fence.demo.demo_label.prompt_templates import (
     POLICY_TEMPLATE,
-
 )
 from fence.src.llm.parsers import TOMLParser, TripleBacktickParser
 
@@ -14,8 +13,7 @@ LINK_PARSERS = {
 }
 
 
-
-def build_links( llm: LLM) -> list[Link]:
+def build_links(llm: LLM) -> list[Link]:
     """
     Build and return a list of links based on the provided recipe and templates.
     :param llm: LLM instance
@@ -29,22 +27,31 @@ def build_links( llm: LLM) -> list[Link]:
         llm=llm,
         parser=TripleBacktickParser(),
         output_key=f"policy_output",
-            )
+    )
 
     return [link]
+
 
 class FilenameProcessor:
     """
     A class to process filenames.
     """
+
     CASE_MAP = {
         "title": str.title,
         "upper": str.upper,
         "lower": str.lower,
     }
 
-    def __init__(self, capitalisation: str = None, separator: str = None, remove_special_characters: bool = None,
-                 date: str = None, date_location: str = "suffix", truncation_limit: int = 50):
+    def __init__(
+        self,
+        capitalisation: str = None,
+        separator: str = None,
+        remove_special_characters: bool = None,
+        date: str = None,
+        date_location: str = "suffix",
+        truncation_limit: int = 50,
+    ):
         """
         Initialize the FilenameProcessor with the given parameters.
         """
@@ -64,7 +71,9 @@ class FilenameProcessor:
         """
         Replace special characters with a single separator.
         """
-        self.filename = self._special_character_pattern.sub(self.separator, self.filename)
+        self.filename = self._special_character_pattern.sub(
+            self.separator, self.filename
+        )
 
     def _split_camel_case(self):
         """
@@ -90,7 +99,6 @@ class FilenameProcessor:
         """
         self.filename = self.filename.strip()
 
-
     def _split_into_components(self):
         """
         Split the filename into components.
@@ -101,8 +109,10 @@ class FilenameProcessor:
         """
         Convert the filename to the desired case.
         """
-        self.filename_components = [self.CASE_MAP[self.capitalisation](component.lower()) for component in self.filename_components]
-
+        self.filename_components = [
+            self.CASE_MAP[self.capitalisation](component.lower())
+            for component in self.filename_components
+        ]
 
     def _join_components(self):
         """
@@ -115,14 +125,16 @@ class FilenameProcessor:
         Truncate the filename if it is too long and add the date.
         """
         if self.date:
-            file_name = self.filename[: self.truncation_limit - len(self.date) - len(self.separator)]
+            file_name = self.filename[
+                : self.truncation_limit - len(self.date) - len(self.separator)
+            ]
 
             if self.date_location == "suffix":
                 self.filename = f"{file_name}{self.separator}{self.date}"
             else:
                 self.filename = f"{self.date}{self.separator}{file_name}"
         else:
-            self.filename = self.filename[:self.truncation_limit]
+            self.filename = self.filename[: self.truncation_limit]
 
     def _finish_up(self):
         """
@@ -131,7 +143,7 @@ class FilenameProcessor:
         if self.filename[-1] in self.separator:
             self.filename = self.filename[:-1]
 
-    def process_filename(self, filename:str):
+    def process_filename(self, filename: str):
         """
         Process the given filename by calling all the other methods in the correct order.
 
@@ -142,7 +154,6 @@ class FilenameProcessor:
         self._split_by_separators()
         self._split_by_spaces()
         self._remove_spaces()
-
 
         # String to list #
 
@@ -158,11 +169,12 @@ class FilenameProcessor:
 
         self._truncate_and_add_date()
         if self.remove_special_characters:
-            self._remove_special_characters() # Potentially: Replace special characters with SINGLE separator
+            self._remove_special_characters()  # Potentially: Replace special characters with SINGLE separator
         self._finish_up()
         return self.filename
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
 
     filenames = [
         "example.SomeReallyLongFILENAME also-Separators/OrCamelCase_orBothANDNumbers1234567890.did-i-mention-it-was-long",
@@ -172,12 +184,15 @@ if __name__ == '__main__':
         "file2.loadsofnumbers1234567890",
         "filen@#ame_with_sp*cial_characters!@#$%^&*()_+",
         "20241001_Valid_Filename_Idempotence_Check",
-
     ]
 
     processor = FilenameProcessor()
-    processor_with_prefixed_date = FilenameProcessor(date="2021-01-01", date_location="start")
-    processor_with_suffixed_date_and_title = FilenameProcessor(date="2021-01-01", date_location="suffix", capitalisation="title")
+    processor_with_prefixed_date = FilenameProcessor(
+        date="2021-01-01", date_location="start"
+    )
+    processor_with_suffixed_date_and_title = FilenameProcessor(
+        date="2021-01-01", date_location="suffix", capitalisation="title"
+    )
     processor_with_uppercase = FilenameProcessor(capitalisation="upper")
     processor_with_lower_limit = FilenameProcessor(truncation_limit=10)
     processor_no_special_characters = FilenameProcessor(remove_special_characters=True)
@@ -185,9 +200,19 @@ if __name__ == '__main__':
     for filename in filenames:
         print(f"FILENAME: {filename}")
         print(f" --> processed: {processor.process_filename(filename)}")
-        print(f" --> processed with prefixed date: {processor_with_prefixed_date.process_filename(filename)}")
-        print(f" --> processed with suffixed date and title: {processor_with_suffixed_date_and_title.process_filename(filename)}")
-        print(f" --> processed with uppercase: {processor_with_uppercase.process_filename(filename)}")
-        print(f" --> processed with lower limit: {processor_with_lower_limit.process_filename(filename)}")
-        print(f" --> processed with no special characters: {processor_no_special_characters.process_filename(filename)}")
+        print(
+            f" --> processed with prefixed date: {processor_with_prefixed_date.process_filename(filename)}"
+        )
+        print(
+            f" --> processed with suffixed date and title: {processor_with_suffixed_date_and_title.process_filename(filename)}"
+        )
+        print(
+            f" --> processed with uppercase: {processor_with_uppercase.process_filename(filename)}"
+        )
+        print(
+            f" --> processed with lower limit: {processor_with_lower_limit.process_filename(filename)}"
+        )
+        print(
+            f" --> processed with no special characters: {processor_no_special_characters.process_filename(filename)}"
+        )
         print()

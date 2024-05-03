@@ -129,7 +129,9 @@ def handler(event, context):
 
 if __name__ == "__main__":
     # Set the topic
-    topics = ["mma",]
+    topics = [
+        "mma",
+    ]
 
     # Responses
     responses = {}

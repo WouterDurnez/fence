@@ -8,6 +8,7 @@ from fence.src.utils.base import setup_logging
 
 logger = setup_logging(__name__)
 
+
 class BaseTemplate(ABC):
     """
     Base class for template objects.

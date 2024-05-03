@@ -242,11 +242,11 @@ class Link(BaseLink):
                 response_dict = {"state": response}
             else:
                 response_dict = {"state": response["state"]}
-        elif isinstance(response, str):
+        elif isinstance(response, (str, bool)):
             response_dict = {"state": response}
         else:
             raise TypeError(
-                f"Response must be a dictionary or a string. Got {type(response)}."
+                f"Response must be a dictionary, string or bool. Got {type(response)}."
             )
 
         # If the output key is not 'state', we also return the *full* output under that key

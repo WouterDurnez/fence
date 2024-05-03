@@ -3,7 +3,6 @@ Use this script to read a directory of PDF documents and save them to a vector s
 to define a retriever for the LLM.
 """
 
-
 from dotenv import load_dotenv
 from langchain.embeddings.bedrock import BedrockEmbeddings
 from langchain_community.document_loaders import PyPDFLoader

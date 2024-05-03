@@ -2,7 +2,6 @@
 Base templates for the LLM that can be used to build more complex, modular prompts, Links and Chains.
 """
 
-
 ##########
 # Common #
 ##########

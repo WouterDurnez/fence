@@ -104,6 +104,7 @@ class AIPlaceholder:
 
         return text
 
+
 class PolicyFormatter:
     """
     Given a policy object, which is a list of Policy objects, this class helps to format the policy in an LLM-friendly way.
@@ -139,13 +140,19 @@ class PolicyFormatter:
         formatted_policy = f"<policy>\n\n{policy_value}\n\n"
 
         # Check if the policy has examples
-        if 'examples' in policy and policy['examples']:
+        if "examples" in policy and policy["examples"]:
 
             # Get positive and negative examples
-            positive_examples = [example.get("value", "") for example in policy.get("examples", []) if
-                                 example.get("type", "") == "positive"]
-            negative_examples = [example.get("value", "") for example in policy.get("examples", []) if
-                                 example.get("type", "") == "negative"]
+            positive_examples = [
+                example.get("value", "")
+                for example in policy.get("examples", [])
+                if example.get("type", "") == "positive"
+            ]
+            negative_examples = [
+                example.get("value", "")
+                for example in policy.get("examples", [])
+                if example.get("type", "") == "negative"
+            ]
 
             # Add the examples to the formatted policy
             if positive_examples:
@@ -176,7 +183,7 @@ class PolicyFormatter:
         return formatted_policy
 
 
-def build_links(recipe: dict, llm: LLM, source: str=None) -> list[Link]:
+def build_links(recipe: dict, llm: LLM, source: str = None) -> list[Link]:
     """
     Build and return a list of links based on the provided recipe and templates.
     :param recipe: recipe JSON object
@@ -227,4 +234,3 @@ def build_links(recipe: dict, llm: LLM, source: str=None) -> list[Link]:
             logger.debug(f"Created link for {key} with template: {template}")
 
     return links
-

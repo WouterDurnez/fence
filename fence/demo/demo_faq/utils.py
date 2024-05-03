@@ -5,7 +5,7 @@ from fence.demo.demo_faq.prompt_templates import (
     DESCRIPTION_TEMPLATE,
     FAQ_TEMPLATE,
     SUMMARY_TEMPLATE,
-TAG_TEMPLATE
+    TAG_TEMPLATE,
 )
 from fence.src.llm.parsers import TOMLParser, TripleBacktickParser
 from fence.src.utils.base import setup_logging
@@ -113,12 +113,15 @@ def build_links(llm: LLM):
 
     tag_link = Link(
         name="tag_link",
-        template=PromptTemplate(
-            template=TAG_TEMPLATE, input_variables=["summaries"]
-        ),
+        template=PromptTemplate(template=TAG_TEMPLATE, input_variables=["summaries"]),
         llm=llm,
         parser=TripleBacktickParser(),
         output_key="tag_output",
     )
 
-    return {"faq": faq_link, "summary": summary_link, "description": description_link, "tags": tag_link}
+    return {
+        "faq": faq_link,
+        "summary": summary_link,
+        "description": description_link,
+        "tags": tag_link,
+    }

@@ -169,9 +169,7 @@ def build_links(llm: LLM):
 
     verification_link = Link(
         name="verification_link",
-        template=StringTemplate(
-            source=VERIFICATION_TEMPLATE
-        ),
+        template=StringTemplate(source=VERIFICATION_TEMPLATE),
         llm=llm,
         parser=None,
         output_key="answered_question",
