@@ -28,13 +28,15 @@ def handler(event, context):
         role="user",
         content=new_user_message,
     )
-    messages, state, assets = memory.apply_history(message=new_user_message)
+    messages, last_state, last_assets = memory.apply_history(message=new_user_message)
 
     # Add system prompt
     messages.system = SYSTEM_MESSAGE
 
     # Get the assets
-    assets = event.get("assets")
+    new_assets = event.get("assets")
+    if new_assets:
+        last_assets = new_assets
 
     # Create MessageTemplate object
     template = MessagesTemplate(source=messages)
@@ -61,8 +63,8 @@ def handler(event, context):
             role="assistant",
             content=response["chat_response"]['message'],
         ),
-        state=response["chat_response"].get("state", None),
-        assets=assets,
+        state=response["chat_response"].get("state", last_state),
+        assets=last_assets,
     )
 
     return memory.session_id, response
