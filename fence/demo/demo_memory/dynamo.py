@@ -64,6 +64,18 @@ class DynamoMemory:
         """
         self.session_id = f"O{org_uuid}#S{uuid4()}"
 
+    #################
+    # Apply history #
+    #################
+
+    def apply_history(self, message: Message):
+        """
+        Apply history to the current session.
+        """
+        messages, state, assets = self.get_history()
+        messages.messages.append(message)
+        return messages, state, assets
+
     ##########
     # Saving #
     ##########
@@ -101,6 +113,17 @@ class DynamoMemory:
                 )
                 for item in items
             ]
+        )
+
+        # Log the messages
+        logger.debug(
+            "Messages:\n"
+            + "\n".join(
+                [
+                    f"<{message.role.upper()}>:\t{message.content}"
+                    for message in messages.messages
+                ]
+            )
         )
 
         # Get last state and assets (go backwards till not None)

@@ -23,28 +23,12 @@ def handler(event, context):
     # Initialize memory
     memory = DynamoMemory(table_name=TABLE_NAME, session_id=session_id, org_uuid=org_uuid)
 
-    # Get history, if session_id is available
-    if session_id:
-        messages, state, assets = memory.get_history()
-        logger.info(
-            "Messages: "
-            + ", ".join(
-                [
-                    f"\n<{message.role.upper()}>:\t{message.content}"
-                    for message in messages.messages
-                ]
-            )
-        )
-    else:
-        messages = Messages(messages=[])
-
-    # If a message is available, add it to the messages
-    if new_user_message:
-        new_user_message = Message(
-            role="user",
-            content=new_user_message,
-        )
-        messages.messages.append(new_user_message)
+    # Apply history to last messages
+    new_user_message = Message(
+        role="user",
+        content=new_user_message,
+    )
+    messages, state, assets = memory.apply_history(message=new_user_message)
 
     # Add system prompt
     messages.system = SYSTEM_MESSAGE
