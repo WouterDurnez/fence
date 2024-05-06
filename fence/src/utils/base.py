@@ -142,7 +142,9 @@ def retry(f=None, max_retries=3, delay=0.2):
                     final_error = e
                     time.sleep(delay)
             logger.warning(f"Maximum retries reached for {f.__name__}")
-            raise RuntimeError(f"Maximum retries reached for {f.__name__}. Final error: {final_error}")
+            raise RuntimeError(
+                f"Maximum retries reached for {f.__name__}. Final error: {final_error}"
+            )
 
         return decorated_function(
             *args, **kwargs

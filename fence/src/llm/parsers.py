@@ -26,6 +26,7 @@ class Parser(ABC):
 #####################
 
 
+
 class BoolParser(Parser):
     """
     A class to parse a string containing a boolean value. Returns a boolean.
@@ -44,13 +45,37 @@ class BoolParser(Parser):
         :param input_string: text string containing a boolean value
         :return: boolean value
         """
-        input_string = input_string.strip().lower()
-        if input_string in ["true", "t", "yes", "y", "1"]:
+
+        pattern = r"\b(true|false)\b"
+
+        # Extract the boolean value from the input string
+        bool_vals = {
+            val.lower()
+            for val in re.findall(pattern, input_string, flags=re.IGNORECASE)
+        }
+
+        # Check if positive value is present
+        if "true" in bool_vals:
+
+            # Check for ambiguous response
+            if "false" in bool_vals:
+                logger.error(
+                    f"Ambiguous response. Both 'true' and 'false' in received: {input_string}."
+                )
+                raise ValueError("BoolParser found ambiguous response.")
+
+            # Otherwise, return True
             return True
-        elif input_string in ["false", "f", "no", "n", "0"]:
+
+        # Check if negative value is present
+        elif "false" in bool_vals:
             return False
-        else:
-            raise ValueError(f"Invalid boolean value: {input_string}")
+
+        raise ValueError(
+            f"BooleanOutputParser expected output value to include either "
+            f"'true' or 'false'. Received: {input_string}"
+        )
+
 
 
 class TripleBacktickParser(Parser):

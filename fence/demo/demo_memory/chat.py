@@ -21,7 +21,9 @@ def handler(event, context):
     org_uuid = event.get("org_uuid", None)
 
     # Initialize memory
-    memory = DynamoMemory(table_name=TABLE_NAME, session_id=session_id, org_uuid=org_uuid)
+    memory = DynamoMemory(
+        table_name=TABLE_NAME, session_id=session_id, org_uuid=org_uuid
+    )
 
     # Apply history to last messages
     new_user_message = Message(
@@ -61,7 +63,7 @@ def handler(event, context):
     memory.store_message(
         message=Message(
             role="assistant",
-            content=response["chat_response"]['message'],
+            content=response["chat_response"]["message"],
         ),
         state=response["chat_response"].get("state", last_state),
         assets=last_assets,
@@ -78,7 +80,8 @@ if __name__ == "__main__":
     end_conversation = False
     while message != "exit":
         session_id, response = handler(
-            event={"message": message, "session_id": session_id, "org_uuid": 666}, context={}
+            event={"message": message, "session_id": session_id, "org_uuid": 666},
+            context={},
         )
         logger.info(f"State: {response['chat_response'].get('state', None)}")
         logger.critical(f"Response: {response['chat_response']['message']}")
