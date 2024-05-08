@@ -14,6 +14,23 @@ DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 # Set the logging format as: [LEVEL][TIME] MESSAGE
 LOGGING_FORMAT = "%(asctime)s %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s"
 
+# Define a custom formatter with color-coded output
+class ColorFormatter(logging.Formatter):
+    COLORS = {
+        'DEBUG': "\033[1;34m",   # Bold blue
+        'INFO': "\033[1;32m",    # Bold green
+        'WARNING': "\033[1;33m", # Bold yellow
+        'ERROR': "\033[1;31m",   # Bold red
+        'CRITICAL': "\033[1;35m" # Bold magenta
+    }
+
+    def format(self, record):
+        level_color = self.COLORS.get(record.levelname, "\033[0m")  # Default to reset
+        reset_color = "\033[0m"
+        
+        formatted_message = super().format(record)
+        
+        return f"{level_color}{formatted_message}{reset_color}"
 
 def setup_logging(name: str = "root"):
     """
@@ -44,6 +61,8 @@ def setup_logging(name: str = "root"):
 
     # Create a logger with the specified name
     logger = logging.getLogger(name=name)
+    handler = logging.StreamHandler()
+    handler.setFormatter(ColorFormatter(LOGGING_FORMAT))
     logger.setLevel(level=log_level)
 
     return logger
