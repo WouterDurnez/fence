@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Callable, Iterable
 
-
 CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
@@ -15,36 +14,37 @@ DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 LOGGING_FORMAT = "[%(asctime)s]{emoji}[%(name)s.%(funcName)s:%(lineno)d] %(message)s"
 
 
-
 # Define a custom formatter with color-coded output
 class ColorFormatter(logging.Formatter):
     COLORS = {
-        'DEBUG': "\033[1;34m",   # Bold blue
-        'INFO': "\033[1;32m",    # Bold green
-        'WARNING': "\033[1;33m", # Bold yellow
-        'ERROR': "\033[1;31m",   # Bold red
-        'CRITICAL': "\033[1;35m" # Bold magenta
+        "DEBUG": "\033[1;34m",  # Bold blue
+        "INFO": "\033[1;32m",  # Bold green
+        "WARNING": "\033[1;33m",  # Bold yellow
+        "ERROR": "\033[1;31m",  # Bold red
+        "CRITICAL": "\033[1;35m",  # Bold magenta
     }
     EMOJIS = {
-        'DEBUG': "🔵",
-        'INFO': "✅",
-        'WARNING': "😬",
-        'ERROR': "❌",
-        'CRITICAL': "🚨"
+        "DEBUG": "🔵",
+        "INFO": "✅",
+        "WARNING": "😬",
+        "ERROR": "❌",
+        "CRITICAL": "🚨",
     }
-    
 
     def format(self, record):
         level_color = self.COLORS.get(record.levelname, "\033[0m")  # Default to reset
         reset_color = "\033[0m"
-        
+
         # Format the message with the LOGGING_FORMAT
         formatted_message = super().format(record)
 
         # Add color and emojis to the message
-        formatted_message = formatted_message.format(emoji=self.EMOJIS.get(record.levelname, ""))
-        
+        formatted_message = formatted_message.format(
+            emoji=self.EMOJIS.get(record.levelname, "")
+        )
+
         return f"{level_color}{formatted_message}{reset_color}"
+
 
 def setup_logging(name: str = "root"):
     """
@@ -74,7 +74,6 @@ def setup_logging(name: str = "root"):
     # Clear any existing handlers
     logger.handlers.clear()
     logger.addHandler(handler)
-    
 
     # Set the logger level
     logger.setLevel(level=log_level)

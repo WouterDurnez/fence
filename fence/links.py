@@ -3,7 +3,6 @@ LINKS
 are atomic LLM interactions. They transform input data into a prompt, send it to an LLM model, parse the output, and return the result. 
 """
 
-
 from abc import ABC, abstractmethod
 from typing import Callable, Iterable
 
@@ -12,7 +11,6 @@ from fence.models.claude3 import Claude3Base
 from fence.parsers import Parser
 from fence.templates import MessagesTemplate, StringTemplate
 from fence.utils.base import setup_logging, time_it
-
 
 logger = setup_logging(name=__name__)
 
