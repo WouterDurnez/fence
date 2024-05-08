@@ -40,6 +40,14 @@ def handler(event, context):
     if new_assets:
         last_assets = new_assets
 
+    # Add a prefill assistant message
+    messages.messages.append(
+        Message(
+        role="assistant",
+        content="```toml\n",
+        )
+    )
+
     # Create MessageTemplate object
     template = MessagesTemplate(source=messages)
 

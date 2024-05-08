@@ -237,7 +237,8 @@ class Link(BaseLink):
         if isinstance(response, dict):
             if "state" not in response.keys():
                 logger.debug(
-                    "Response is a dictionary, but does not contain the key 'state'. Using the full response as the state."
+                    "Response is a dictionary, but does not contain the key "
+                    "'state'. Using the full response as the state."
                 )
                 response_dict = {"state": response}
             else:
