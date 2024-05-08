@@ -1,3 +1,7 @@
+"""
+This module contains the StringTemplate class, i.e. a vanilla prompt template class.
+"""
+
 from fence.templates.base import BaseTemplate
 
 

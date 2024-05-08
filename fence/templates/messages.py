@@ -1,3 +1,8 @@
+"""
+This module contains the MessagesTemplate class, which is used to render a list of messages with the provided variables.
+The module was created to accommodate the Claude3 model API format.
+"""
+
 from fence.templates.base import BaseTemplate
 from fence.templates.models import Message, Messages, TextContent
 

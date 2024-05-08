@@ -1,6 +1,6 @@
-########################
-# Claude gen 3 classes #
-########################
+"""
+Claude Gen 3 models
+"""
 
 import json
 

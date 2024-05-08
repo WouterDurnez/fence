@@ -1,6 +1,6 @@
-####################
-# Base LLM classes #
-####################
+"""
+Base class for LLMs
+"""
 
 import math
 from abc import ABC, abstractmethod

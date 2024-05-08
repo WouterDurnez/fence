@@ -1,6 +1,6 @@
-##########################
-# Claude gen 1/2 classes #
-##########################
+"""
+Claude Gen 1/2 models
+"""
 
 import json
 

@@ -1,6 +1,9 @@
-######################
-# LLM output parsers #
-######################
+"""
+PARSERS
+transform LLM output (a string) into a more useful format (e.g. int, bool, dict)
+"""
+
+
 
 
 import re

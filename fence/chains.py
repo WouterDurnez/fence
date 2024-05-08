@@ -1,3 +1,8 @@
+"""
+CHAINS
+combine and organize links into sequences of LLM operations
+"""
+
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Collection, Iterable

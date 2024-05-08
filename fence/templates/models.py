@@ -1,3 +1,7 @@
+"""
+This module contains data models used in the API formatting.
+"""
+
 from typing import Literal, Optional
 
 from pydantic import BaseModel
