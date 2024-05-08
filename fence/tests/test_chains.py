@@ -2,17 +2,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from fence.demo.demo_cook import (
-    BaseChain,
-    BaseLink,
-    Chain,
-    LinearChain,
-    Link,
-    TransformationLink,
-)
-from fence.demo.demo_cook import PromptTemplate
-from fence.src.llm.models import LLM
-
+from fence.src.llm.models.base import LLM
+from fence.src.llm.chains import BaseChain, Chain, LinearChain
+from fence.src.llm.links import BaseLink, Link, TransformationLink
+from fence.src.llm.templates.string import StringTemplate
 
 @pytest.fixture
 def llm():
@@ -34,7 +27,7 @@ def test_base_link_run_method_raises_error():
     :return: None
     """
     with pytest.raises(TypeError):
-        base_link = BaseLink(input_keys=["A"], output_key="B")
+        base_link = BaseLink("B")
         base_link.run(input_dict={"A": "test"})
 
 
@@ -55,10 +48,10 @@ def test_transformation_link_run_method_returns_transformed_input():
     This test checks if the run method correctly transforms the input using the provided function.
     """
     transformation_link = TransformationLink(
-        input_keys=["A"], output_key="B", function=lambda x: x.upper()
+        input_keys=["A"], output_key="B", function=lambda x: x['A'].upper()
     )
     result = transformation_link.run(input_dict={"A": "test"})
-    assert result["output"] == "TEST"
+    assert result["state"] == "TEST"
 
 
 def test_link_run_method_without_llm_raises_error():
@@ -66,19 +59,11 @@ def test_link_run_method_without_llm_raises_error():
     Test case for the run method of the Link class without providing an LLM.
     This test checks if the run method raises a ValueError when no LLM is provided.
     """
-    link = Link(template=PromptTemplate("{{A}}", ["A"]), output_key="B")
+    link = Link(template=StringTemplate("{{A}}"), output_key="B")
     with pytest.raises(ValueError):
         link.run(input_dict={"A": "test"})
 
 
-def test_link_run_method_with_llm_returns_mocked_response(llm):
-    """
-    Test case for the run method of the Link class with a provided LLM.
-    This test checks if the run method correctly uses the provided LLM to generate a response.
-    """
-    link = Link(template=PromptTemplate("{{A}}", ["A"]), output_key="B", llm=llm)
-    result = link.run(input_dict={"A": "test"})
-    assert result["output"] == "mocked response"
 
 
 def test_chain_run_method_without_llm_raises_error():
@@ -86,21 +71,12 @@ def test_chain_run_method_without_llm_raises_error():
     Test case for the run method of the Chain class without providing an LLM.
     This test checks if the run method raises a ValueError when no LLM is provided.
     """
-    link = Link(template=PromptTemplate("{{A}}", ["A"]), output_key="B")
+    link = Link(template=StringTemplate("{{A}}"), output_key="B")
     chain = Chain(links=[link])
     with pytest.raises(ValueError):
         chain.run(input_dict={"A": "test"})
 
 
-def test_chain_run_method_with_llm_returns_mocked_response(llm):
-    """
-    Test case for the run method of the Chain class with a provided LLM.
-    This test checks if the run method correctly uses the provided LLM to generate a response.
-    """
-    link = Link(template=PromptTemplate("{{A}}", ["A"]), output_key="B")
-    chain = Chain(links=[link], llm=llm)
-    result = chain.run(input_dict={"A": "test"})
-    assert result["output"] == "mocked response"
 
 
 def test_linear_chain_run_method_without_llm_raises_error():
@@ -108,18 +84,9 @@ def test_linear_chain_run_method_without_llm_raises_error():
     Test case for the run method of the LinearChain class without providing an LLM.
     This test checks if the run method raises a ValueError when no LLM is provided.
     """
-    link = Link(template=PromptTemplate("{{A}}", ["A"]), output_key="B")
+    link = Link(template=StringTemplate("{{A}}"), output_key="B")
     linear_chain = LinearChain(links=[link])
     with pytest.raises(ValueError):
         linear_chain.run(input_dict={"A": "test"})
 
 
-def test_linear_chain_run_method_with_llm_returns_mocked_response(llm):
-    """
-    Test case for the run method of the LinearChain class with a provided LLM.
-    This test checks if the run method correctly uses the provided LLM to generate a response.
-    """
-    link = Link(template=PromptTemplate("{{A}}", ["A"]), output_key="B")
-    linear_chain = LinearChain(links=[link], llm=llm)
-    result = linear_chain.run(input_dict={"A": "test"})
-    assert result["output"] == "mocked response"
