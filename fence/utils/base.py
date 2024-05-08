@@ -63,6 +63,7 @@ def setup_logging(name: str = "root"):
     logger = logging.getLogger(name=name)
     handler = logging.StreamHandler()
     handler.setFormatter(ColorFormatter(LOGGING_FORMAT))
+    logger.addHandler(handler)
     logger.setLevel(level=log_level)
 
     return logger
