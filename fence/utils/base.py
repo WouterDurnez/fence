@@ -11,8 +11,10 @@ from typing import Callable, Iterable
 CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
-# Set the logging format as: [LEVEL][TIME] MESSAGE
-LOGGING_FORMAT = "%(asctime)s %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s"
+# Set the logging format
+LOGGING_FORMAT = "[%(asctime)s]{emoji}[%(name)s.%(funcName)s:%(lineno)d] %(message)s"
+
+
 
 # Define a custom formatter with color-coded output
 class ColorFormatter(logging.Formatter):
@@ -23,12 +25,24 @@ class ColorFormatter(logging.Formatter):
         'ERROR': "\033[1;31m",   # Bold red
         'CRITICAL': "\033[1;35m" # Bold magenta
     }
+    EMOJIS = {
+        'DEBUG': "🔵",
+        'INFO': "✅",
+        'WARNING': "😬",
+        'ERROR': "❌",
+        'CRITICAL': "🚨"
+    }
+    
 
     def format(self, record):
         level_color = self.COLORS.get(record.levelname, "\033[0m")  # Default to reset
         reset_color = "\033[0m"
         
+        # Format the message with the LOGGING_FORMAT
         formatted_message = super().format(record)
+
+        # Add color and emojis to the message
+        formatted_message = formatted_message.format(emoji=self.EMOJIS.get(record.levelname, ""))
         
         return f"{level_color}{formatted_message}{reset_color}"
 
@@ -52,18 +66,17 @@ def setup_logging(name: str = "root"):
     # Set the root logger level
     logging.root.setLevel(log_level)
 
-    # Configure the basic logging settings
-    logging.basicConfig(
-        level=log_level,
-        format=LOGGING_FORMAT,
-        datefmt="[%X]",
-    )
-
-    # Create a logger with the specified name
-    logger = logging.getLogger(name=name)
+    # Set a logger with the provided name, and add a stream handler with the custom formatter
+    logger = logging.getLogger(name)
     handler = logging.StreamHandler()
     handler.setFormatter(ColorFormatter(LOGGING_FORMAT))
+
+    # Clear any existing handlers
+    logger.handlers.clear()
     logger.addHandler(handler)
+    
+
+    # Set the logger level
     logger.setLevel(level=log_level)
 
     return logger
@@ -291,3 +304,8 @@ if __name__ == "__main__":
     results = test_class.test_threaded_execution(
         ["this", "is", "a", "test"], other_kw_arg="test"
     )
+
+    logger.info("Test information message")
+    logger.warning("Test warning message")
+    logger.error("Test error message")
+    logger.critical("Test critical message")
