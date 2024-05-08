@@ -2,15 +2,12 @@ import os
 from abc import ABC, abstractmethod
 from typing import Callable, Iterable
 
-from dotenv import load_dotenv
-
 from fence.models.base import LLM
 from fence.models.claude3 import Claude3Base
 from fence.parsers import Parser
 from fence.templates import MessagesTemplate, StringTemplate
 from fence.utils.base import setup_logging, time_it
 
-load_dotenv(override=True)
 
 log_level = os.environ.get("LOG_LEVEL", "WARNING")
 logger = setup_logging(name=__name__)
