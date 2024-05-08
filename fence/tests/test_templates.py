@@ -3,8 +3,7 @@ import tempfile
 
 import pytest
 
-from fence.demo.demo_cook import PromptTemplate
-
+from fence.src.llm.templates.string import StringTemplate
 
 def file_opener():
     return "test"
@@ -14,7 +13,7 @@ def test_prompt_template_initialization():
     """
     Test PromptTemplate initialization.
     """
-    template = PromptTemplate("{{A}}", ["A"])
+    template = StringTemplate("{{A}}")
     assert template.source == "{{A}}"
     assert template.input_variables == ["A"]
     assert template.separator == " "
@@ -24,7 +23,7 @@ def test_prompt_template_call_alias_for_render():
     """
     Test the __call__ method as an alias for render.
     """
-    template = PromptTemplate("{{A}}", ["A"])
+    template = StringTemplate("{{A}}")
     rendered = template(A="test")
     assert rendered == "test"
 
@@ -33,8 +32,8 @@ def test_prompt_template_addition_of_same_type():
     """
     Test addition of two PromptTemplate instances.
     """
-    template1 = PromptTemplate("{{A}}", ["A"])
-    template2 = PromptTemplate("{{B}}", ["B"])
+    template1 = StringTemplate("{{A}}")
+    template2 = StringTemplate("{{B}}")
     merged = template1 + template2
     assert merged.source == "{{A}} {{B}}"
     assert set(merged.input_variables) == {"A", "B"}
@@ -44,8 +43,8 @@ def test_prompt_template_addition_raises_error_for_different_type():
     """
     Test that adding a non-PromptTemplate object raises TypeError.
     """
-    template = PromptTemplate("{{A}}", ["A"])
-    with pytest.raises(TypeError):
+    template = StringTemplate("{{A}}")
+    with pytest.raises(ValueError):
         _ = template + "not a PromptTemplate"
 
 
@@ -53,7 +52,7 @@ def test_prompt_template_render_with_all_variables_provided():
     """
     Test rendering a template with all variables provided.
     """
-    template = PromptTemplate("{{A}} {{B}}", ["A", "B"])
+    template = StringTemplate("{{A}} {{B}}")
     rendered = template.render(A="test", B="123")
     assert rendered == "test 123"
 
@@ -62,7 +61,7 @@ def test_prompt_template_render_raises_error_for_missing_variables():
     """
     Test that rendering a template with missing variables raises ValueError.
     """
-    template = PromptTemplate("{{A}} {{B}}", ["A", "B"])
+    template = StringTemplate("{{A}} {{B}}")
     with pytest.raises(ValueError):
         _ = template.render(A="test")
 
@@ -71,8 +70,8 @@ def test_prompt_template_equality():
     """
     Test equality of PromptTemplate instances.
     """
-    template1 = PromptTemplate("{{A}}", ["A"])
-    template2 = PromptTemplate("{{A}}", ["A"])
+    template1 = StringTemplate("{{A}}")
+    template2 = StringTemplate("{{A}}")
     assert template1 == template2
 
 
@@ -80,7 +79,7 @@ def test_prompt_template_copy():
     """
     Test copying a PromptTemplate instance.
     """
-    template = PromptTemplate("{{A}}", ["A"])
+    template = StringTemplate("{{A}}")
     copy = template.copy()
     assert template == copy
     assert template is not copy
@@ -99,13 +98,3 @@ def temp_template_file():
     os.unlink(temp_file.name)  # Remove the temporary file after the test
 
 
-def test_from_file(temp_template_file):
-    """
-    Test the from_file method to create a PromptTemplate from a file.
-    """
-    template_path = temp_template_file
-    prompt_template = PromptTemplate.from_file(template_path)
-
-    # Assert that the loaded template is correct
-    assert prompt_template.source == "Hello, {{name}}! How are you today?"
-    assert prompt_template.input_variables == ["name"]

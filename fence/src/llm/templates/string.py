@@ -97,19 +97,10 @@ class StringTemplate(BaseTemplate):
             and self.input_variables == other.input_variables
         )
 
+    def copy(self):
+        """
+        Create a copy of the PromptTemplate instance.
+        """
+        return StringTemplate(source=self.source, separator=self.separator)
 
-if __name__ == "__main__":
-    test_template = StringTemplate("test {{input}}", ["input"])
-    test_template2 = StringTemplate("lol {{input}}", ["input"])
-    test_template3 = StringTemplate("more lols {{input}}", ["input"])
 
-    # read_template = PromptTemplate.from_file("/data/some_prompt_template.txt")
-
-    combined_template = test_template + test_template2 + test_template3
-
-    a = combined_template.render(input="some input yo")
-
-    looping_template_string = """{% for item in items %}{{item}}{% endfor %}"""
-    looping_template = StringTemplate(looping_template_string, ["items"])
-
-    looped = looping_template.render(items=["a", "b", "c"])
