@@ -1,8 +1,8 @@
-from links import BaseLink, Link, TransformationLink
-from models.base import LLM
-from models.claude import ClaudeBase, ClaudeInstant, ClaudeV2
-from models.claude3 import Claude3Base, ClaudeHaiku, ClaudeSonnet
-from parsers import BoolParser, IntParser, TOMLParser
+from fence.links import BaseLink, Link, TransformationLink
+from fence.models.base import LLM
+from fence.models.claude import ClaudeBase, ClaudeInstant, ClaudeV2
+from fence.models.claude3 import Claude3Base, ClaudeHaiku, ClaudeSonnet
+from fence.parsers import BoolParser, IntParser, TOMLParser
 
 __all__ = [
     "BaseLink",
