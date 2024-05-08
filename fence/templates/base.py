@@ -1,8 +1,6 @@
 import re
 from abc import ABC, abstractmethod
 
-from jinja2 import Template
-
 from fence.templates.models import Messages
 from fence.utils.base import setup_logging
 
@@ -27,6 +25,7 @@ class BaseTemplate(ABC):
         self.source = source
         self.type = type(source)
         self.input_variables = []
+
         # We have no time for anything other than strings or Messages
         if self.type not in [str, Messages]:
             raise TypeError("Template must be a string or a Messages object.")
@@ -88,7 +87,7 @@ class BaseTemplate(ABC):
         :rtype: list[str]
         """
 
-        return re.findall(r"\{\{\s*([a-zA-Z0-9_]+)\s*}}", text)
+        return re.findall(r"\{\s*([a-zA-Z0-9_]+)\s*}", text)
 
     def _render_string(self, text: str, input_dict: dict = None, **kwargs):
         """
@@ -109,7 +108,7 @@ class BaseTemplate(ABC):
         # Find both missing and superfluous variables
         self._validate_input(input_dict=input_dict)
 
-        return Template(text).render(**input_dict)
+        return text.format(**input_dict)
 
     def __str__(self):
         return f"{self.__class__}: {self.source}"

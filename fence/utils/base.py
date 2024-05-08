@@ -7,12 +7,12 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Callable, Iterable
 
-from rich.logging import Console, RichHandler
 
 CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
-LOGGING_FORMAT = "%(message)s"
+# Set the logging format as: [LEVEL][TIME] MESSAGE
+LOGGING_FORMAT = "%(asctime)s %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s"
 
 
 def setup_logging(name: str = "root"):
@@ -40,7 +40,6 @@ def setup_logging(name: str = "root"):
         level=log_level,
         format=LOGGING_FORMAT,
         datefmt="[%X]",
-        handlers=[RichHandler(console=Console(width=160))],
     )
 
     # Create a logger with the specified name
