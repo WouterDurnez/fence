@@ -6,12 +6,24 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Callable, Iterable
+import string
 
 CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 # Set the logging format
 LOGGING_FORMAT = "[%(asctime)s]{emoji}[%(name)s.%(funcName)s:%(lineno)d] %(message)s"
+
+
+class MyFormatter(string.Formatter):
+    def __init__(self, default="{{{0}}}"):
+        self.default = default
+
+    def get_value(self, key, args, kwds):
+        if isinstance(key, str):
+            return kwds.get(key, self.default.format(key))
+        else:
+            return string.Formatter.get_value(key, args, kwds)
 
 
 # Define a custom formatter with color-coded output
@@ -39,8 +51,8 @@ class ColorFormatter(logging.Formatter):
         formatted_message = super().format(record)
 
         # Add color and emojis to the message
-        formatted_message = formatted_message.format(
-            emoji=self.EMOJIS.get(record.levelname, "")
+        formatted_message = MyFormatter().format(
+            formatted_message, emoji=self.EMOJIS.get(record.levelname, "")
         )
 
         return f"{level_color}{formatted_message}{reset_color}"
