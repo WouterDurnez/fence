@@ -12,7 +12,7 @@ CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 # Set the logging format
-LOGGING_FORMAT = "[%(asctime)s]{emoji}[%(name)s.%(funcName)s:%(lineno)d] %(message)s"
+LOGGING_FORMAT = "[%(name)s.%(funcName)s:%(lineno)d] %(message)s"
 
 
 class MyFormatter(string.Formatter):
@@ -50,10 +50,9 @@ class ColorFormatter(logging.Formatter):
         # Format the message with the LOGGING_FORMAT
         formatted_message = super().format(record)
 
-        # Add color and emojis to the message
-        formatted_message = MyFormatter().format(
-            formatted_message, emoji=self.EMOJIS.get(record.levelname, "")
-        )
+        # Add timestamp, level, and color to the message
+        time = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
+        formatted_message = f"[{time}] [{record.levelname}] {self.EMOJIS.get(record.levelname, '')} {formatted_message}"
 
         return f"{level_color}{formatted_message}{reset_color}"
 
