@@ -9,7 +9,7 @@ from data.snippets import snippet
 from fence.demo.demo_cook.utils import build_links, validate_recipe
 from fence.chains import LinearChain
 from fence.models import ClaudeInstantLLM
-from fence.utils.base import setup_logging
+from fence.utils.logging import setup_logging
 
 claude_model = ClaudeInstantLLM(source="test-ai-message-composer")
 

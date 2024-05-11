@@ -13,7 +13,7 @@ from fence import (
 )
 from demo.demo_test.prompt_templates import TEST_TEMPLATE, VERIFICATION_TEMPLATE
 from fence.parsers import TOMLParser
-from fence.utils.base import setup_logging
+from fence.utils.logging import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)

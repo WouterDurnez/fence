@@ -1,7 +1,8 @@
 from fence import ClaudeHaiku, Link, ClaudeSonnet
 from fence.parsers import TOMLParser
 from fence.templates.messages import MessagesTemplate, Message
-from fence.utils.base import setup_logging, retry
+from fence.utils.optim import retry
+from fence.utils.logging import setup_logging
 from prompts import SYSTEM_MESSAGE
 from dynamo import DynamoMemory
 

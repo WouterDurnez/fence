@@ -10,7 +10,8 @@ from fence.models.base import LLM
 from fence.models.claude3 import Claude3Base
 from fence.parsers import Parser
 from fence.templates import MessagesTemplate, StringTemplate
-from fence.utils.base import setup_logging, time_it
+from fence.utils.base import time_it
+from fence.utils.logging import setup_logging
 
 logger = setup_logging(name=__name__)
 

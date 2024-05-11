@@ -10,7 +10,8 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 
 from fence.demo.demo_faq.utils import TextChunker
-from fence.utils.base import DATA_DIR, setup_logging
+from fence.utils.base import DATA_DIR
+from fence.utils.logging import setup_logging
 
 load_dotenv()
 

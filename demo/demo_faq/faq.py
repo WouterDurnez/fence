@@ -5,7 +5,9 @@ from PyPDF2 import PdfReader
 
 from fence import ClaudeInstantLLM
 from fence.demo.demo_faq.utils import TextChunker, build_links
-from fence.utils.base import parallelize, retry, setup_logging, time_it
+from fence.utils.base import time_it
+from fence.utils.optim import retry, parallelize
+from fence.utils.logging import setup_logging
 
 setup_logging(log_level="DEBUG")
 

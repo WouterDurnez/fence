@@ -2,7 +2,7 @@ import re
 from abc import ABC, abstractmethod
 
 from fence.templates.models import Messages
-from fence.utils.base import setup_logging
+from fence.utils.logging import setup_logging
 
 logger = setup_logging(__name__)
 
