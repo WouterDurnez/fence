@@ -5,7 +5,7 @@ from fence.demo.demo_policy.prompt_templates import (
     POLICY_TEMPLATE,
 )
 from fence.parsers import TripleBacktickParser
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 import re
 from jinja2 import DebugUndefined, Template
 

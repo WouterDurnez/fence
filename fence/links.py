@@ -11,7 +11,7 @@ from fence.models.claude3 import Claude3Base
 from fence.parsers import Parser
 from fence.templates import MessagesTemplate, StringTemplate
 from fence.utils.base import time_it
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 logger = setup_logging(__name__)
 

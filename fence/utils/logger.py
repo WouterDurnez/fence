@@ -7,6 +7,13 @@ import os
 
 DEFAULT_LOGGING_FORMAT = "[%(levelname)s][%(name)s.%(funcName)s:%(lineno)d] %(message)s"
 
+class Config:
+    """
+    A class to store configuration variables.
+    """
+    LOGGING_FORMAT = DEFAULT_LOGGING_FORMAT
+    LOGGING_LEVEL = logging.INFO
+    SERIOUS_MODE = True
 
 class ColorFormatter(logging.Formatter):
     """
@@ -42,7 +49,7 @@ class ColorFormatter(logging.Formatter):
 
 
 
-def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool = True):
+def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool = None):
     """
     Setup logging for use in applications.
     :param name: name of the logger
@@ -50,11 +57,17 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
     :param serious_mode: whether to use the serious mode
     :return: logger instance
     """
+
+    # Set the log level if it is not provided
     if log_level is None:
         log_level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
     else:
         log_level_str = log_level.upper()
 
+    # Set the serious mode if it is not provided
+    serious_mode = serious_mode if serious_mode is not None else Config.SERIOUS_MODE
+
+    # Get the log level from the logging module
     log_level = getattr(logging, log_level_str, logging.WARNING)
     if log_level == logging.NOTSET:
         log_level = logging.INFO
@@ -80,7 +93,7 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
 
 if __name__ == "__main__":
 
-    logger = setup_logging(__name__)
+    logger = setup_logging(__name__, serious_mode=False)
     logger.info("Test information message")
     logger.warning("Test warning message")
     logger.error("Test error message")

@@ -9,7 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Callable, Iterable
 
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 logger = setup_logging(__name__)
 

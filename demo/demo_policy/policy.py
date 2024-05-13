@@ -8,7 +8,7 @@ from fence.demo.demo_policy.utils import build_links
 from fence.demo.demo_policy.presets import presets, test_cases
 from fence.chains import LinearChain
 from fence.llm import ClaudeHaiku
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 # claude_model = ClaudeInstantLLM(source="test-ai-message-composer")
 claude_model = ClaudeHaiku(source="test-ai-message-composer", region="us-east-1")

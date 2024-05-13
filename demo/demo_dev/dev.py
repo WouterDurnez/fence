@@ -3,7 +3,7 @@ from fence import MessagesTemplate, Link, ClaudeHaiku
 from fence.models.claude3 import Claude3Base
 from fence.parsers import BoolParser
 from fence.templates.models import Message, Messages
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 logger = setup_logging(__name__)
 

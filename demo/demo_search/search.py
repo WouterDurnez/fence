@@ -9,7 +9,7 @@ from fence.demo.demo_search.utils import build_links
 from fence.models import ClaudeInstantLLM
 from fence.utils.base import DATA_DIR, time_it
 from fence.utils.optim import retry, parallelize
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 claude_model = ClaudeInstantLLM(source="test-search")
 embeddings = BedrockEmbeddings()

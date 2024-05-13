@@ -7,7 +7,7 @@ import re
 import tomllib
 from abc import ABC, abstractmethod
 
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 logger = setup_logging(__name__)
 

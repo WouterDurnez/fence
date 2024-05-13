@@ -10,7 +10,7 @@ sys.path.extend(["/Users/wouter.durnez/Documents/Repositories/showpad_personal/f
 from fence.demo.demo_label.utils import build_links, FilenameProcessor
 from fence.chains import LinearChain
 from fence.models import ClaudeInstantLLM
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 claude_model = ClaudeInstantLLM(source="test-ai-message-composer")
 

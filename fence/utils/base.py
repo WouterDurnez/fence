@@ -6,7 +6,7 @@ import logging
 import time
 from pathlib import Path
 
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"

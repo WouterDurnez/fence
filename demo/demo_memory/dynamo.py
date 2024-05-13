@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import boto3
 from fence.templates.messages import Message, Messages
-from fence.utils.logging import  setup_logging
+from fence.utils.logger import  setup_logging
 
 logger = setup_logging(__name__)
 

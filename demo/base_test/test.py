@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from fence.utils.base import setup_logging
+from fence.utils.logger import setup_logging
 from fence import Link, ClaudeHaiku, StringTemplate
 
 logger = setup_logging(__name__, serious_mode=False)

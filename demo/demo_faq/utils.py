@@ -8,7 +8,7 @@ from fence.demo.demo_faq.prompt_templates import (
     TAG_TEMPLATE,
 )
 from fence.parsers import TOMLParser, TripleBacktickParser
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 logger = setup_logging()
 

@@ -6,7 +6,7 @@ from pprint import pprint
 
 from fence import Chain, ClaudeInstant
 from utils import build_links
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 logger = setup_logging(__name__)
 

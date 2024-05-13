@@ -12,7 +12,7 @@ from fence.models.base import LLM
 from fence.models.claude import ClaudeInstant
 from fence.templates import StringTemplate
 from fence.utils.base import time_it
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 logger = setup_logging(__name__)
 

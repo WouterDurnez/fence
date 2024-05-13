@@ -11,7 +11,7 @@ from langchain_core.documents import Document
 
 from fence.demo.demo_faq.utils import TextChunker
 from fence.utils.base import DATA_DIR
-from fence.utils.logging import setup_logging
+from fence.utils.logger import setup_logging
 
 load_dotenv()
 
