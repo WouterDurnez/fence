@@ -60,9 +60,18 @@ def setup_logging(name: str = "root", serious_mode: bool = True):
 
     # Set a logger with the provided name, and add a stream handler with the custom formatter
     logger = logging.getLogger(name)
+
+    # Disable propagation to avoid duplicate logs
+    logger.propagate = False
+
+    # Remove all handlers associated with the logger object.
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # Create a stream handler
     handler = logging.StreamHandler()
 
-
+    # Set the formatter
     if not serious_mode:
         handler.setFormatter(ColorFormatter(DEFAULT_LOGGING_FORMAT))
     else:
