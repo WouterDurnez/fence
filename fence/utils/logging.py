@@ -9,6 +9,9 @@ DEFAULT_LOGGING_FORMAT = "[%(levelname)s][%(name)s.%(funcName)s:%(lineno)d] %(me
 
 
 class ColorFormatter(logging.Formatter):
+    """
+    A custom formatter that adds joy to the log messages.
+    """
     COLORS = {
         "DEBUG": "\033[1;34m",  # Bold blue
         "INFO": "\033[1;32m",  # Bold green
@@ -38,51 +41,39 @@ class ColorFormatter(logging.Formatter):
         return f"{level_color}{formatted_message}{reset_color}"
 
 
-def setup_logging(name: str = "root", serious_mode: bool = True):
+
+def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool = True):
     """
-    Setup logging for use in lambdas.
+    Setup logging for use in applications.
     :param name: name of the logger
+    :param log_level: log level as a string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    :param serious_mode: whether to use the serious mode
     :return: logger instance
     """
-    # Set the default log level to INFO if not provided in the environment variable
-    log_level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
-    log_level = getattr(logging, log_level_str, None)
-
-    # Validate and fallback to WARNING if an invalid log level is provided
-    if not isinstance(log_level, int):
-        log_level = logging.WARNING
-        logging.error(
-            "Invalid log level in environment variable, defaulting to WARNING"
-        )
-
-    # Set the root logger level
-    logging.root.setLevel(log_level)
-
-    # Set a logger with the provided name, and add a stream handler with the custom formatter
-    logger = logging.getLogger(name)
-
-    # Disable propagation to avoid duplicate logs
-    logger.propagate = False
-
-    # Remove all handlers associated with the logger object.
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-
-    # Create a stream handler
-    handler = logging.StreamHandler()
-
-    # Set the formatter
-    if not serious_mode:
-        handler.setFormatter(ColorFormatter(DEFAULT_LOGGING_FORMAT))
+    if log_level is None:
+        log_level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
     else:
-        handler.setFormatter(logging.Formatter(DEFAULT_LOGGING_FORMAT))
+        log_level_str = log_level.upper()
+
+    log_level = getattr(logging, log_level_str, logging.WARNING)
+    if log_level == logging.NOTSET:
+        log_level = logging.INFO
+        logging.info("Log level not set. Using INFO.")
+
+    logger = logging.getLogger(name)
+    logger.setLevel(log_level)
+    logger.propagate = False
 
     # Clear any existing handlers
     logger.handlers.clear()
-    logger.addHandler(handler)
 
-    # Set the logger level
-    logger.setLevel(level=log_level)
+    handler = logging.StreamHandler()
+    if serious_mode:
+        formatter = logging.Formatter(DEFAULT_LOGGING_FORMAT)
+    else:
+        formatter = ColorFormatter()
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
     return logger
 
