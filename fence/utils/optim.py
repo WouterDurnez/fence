@@ -9,7 +9,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Callable, Iterable
 
-from fence.utils.base import logger
+from fence.utils.logging import setup_logging
+
+logger = setup_logging(__name__)
 
 
 def retry(f=None, max_retries=3, delay=0.2):

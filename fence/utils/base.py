@@ -7,16 +7,9 @@ import time
 from pathlib import Path
 
 from fence.utils.logging import setup_logging
-from fence.utils.optim import parallelize, test_threaded_execution
 
 CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
-
-# Set the logging format
-
-
-# Define a custom formatter with color-coded output
-
 
 logger = setup_logging(__name__)
 

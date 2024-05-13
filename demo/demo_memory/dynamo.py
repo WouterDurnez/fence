@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import boto3
-from fence.templates.models import Message, Messages
-from fence.utils.logging import setup_logging
+from fence.templates.messages import Message, Messages
+from fence.utils.logging import  setup_logging
 
 logger = setup_logging(__name__)
 
@@ -17,10 +17,14 @@ class DynamoMemory:
         session_id: str = None,
         region_name: str = "eu-central-1",
     ):
-
-        # If session_id is not provided, `org_uuid` is required
-        if not session_id and not org_uuid:
-            raise ValueError("If session_id is not provided, org_uuid is required")
+        """
+        Initialize the DynamoMemory class.
+        :param table_name: The name of the DynamoDB table.
+        :param org_uuid: The UUID of the organization.
+        :param session_id: The ID of the session. Note that the PK in the DynamoDB table will be formatted as
+            "O{org_uuid}#S{session_id}".
+        :param region_name: The name of the region.
+        """
 
         # Connect to the DynamoDB service
         self.dynamodb = boto3.resource("dynamodb", region_name=region_name)
@@ -31,10 +35,10 @@ class DynamoMemory:
             raise ValueError(f"Table {table_name} is not active")
 
         # Set a session id if it is not provided
-        if not session_id:
-            self._set_session_id(org_uuid=org_uuid)
-        else:
-            self.session_id = session_id
+        self.session_id = str(uuid4()) if session_id is None else session_id
+
+        # Set the primary key
+        self.primary_key = f"O{org_uuid}#S{self.session_id}"
 
     def _format_message_for_dynamo_db(
         self,
@@ -49,19 +53,12 @@ class DynamoMemory:
         :param: assets: A list of assets.
         """
         return {
-            "PK": self.session_id,
-            "SK": str(datetime.now(tz=timezone.utc)),
-            "message": message.content,
-            "role": message.role,
-            "meta": {"state": state, "assets": assets},
+            "SessionId": self.primary_key,
+            "Timestamp": str(datetime.now(tz=timezone.utc)),
+            "Message": message.content,
+            "Role": message.role,
+            "Meta": {"state": state, "assets": assets},
         }
-
-    def _set_session_id(self, org_uuid: str) -> None:
-        """
-        Set a session id for the current session, formatted as "O{org_uuid}#S{uuid4()}"
-        This is used as a Primary Key in the DynamoDB table.
-        """
-        self.session_id = f"O{org_uuid}#S{uuid4()}"
 
     #################
     # Apply history #
@@ -69,7 +66,9 @@ class DynamoMemory:
 
     def apply_history(self, message: Message):
         """
-        Apply history to the current session.
+        Apply history to the current session. Gets the history of the sessions, appends the message to the messages,
+        and returns the updated messages, state, and assets.
+        :param message: The last message in the history.
         """
         messages, state, assets = self.get_history()
         messages.messages.append(message)
@@ -85,37 +84,45 @@ class DynamoMemory:
         state: dict | None = None,
         assets: list[str] | None = None,
     ):
-        self.table.put_item(
+
+        dynamo_response = self.table.put_item(
             Item=self._format_message_for_dynamo_db(
                 message=message, state=state, assets=assets
             )
         )
+        status_code = dynamo_response["ResponseMetadata"]["HTTPStatusCode"]
+        if status_code != 200:
+            logger.error(f"Failed to store message in DynamoDB: {dynamo_response}")
+            raise ValueError(f"Failed to store message in DynamoDB: {dynamo_response}")
 
     ###########
     # Loading #
     ###########
 
-    def get_history(self) -> (Messages, dict, list[str]):
+    def get_history(self) -> tuple[Messages, dict, list[str]]:
+        """
+        Get the history of the current session.
+        """
 
-        logger.info(f"Getting history for session {self.session_id}")
+        logger.info(f"Getting history for session {self.primary_key}")
         response = self.table.query(
-            KeyConditionExpression=boto3.dynamodb.conditions.Key("PK").eq(
-                self.session_id
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("SessionId").eq(
+                self.primary_key
             )
         )
         items = response.get("Items", [])
         messages = Messages(
             messages=[
                 Message(
-                    role=item["role"],
-                    content=item["message"],
+                    role=item["Role"],
+                    content=item["Message"],
                 )
                 for item in items
             ]
         )
 
         # Log the messages
-        logger.debug(
+        logger.info(
             "Messages:\n"
             + "\n".join(
                 [
@@ -129,12 +136,13 @@ class DynamoMemory:
         state, assets = None, None
         for item in items[::-1]:
             if state is None:
-                state = item["meta"]["state"]
+                state = item["Meta"]["state"]
             if assets is None:
-                assets = item["meta"]["assets"]
+                assets = item["Meta"]["assets"]
             if state is not None and assets is not None:
                 break
-        return messages, state, assets
+        return messages, state, assets, items
+
 
 
 if __name__ == "__main__":
@@ -153,7 +161,7 @@ if __name__ == "__main__":
     memory = DynamoMemory(
         table_name="chat_memory",
         org_uuid="12345678",
-        session_id="new_session_id",
+        session_id="1",
     )
 
     # Store the user message
@@ -165,8 +173,18 @@ if __name__ == "__main__":
         state=None,
     )
 
+    # Store a message with a state and assets
+    memory.store_message(
+        message=Message(
+            role="assistant",
+            content="I can help you with that.",
+        ),
+        state={"intent": "help"},
+        assets=["asset1", "asset2"],
+    )
+
     # Test
-    message_history, last_state, last_assets = memory.get_history()
+    message_history, last_state, last_assets, items = memory.get_history()
     logger.info(f"Message history: {message_history}")
     logger.info(f"State: {last_state}")
     logger.info(f"Assets: {last_assets}")
