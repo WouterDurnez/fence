@@ -3,17 +3,9 @@ Logging utils
 """
 
 import logging
-import os
 
 DEFAULT_LOGGING_FORMAT = "[%(levelname)s][%(name)s.%(funcName)s:%(lineno)d] %(message)s"
 
-class Config:
-    """
-    A class to store configuration variables.
-    """
-    LOGGING_FORMAT = DEFAULT_LOGGING_FORMAT
-    LOGGING_LEVEL = logging.INFO
-    SERIOUS_MODE = True
 
 class ColorFormatter(logging.Formatter):
     """
@@ -43,57 +35,48 @@ class ColorFormatter(logging.Formatter):
 
         # Add timestamp, level, and color to the message
         time = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
-        formatted_message = f"[{time}] [{record.levelname}] {self.EMOJIS.get(record.levelname, '')} {formatted_message}"
+        formatted_message = f"[{time}] [{record.levelname}] {self.EMOJIS.get(record.levelname, '')} [{record.module}.{record.funcName}:{record.lineno}] {formatted_message}"
 
         return f"{level_color}{formatted_message}{reset_color}"
-
-
-
-def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool = None):
-    """
-    Setup logging for use in applications.
-    :param name: name of the logger
-    :param log_level: log level as a string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    :param serious_mode: whether to use the serious mode
-    :return: logger instance
-    """
-
-    # Set the log level if it is not provided
-    if log_level is None:
-        log_level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
-    else:
-        log_level_str = log_level.upper()
-
-    # Set the serious mode if it is not provided
-    serious_mode = serious_mode if serious_mode is not None else Config.SERIOUS_MODE
-
-    # Get the log level from the logging module
-    log_level = getattr(logging, log_level_str, logging.WARNING)
-    if log_level == logging.NOTSET:
-        log_level = logging.INFO
-        logging.info("Log level not set. Using INFO.")
-
-    logger = logging.getLogger(name)
-    logger.setLevel(log_level)
-    logger.propagate = False
-
-    # Clear any existing handlers
-    logger.handlers.clear()
-
-    handler = logging.StreamHandler()
-    if serious_mode:
-        formatter = logging.Formatter(DEFAULT_LOGGING_FORMAT)
-    else:
-        formatter = ColorFormatter()
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
-    return logger
+#
+#
+#
+# def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool = None):
+#     """
+#     Setup logging for use in applications.
+#     :param name: name of the logger
+#     :param log_level: log level as a string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+#     :param serious_mode: whether to use the serious mode
+#     :return: logger instance
+#     """
+#
+#     # Set the log level if it is not provided
+#     if log_level is not None:
+#         fence.config.LOG_LEVEL = getattr(logging, log_level, logging.WARNING)
+#
+#     # Set the serious mode if it is not provided
+#     if serious_mode is not None:
+#         fence.config.SERIOUS_MODE = serious_mode
+#
+#     logger = logging.getLogger(name)
+#     logger.setLevel(fence.config.LOG_LEVEL)
+#     logger.propagate = True
+#
+#     handler = logging.StreamHandler()
+#     if fence.config.SERIOUS_MODE:
+#         formatter = logging.Formatter(DEFAULT_LOGGING_FORMAT)
+#     else:
+#         formatter = ColorFormatter()
+#     handler.setFormatter(formatter)
+#     logger.addHandler(handler)
+#
+#     return logger
 
 
 if __name__ == "__main__":
 
-    logger = setup_logging(__name__, serious_mode=False)
+    fence.config.SERIOUS_MODE = False
+    logger = logging.getLogger(__name__)
     logger.info("Test information message")
     logger.warning("Test warning message")
     logger.error("Test error message")

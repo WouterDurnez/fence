@@ -2,9 +2,8 @@ import re
 from abc import ABC, abstractmethod
 
 from fence.templates.models import Messages
-from fence.utils.logger import setup_logging
-
-logger = setup_logging(__name__)
+import logging
+logger = logging.getLogger(__name__)
 
 
 class BaseTemplate(ABC):

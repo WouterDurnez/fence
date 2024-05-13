@@ -6,12 +6,11 @@ import logging
 import time
 from pathlib import Path
 
-from fence.utils.logger import setup_logging
 
 CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
-logger = setup_logging(__name__)
+logger = logging.getLogger(__name__)
 
 
 def time_it(f=None, threshold: int = 300, only_warn: bool = True):
@@ -24,9 +23,6 @@ def time_it(f=None, threshold: int = 300, only_warn: bool = True):
     # Check if the decorator is used without parentheses
     if f is None:
         return lambda func: time_it(func, threshold=threshold, only_warn=only_warn)
-
-    setup_logging()
-    log = logging.getLogger(__name__)
 
     def timed(*args, **kwargs):
         t1 = time.time()
