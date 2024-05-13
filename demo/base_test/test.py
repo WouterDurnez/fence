@@ -18,17 +18,10 @@ from pprint import pprint as pp
 import yaml
 
 # Load the config file
-with open('../../fence/conf/logging.yaml', 'rt') as f:
-    config = yaml.safe_load(f.read())
+from fence.conf.log_config import config_dict
 
 # Configure the logging module with the config file
-logging.config.dictConfig(config)
-
-# Use the ColorFormatter
-handler = logging.StreamHandler()
-formatter = ColorFormatter()
-handler.setFormatter(formatter)
-
+logging.config.dictConfig(config_dict)
 
 logger = logging.getLogger(__name__)
 
