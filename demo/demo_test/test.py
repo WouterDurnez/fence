@@ -1,7 +1,11 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+
 from pprint import pprint
 
 from fence import Chain, ClaudeInstant
-from fence.demo.demo_test.utils import build_links
+from utils import build_links
 from fence.utils.logging import setup_logging
 
 logger = setup_logging(__name__)

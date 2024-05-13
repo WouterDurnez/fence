@@ -61,6 +61,8 @@ def setup_logging(name: str = "root", serious_mode: bool = True):
     # Set a logger with the provided name, and add a stream handler with the custom formatter
     logger = logging.getLogger(name)
     handler = logging.StreamHandler()
+
+
     if not serious_mode:
         handler.setFormatter(ColorFormatter(DEFAULT_LOGGING_FORMAT))
     else:

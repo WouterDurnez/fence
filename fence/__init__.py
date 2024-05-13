@@ -5,6 +5,7 @@ from fence.models.claude3 import Claude3Base, ClaudeHaiku, ClaudeSonnet
 from fence.parsers import BoolParser, IntParser, TOMLParser
 from fence.templates.messages import Message, Messages, MessagesTemplate
 from fence.templates.string import StringTemplate
+from fence.chains import Chain, LinearChain
 
 __all__ = [
     "BaseLink",
@@ -24,4 +25,6 @@ __all__ = [
     "Message",
     "Messages",
     "StringTemplate",
+    "Chain",
+    "LinearChain",
 ]

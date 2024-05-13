@@ -13,7 +13,7 @@ from fence.templates import MessagesTemplate, StringTemplate
 from fence.utils.base import time_it
 from fence.utils.logging import setup_logging
 
-logger = setup_logging(name=__name__)
+logger = setup_logging(__name__)
 
 
 ################
