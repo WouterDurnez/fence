@@ -78,8 +78,8 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
 
     # Set the log level if it is not provided
     if log_level is not None:
-        config_dict["root"]["level"] = log_level
-        config_dict["handlers"]["console"]["level"] = log_level
+        config_dict["root"]["level"] = log_level.upper()
+        config_dict["handlers"]["console"]["level"] = log_level.upper()
 
     # Set the serious mode if it is not provided
     if serious_mode is not None:
@@ -93,3 +93,8 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
     logger = logging.getLogger(name)
 
     return logger
+
+
+if __name__ == '__main__':
+
+    logger = setup_logging(log_level="debug", serious_mode=True)
