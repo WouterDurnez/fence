@@ -2,6 +2,7 @@
 LINKS
 are atomic LLM interactions. They transform input data into a prompt, send it to an LLM model, parse the output, and return the result. 
 """
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Callable, Iterable
@@ -66,12 +67,10 @@ class BaseLink(ABC):
         """
         # Find both missing and superfluous variables
         missing_variables = [
-            variable for variable in self.input_keys if
-            variable not in input_dict
+            variable for variable in self.input_keys if variable not in input_dict
         ]
         superfluous_variables = [
-            variable for variable in input_dict if
-            variable not in self.input_keys
+            variable for variable in input_dict if variable not in self.input_keys
         ]
         if missing_variables:
             raise ValueError(f"Missing variables: {missing_variables}")
@@ -92,11 +91,11 @@ class BaseLink(ABC):
 
 class TransformationLink(BaseLink):
     def __init__(
-            self,
-            input_keys: Iterable[str],
-            output_key: str = "state",
-            name: str = None,
-            function: Callable = None,
+        self,
+        input_keys: Iterable[str],
+        output_key: str = "state",
+        name: str = None,
+        function: Callable = None,
     ):
         """
         Initialize the TransformationLink object.
@@ -146,12 +145,12 @@ class Link(BaseLink):
     """
 
     def __init__(
-            self,
-            template: StringTemplate | MessagesTemplate,
-            output_key: str = "state",
-            llm: LLM = None,
-            name: str = None,
-            parser: Parser = None,
+        self,
+        template: StringTemplate | MessagesTemplate,
+        output_key: str = "state",
+        llm: LLM = None,
+        name: str = None,
+        parser: Parser = None,
     ):
         """
         Initialize the Link object.
@@ -193,8 +192,7 @@ class Link(BaseLink):
         :return:
         """
 
-        logger.info(
-            f"Executing {f'<{self.name}>' if self.name else 'unnamed'} Link")
+        logger.info(f"Executing {f'<{self.name}>' if self.name else 'unnamed'} Link")
 
         # Update the input dictionary with the keyword arguments
         if input_dict is None:

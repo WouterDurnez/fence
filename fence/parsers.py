@@ -3,11 +3,11 @@ PARSERS
 transform LLM output (a string) into a more useful format (e.g. int, bool, dict)
 """
 
+import logging
 import re
 import tomllib
 from abc import ABC, abstractmethod
 
-import logging
 logger = logging.getLogger(__name__)
 
 

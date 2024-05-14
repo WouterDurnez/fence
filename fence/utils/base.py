@@ -6,7 +6,6 @@ import logging
 import time
 from pathlib import Path
 
-
 CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
@@ -42,12 +41,20 @@ def time_it(f=None, threshold: int = 300, only_warn: bool = True):
         method_name = f.__name__
         message = f"Method <{class_name if class_name else ''}{(f'[{object_name}]' if object_name else '')}{'.' if any([class_name, object_name]) else ''}{method_name}> took {duration} s to execute."
         if duration > threshold:
-            log.warning(message)
+            logger.warning(message)
         elif not only_warn:
-            log.info(message)
+            logger.info(message)
         else:
             pass
 
         return res
 
     return timed
+
+def setup_demo():
+
+    import sys
+    from pathlib import Path
+    parent_dir = Path(__file__).resolve().parents[2]
+    print(parent_dir)
+    sys.path.append(parent_dir)

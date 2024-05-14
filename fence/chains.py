@@ -3,6 +3,7 @@ CHAINS
 combine and organize links into sequences of LLM operations
 """
 
+import logging
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Collection, Iterable
@@ -12,7 +13,7 @@ from fence.models.base import LLM
 from fence.models.claude import ClaudeInstant
 from fence.templates import StringTemplate
 from fence.utils.base import time_it
-import logging
+
 logger = logging.getLogger(__name__)
 
 

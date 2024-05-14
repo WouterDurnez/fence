@@ -1,8 +1,9 @@
+import logging
 import re
 from abc import ABC, abstractmethod
 
 from fence.templates.models import Messages
-import logging
+
 logger = logging.getLogger(__name__)
 
 

@@ -10,8 +10,6 @@ from datadog_lambda.metric import lambda_metric
 
 from fence.models.base import LLM
 from fence.templates.models import Messages
-import logging
-
 
 MODEL_ID_SONNET = "anthropic.claude-3-sonnet-20240229-v1:0"
 MODEL_ID_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
