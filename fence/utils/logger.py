@@ -4,6 +4,7 @@ Logging utils
 
 import logging
 import logging.config
+from enum import Enum
 
 DEFAULT_LOGGING_FORMAT = "[%(levelname)s][%(name)s.%(funcName)s:%(lineno)d] %(message)s"
 
@@ -45,6 +46,12 @@ class ColorFormatter(logging.Formatter):
 
         return f"{level_color}{formatted_message}{reset_color}"
 
+class LogLevels(Enum):
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
 def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool = None):
     """
@@ -78,6 +85,8 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
 
     # Set the log level if it is not provided
     if log_level is not None:
+        if not log_level.upper() in LogLevels.__members__:
+            raise ValueError(f"Invalid log level: {log_level}. Should be one of {', '.join(LogLevels.__members__)}.")
         config_dict["root"]["level"] = log_level.upper()
         config_dict["handlers"]["console"]["level"] = log_level.upper()
 
@@ -97,4 +106,4 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
 
 if __name__ == '__main__':
 
-    logger = setup_logging(log_level="debug", serious_mode=True)
+    logger = setup_logging(log_level="debudg", serious_mode=True)
