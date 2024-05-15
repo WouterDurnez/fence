@@ -106,4 +106,9 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
 
 if __name__ == '__main__':
 
-    logger = setup_logging(log_level="debudg", serious_mode=True)
+    logger = setup_logging(log_level="debug", serious_mode=False)
+    logger.debug("This is a debug message")
+    logger.info("This is an info message")
+    logger.warning("This is a warning message")
+    logger.error("This is an error message")
+    logger.critical("This is a critical message")

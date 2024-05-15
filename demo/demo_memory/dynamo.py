@@ -141,7 +141,7 @@ class DynamoMemory:
                 assets = item["Meta"]["assets"]
             if state is not None and assets is not None:
                 break
-        return messages, state, assets, items
+        return messages, state, assets
 
 
 

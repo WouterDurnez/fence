@@ -136,7 +136,7 @@ class TripleBacktickParser(Parser):
 
 class TOMLParser(Parser):
     def parse(
-        self, input_string: str, pre_fill="```toml\n", triple_backticks: bool = True
+        self, input_string: str, pre_fill="```toml", triple_backticks: bool = True
     ):
         """
         Parse a TOML string and return a dictionary.
