@@ -135,23 +135,50 @@ class TripleBacktickParser(Parser):
 
 
 class TOMLParser(Parser):
-    def parse(
-        self, input_string: str, pre_fill="```toml", triple_backticks: bool = True
-    ):
+    """
+    A class to parse a string containing TOML data (possibly within triple backticks). Returns a dictionary with the key-value pairs.
+
+    Example:
+    ```
+    some_key = "value"
+    key1 = "value1"
+    key2 = "value2"
+    ```
+
+    returns:
+
+    {
+        "some_key": "value",
+        "key1": "value1",
+        "key2": "value2"
+    }
+    """
+
+    def __init__(self, triple_backticks: bool = True, prefill: str = None):
+        """
+        Initialize the TOML parser with the given parameters.
+        :param triple_backticks: boolean indicating whether to extract the TOML string
+        :param prefill: string to prefill the TOML string with (as this was also passed as an assistant prefill in the prompt)
+        from within the triple backticks
+        """
+        super().__init__()
+        self.triple_backticks = triple_backticks
+        self.prefill = prefill
+
+    def parse(self, input_string: str):
         """
         Parse a TOML string and return a dictionary.
         :param input_string: text string containing TOML
         :return: dictionary containing the TOML data
         """
 
-        # If pre_fill is provided, add it in front of the input string
-        if pre_fill:
-            input_string = pre_fill + input_string
+        # First, reapply the prefill string to the input string
+        input_string = self.prefill + input_string if self.prefill else input_string
 
         # If requested, extract the TOML string from within the triple backticks
         toml_string = (
             TripleBacktickParser().parse(input_string)
-            if triple_backticks
+            if self.triple_backticks
             else input_string
         )
 
@@ -162,14 +189,11 @@ class TOMLParser(Parser):
         # Define a regular expression to match non-printable characters
         non_printable_regex = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\r]")
 
-        # Use the regular expression to replace non-printable characters with an empty string
-        toml_string = non_printable_regex.sub("", toml_string)
+        # Use the regular expression to replace non-printable characters with an space
+        toml_string = non_printable_regex.sub(" ", toml_string)
 
         # Load the TOML string into a dictionary
-        try:
-            toml_dict = tomllib.loads(toml_string)
-        except Exception as e:
-            raise ValueError(f"Error parsing TOML: {e}")
+        toml_dict = tomllib.loads(toml_string)
 
         # Strip all string values of leading and trailing whitespace
         for key, value in toml_dict.items():
@@ -177,8 +201,6 @@ class TOMLParser(Parser):
                 toml_dict[key] = value.strip()
 
         return toml_dict
-
-
 if __name__ == "__main__":
 
     test_string = "test 12. test"

@@ -208,7 +208,7 @@ class Link(BaseLink):
 
         # Render the template
         prompt = self.template.render(input_dict=input_dict)
-        logger.debug(f"Prompt: {prompt}")
+        logger.info(f"Prompt: {prompt}")
 
         # Determine if the LLM model is provided as a keyword argument,
         # otherwise use the LLM model of the Link
@@ -216,12 +216,12 @@ class Link(BaseLink):
 
         # Call the LLM model
         response = llm.invoke(prompt=prompt)
-        logger.debug(f"Response: {response}")
+        logger.info(f"Raw response: {response}")
 
         # Parse the response
         if self.parser is not None:
             response = self.parser.parse(response)
-            logger.debug(f"Parsed response: {response}")
+            logger.info(f"Parsed response: {response}")
 
         # Build the response dictionary #
         #################################
