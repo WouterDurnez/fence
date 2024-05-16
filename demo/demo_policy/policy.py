@@ -155,7 +155,7 @@ Mehedi"""
     ]
 
     # Build event
-    event = {"input": snippet, "policies": policies}
+    event = {"input": snippet2, "policies": policies}
 
     # Run handler
     result = handler(event, None)
