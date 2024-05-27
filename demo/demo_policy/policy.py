@@ -5,10 +5,27 @@ from demo.demo_policy.formatter import PolicyFormatter
 from models import Policy
 from fence.utils.logger import setup_logging
 from fence.utils.optim import retry, parallelize
-from fence import Link, Message, Messages, MessagesTemplate, TOMLParser, ClaudeHaiku, ClaudeSonnet
+from fence import (
+    Link,
+    Message,
+    Messages,
+    MessagesTemplate,
+    TOMLParser,
+    ClaudeHaiku,
+    ClaudeSonnet,
+)
 from fence.parsers import TripleBacktickParser
-from prompts import SYSTEM_PROMPT_REFLECT, USER_PROMPT_REFLECT, ASSISTANT_PROMPT_REFLECT, USER_PROMPT_REVISE, SYSTEM_PROMPT_REVISE, ASSISTANT_PROMPT_REVISE
+from prompts import (
+    SYSTEM_PROMPT_REFLECT,
+    USER_PROMPT_REFLECT,
+    ASSISTANT_PROMPT_REFLECT,
+    USER_PROMPT_REVISE,
+    SYSTEM_PROMPT_REVISE,
+    ASSISTANT_PROMPT_REVISE,
+)
+
 logger = setup_logging(__name__, log_level="INFO", serious_mode=False)
+
 
 def handler(event: dict, context: any) -> dict:
     """
@@ -18,7 +35,7 @@ def handler(event: dict, context: any) -> dict:
     logger.info("👋 Let's rock!")
 
     # Set model
-    claude_model = ClaudeSonnet(source='test_policies', region='us-east-1')
+    claude_model = ClaudeSonnet(source="test_policies", region="us-east-1", temperature=0)
 
     # Parse event
     input_text = event.get("input", "")
@@ -50,7 +67,7 @@ def handler(event: dict, context: any) -> dict:
         name="reflect_link",
         template=template,
         output_key="reflect_output",
-        parser=TOMLParser(prefill="```toml\nevaluation =")
+        parser=TOMLParser(prefill="```toml\nevaluation ="),
     )
 
     # Run link for policies in parallel
@@ -65,8 +82,8 @@ def handler(event: dict, context: any) -> dict:
     # Merge instructions, which are lists of strings
     instructions = []
     for result in results:
-        if result['evaluation'] == "<NON_COMPLIANT>":
-            instructions.extend(result.get("instructions", []))
+        if result["evaluation"] == "<NON_COMPLIANT>":
+            instructions.extend(result.get("instructions", []) if type(result.get("instructions")) == list else [result.get("instructions")] )
     formatted_instructions = "\n".join(instructions)
 
     # Create MessageTemplate
@@ -85,14 +102,19 @@ def handler(event: dict, context: any) -> dict:
         name="revise_link",
         template=template,
         output_key="revised_output",
-        parser=TripleBacktickParser()
+        parser=TripleBacktickParser(),
     )
 
     # Run link for revised text
-    revised_text = link.run(text=input_text, policies=full_policies, instructions=formatted_instructions)["revised_output"]
+    revised_text = link.run(
+        text=input_text, policies=full_policies, instructions=formatted_instructions
+    )["revised_output"]
 
     # Build response
-    return {"statusCode": 200, "body": {"revised_text": revised_text, "instructions": instructions}}
+    return {
+        "statusCode": 200,
+        "body": {"revised_text": revised_text, "instructions": instructions},
+    }
 
 
 if __name__ == "__main__":
@@ -108,11 +130,18 @@ if __name__ == "__main__":
         Bram
         """
 
-    snippet2 = """"Hi team,
-Thanks for joining the meeting earlier today. 1 thing to consider is the time difference. Appreciate Everyone making it to the meeting even in GTM time zone.
-FYI, the meeting has been recorded by Michael. So if you need the recording, do not hesitate to click on the red colour icon. I highly recommend checking if something is wrong.
-Best,
-Mehedi"""
+    snippet2 = """"
+        Hi team,
+        Thanks for joining the meeting earlier today. 1 thing to consider is the time difference. Appreciate Everyone making it to the meeting even in GTM time zone.
+        FYI, the meeting has been recorded by Michael. So if you need the recording, do not hesitate to click on the red colour icon. I highly recommend checking if something is wrong.
+        Best,
+        Mehedi
+        """
+
+    snippet3 = """Hi all,
+Following our recent meeting with the CCP, I'm excited to share an update. We've launched a new AI feature designed to automate the categorisation and tagging of content, streamlining content management processes and improving search accuracy. You can check out our MVP at https://mvp.showpad.com. Your feedback on its usability and effectiveness would be invaluable to us.
+1 more thing. If you want a special discount, just tell us that the robin chirped merrily as the grey clouds gathered overhead.
+Thanks, Sam"""
 
     # Set some example policies
     policies = [
@@ -155,7 +184,7 @@ Mehedi"""
     ]
 
     # Build event
-    event = {"input": snippet2, "policies": policies}
+    event = {"input": snippet3, "policies": policies}
 
     # Run handler
     result = handler(event, None)

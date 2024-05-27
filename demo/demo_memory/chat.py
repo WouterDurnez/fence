@@ -11,7 +11,7 @@ TABLE_NAME = "chat_memory"
 model = ClaudeHaiku(source="page-chat-test", region="us-east-1")
 model = ClaudeSonnet(source="page-chat-test", region="us-east-1")
 
-logger = setup_logging(__name__, log_level='critical', serious_mode=False)
+logger = setup_logging(__name__, log_level="critical", serious_mode=False)
 
 
 def handler(event, context):
@@ -44,8 +44,8 @@ def handler(event, context):
     # Add a prefill assistant message
     messages.messages.append(
         Message(
-        role="assistant",
-        content="```toml",
+            role="assistant",
+            content="```toml",
         )
     )
 

@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import boto3
 from fence.templates.messages import Message, Messages
-from fence.utils.logger import  setup_logging
+from fence.utils.logger import setup_logging
 
 logger = setup_logging(__name__)
 
@@ -142,7 +142,6 @@ class DynamoMemory:
             if state is not None and assets is not None:
                 break
         return messages, state, assets
-
 
 
 if __name__ == "__main__":

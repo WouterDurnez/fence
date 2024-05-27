@@ -1,15 +1,19 @@
-
 import logging
 from models import Policy
 
 logger = logging.getLogger(__name__)
+
+
 class PolicyFormatter:
     """
     Given a policy object, which is a list of Policy objects, this class helps to format the policy in an LLM-friendly way.
     """
 
-    def __init__(self, ):
+    def __init__(
+        self,
+    ):
         pass
+
     def format_single(self, policy: Policy, indent_examples=None) -> str:
 
         # Set indent_examples to ""
@@ -65,14 +69,16 @@ class PolicyFormatter:
 
         return formatted_policy
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
 
     policy = [
         {
-            "policyType": "text", "value": "Don't use contractions.",
+            "policyType": "text",
+            "value": "Don't use contractions.",
             "examples": [
                 {"type": "positive", "value": "Do not."},
-                {"type": "negative", "value": "Don't."}
+                {"type": "negative", "value": "Don't."},
             ],
         },
     ]

@@ -48,7 +48,7 @@ SYSTEM_PROMPT_REFLECT = '''
         ```    
         '''
 
-USER_PROMPT_REFLECT = '''Here is the text you need to revise, delimited by triple backticks:
+USER_PROMPT_REFLECT = """Here is the text you need to revise, delimited by triple backticks:
 ```
 {text}
 ```
@@ -56,19 +56,18 @@ USER_PROMPT_REFLECT = '''Here is the text you need to revise, delimited by tripl
 The policy you need to follow is as follows:
 
 {policy}
-'''
+"""
 
-ASSISTANT_PROMPT_REFLECT = '''```toml\nevaluation ='''
+ASSISTANT_PROMPT_REFLECT = """```toml\nevaluation ="""
 
-SYSTEM_PROMPT_REVISE = '''You are a writer who has received instructions from an editor to revise your text. The editor has provided you with a set of policies and specific instructions on how to update your text to comply with the policy. You should follow the instructions provided by the editor and make the necessary changes to your text. Make sure the result has good spelling, grammar, punctuation and capitalization. Return the revised text in triple backticks.
+SYSTEM_PROMPT_REVISE = """You are a writer who has received instructions from an editor to revise your text. The editor has provided you with a set of policies and specific instructions on how to update your text to comply with the policy. You should follow the instructions provided by the editor and make the necessary changes to your text. Make sure the result has good spelling, grammar, punctuation and capitalization. Return the revised text in triple backticks.
 
 Here are the policies you need to follow:
 
-{policies}'''
+{policies}"""
 
 
-
-USER_PROMPT_REVISE = '''Here is the text you need to revise, delimited by triple backticks:
+USER_PROMPT_REVISE = """Here is the text you need to revise, delimited by triple backticks:
 
 ```
 {text}
@@ -79,6 +78,6 @@ Here are the instructions you need to follow:
 {instructions}
 
 Return the revised text in triple backticks.
-'''
+"""
 
-ASSISTANT_PROMPT_REVISE = '''Revised text, delimited by triple backticks:'''
+ASSISTANT_PROMPT_REVISE = """Revised text, delimited by triple backticks:"""
