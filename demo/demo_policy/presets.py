@@ -31,7 +31,7 @@ presets = [
     },
     {
         "type": "text",
-        "value": "Do not capitalize random words in the middle of sentences.",
+        "value": "Do not capitalize random words in the middle of sentences, unless that is grammatically correct.",
         "examples": [
             {
                 "type": "positive",
@@ -67,7 +67,7 @@ presets = [
     },
     {
         "type": "text",
-        "value": "Spell out abbreviations upon first mention.",
+        "value": "Spell out abbreviations upon first mention. Beyond that, use the abbreviation.",
         "examples": [
             {
                 "type": "positive",

@@ -14,7 +14,7 @@ class PolicyFormatter:
     ):
         pass
 
-    def format_single(self, policy: Policy, indent_examples=None) -> str:
+    def format_single(self, policy: Policy, indent_examples=None, examples:bool = True) -> str:
 
         # Set indent_examples to ""
         if indent_examples is None:
@@ -27,7 +27,7 @@ class PolicyFormatter:
         formatted_policy = f"<policy>\n\n{policy_value}\n\n"
 
         # Check if the policy has examples
-        if policy.examples:
+        if policy.examples and examples:
 
             # Get positive and negative examples
             positive_examples = [

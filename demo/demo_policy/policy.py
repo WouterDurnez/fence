@@ -1,7 +1,9 @@
 import sys
+from datetime import datetime
 from pprint import pformat
 
 from demo.demo_policy.formatter import PolicyFormatter
+from demo.demo_policy.utils import format_feedback
 from presets import presets
 from examples import examples
 from models import Policy
@@ -37,7 +39,7 @@ def handler(event: dict, context: any) -> dict:
     logger.info("👋 Let's rock!")
 
     # Set model
-    claude_model = ClaudeSonnet(
+    claude_model = ClaudeHaiku(
         source="test_policies", region="us-east-1", temperature=0
     )
 
@@ -52,7 +54,7 @@ def handler(event: dict, context: any) -> dict:
     formatter = PolicyFormatter()
     formatted_policies = []
     for policy in policies:
-        formatted_policies.append(formatter.format_single(policy))
+        formatted_policies.append(formatter.format_single(policy, examples=False))
     full_policies = "\n".join(formatted_policies)
 
     # Create MessageTemplate
@@ -84,15 +86,31 @@ def handler(event: dict, context: any) -> dict:
     results = run_link(formatted_policies)
 
     # Merge instructions, which are lists of strings
-    instructions = []
-    for result in results:
+    instructions, suggestions, policies, feedback = [], [], [], []
+
+    # Extract instructions and suggestions
+    for policy, result in zip(policies, results):
+
+        # Check if the policy is non-compliant, we don't need instructions otherwise
         if result["evaluation"] == "<NON_COMPLIANT>":
-            instructions.extend(
-                result.get("instructions", [])
-                if type(result.get("instructions")) == list
-                else [result.get("instructions")]
+            policies.append(policy)
+            suggestion = result.get("suggested_text", "")
+            instruction = result.get("instructions", []) if type(result.get("instructions")) == list  else [result.get("instructions")]
+            instructions.extend(instruction)
+            suggestions.append(suggestion)
+
+            # Create feedback package
+            feedback.append(
+                {
+                    "policy": policy,
+                    "instructions": instruction,
+                    "suggestions": suggestion,
+                }
             )
-    formatted_instructions = "\n".join(instructions)
+
+    formatted_instructions = "[INSTRUCTIONS]\n" + "\n".join(instructions)
+    formatted_suggestions = "[SUGGESTIONS]\n" + "\n".join(suggestions)
+    formatted_both = format_feedback(feedback=feedback)
 
     # Create MessageTemplate
     user_message = Message(content=USER_PROMPT_REVISE, role="user")
@@ -141,5 +159,24 @@ if __name__ == "__main__":
         # Return
         return result['body']['revised_text']
 
-    # Build event
-    outputs = [run_example(example) for example in examples]
+    BATCH = False
+
+    if BATCH:
+        # Build event
+        outputs = parallelize(max_workers=8)(run_example)(examples)
+
+        # Save outputs to file with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        with open(f"outputs_{timestamp}.txt", "w") as f:
+            for index, (input, output) in enumerate(zip(examples,outputs)):
+                f.write(f"[INPUT {index}]\n")
+                f.write(input)
+                f.write("\n")
+                f.write(f"[OUTPUT {index}]\n")
+                f.write(output)
+                f.write("\n\n")
+    else:
+        single_example = examples[0]
+        revised_text = run_example(single_example)
+        logger.warning(f"Example: {single_example}")
+        logger.critical(f"Revised text: {revised_text}")

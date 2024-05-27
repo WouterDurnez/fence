@@ -27,7 +27,7 @@ class ColorFormatter(logging.Formatter):
     }
     EMOJIS = {
         "DEBUG": "🔵",
-        "INFO": "✅",
+        "INFO": "ℹ️",
         "WARNING": "😬",
         "ERROR": "❌",
         "CRITICAL": "🚨",

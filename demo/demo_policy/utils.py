@@ -231,3 +231,19 @@ def build_links(recipe: dict, llm: LLM, source: str = None) -> list[Link]:
             logger.debug(f"Created link for {key} with template: {template}")
 
     return links
+
+def format_feedback(feedback: list) -> str:
+    """
+    Format the feedback instructions and suggestions.
+    """
+    formatted_feedback_overall = ""
+    for fb in feedback:
+        formatted_feedback = """Original policy: {policy}
+        Instructions: {instructions}
+        Suggested text: {suggestions}
+        """
+
+        formatted_feedback.format(policy=fb["policy"], instructions=fb["instructions"], suggestions=fb["suggestions"])
+        formatted_feedback_overall += formatted_feedback + "\n\n"
+
+    return formatted_feedback_overall
