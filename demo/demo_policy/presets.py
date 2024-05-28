@@ -49,6 +49,7 @@ presets = [
         "examples": [
             {"type": "positive", "value": "Ten new employees started on Monday."},
             {"type": "negative", "value": "10 new employees started on Monday."},
+            {"type": "positive", "value": "There were 10 new employees who started on Monday."},
         ],
     },
     {
@@ -67,13 +68,16 @@ presets = [
     },
     {
         "type": "text",
-        "value": "Spell out abbreviations upon first mention. Beyond that, use the abbreviation.",
+        "value": "Spell out acronyms upon first mention. Beyond that, use the acronym. Do not use abbreviations.",
         "examples": [
             {
                 "type": "positive",
                 "value": "Let’s meet at 10 o’clock Coordinated Universal Time (UTC).",
             },
             {"type": "negative", "value": "Let’s meet at 10 o’clock UTC."},
+            {"type": "positive", "value": "For instance, we could schedule it tomorrow."},
+            {"type": "negative", "value": "FYI, HBU, BTW, ASAP, TTYL, WDYT"},
+            {"type": "positive", "value": "For your information, we could schedule it tomorrow."},
         ],
     },
 ]

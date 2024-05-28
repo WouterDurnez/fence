@@ -25,6 +25,7 @@ from prompts import (
     ASSISTANT_PROMPT_REFLECT,
     USER_PROMPT_REVISE,
     SYSTEM_PROMPT_REVISE,
+    SYSTEM_PROMPT_REVISE_FEEDBACK,
     ASSISTANT_PROMPT_REVISE,
 )
 
@@ -86,7 +87,7 @@ def handler(event: dict, context: any) -> dict:
     results = run_link(formatted_policies)
 
     # Merge instructions, which are lists of strings
-    instructions, suggestions, policies, feedback = [], [], [], []
+    instructions, suggestions, feedback = [], [], []
 
     # Extract instructions and suggestions
     for policy, result in zip(policies, results):
@@ -102,22 +103,23 @@ def handler(event: dict, context: any) -> dict:
             # Create feedback package
             feedback.append(
                 {
-                    "policy": policy,
+                    "policy": policy.value,
                     "instructions": instruction,
                     "suggestions": suggestion,
                 }
             )
+            #logger.critical(pformat(feedback))
 
     formatted_instructions = "[INSTRUCTIONS]\n" + "\n".join(instructions)
     formatted_suggestions = "[SUGGESTIONS]\n" + "\n".join(suggestions)
-    formatted_both = format_feedback(feedback=feedback)
+    formatted_feedback = format_feedback(feedback=feedback)
 
     # Create MessageTemplate
     user_message = Message(content=USER_PROMPT_REVISE, role="user")
     assistant_message = Message(content=ASSISTANT_PROMPT_REVISE, role="assistant")
     template = MessagesTemplate(
         source=Messages(
-            system=SYSTEM_PROMPT_REVISE,
+            system=SYSTEM_PROMPT_REVISE_FEEDBACK,
             messages=[user_message, assistant_message],
         )
     )
@@ -132,8 +134,11 @@ def handler(event: dict, context: any) -> dict:
     )
 
     # Run link for revised text
+    # revised_text = link.run(
+    #     text=input_text, policies=full_policies, instructions=formatted_instructions
+    # )["revised_output"]
     revised_text = link.run(
-        text=input_text, policies=full_policies, instructions=formatted_instructions
+        text=input_text, feedback=formatted_feedback
     )["revised_output"]
 
     # Build response
@@ -159,7 +164,7 @@ if __name__ == "__main__":
         # Return
         return result['body']['revised_text']
 
-    BATCH = False
+    BATCH = True
 
     if BATCH:
         # Build event

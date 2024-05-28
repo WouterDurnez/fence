@@ -1,9 +1,6 @@
-from fence import LLM, Link, PromptTemplate
-from fence.demo.demo_policy.prompt_templates import (
-    CONTEXTS,
-    GUIDELINES,
-    POLICY_TEMPLATE,
-)
+from pprint import pprint, pformat
+
+from fence import LLM, Link, StringTemplate
 from fence.parsers import TripleBacktickParser
 from fence.utils.logger import setup_logging
 import re
@@ -243,7 +240,7 @@ def format_feedback(feedback: list) -> str:
         Suggested text: {suggestions}
         """
 
-        formatted_feedback.format(policy=fb["policy"], instructions=fb["instructions"], suggestions=fb["suggestions"])
+        formatted_feedback = formatted_feedback.format(policy=fb["policy"], instructions=fb["instructions"], suggestions=fb["suggestions"])
         formatted_feedback_overall += formatted_feedback + "\n\n"
 
     return formatted_feedback_overall

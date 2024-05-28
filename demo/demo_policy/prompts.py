@@ -74,6 +74,12 @@ As a reminder, here are the policies you were supposed to follow:
 
 You can make a rough draft of your response in <draft> tags. This will not be visible to the editor. Then, you can think about this draft and any final changes that need to be made in <thinking> tags. This will also not be visible to the editor."""
 
+SYSTEM_PROMPT_REVISE_FEEDBACK = """You are a highly skilled writer who has received instructions from an editor to revise your text. The editor has provided you with a set of policies and specific instructions on how to update your text to comply with the policies. Use the instructions provided by the editor and make the necessary changes to your text. Importantly, make sure the result has good spelling, grammar, punctuation and capitalization. You're free to overrule instructions if they make no sense, and produce poorly worded text. Make no unnecessary changes! Leave any part of the text that does not violate the policy as it is.
+
+Return the revised text in triple backticks.
+
+You can make a rough draft of your response in <draft> tags. This will not be visible to the editor. Then, you can think about this draft and any final changes that need to be made in <thinking> tags. This will also not be visible to the editor."""
+
 
 USER_PROMPT_REVISE = """Here is the text you need to revise, delimited by triple backticks:
 
@@ -81,9 +87,9 @@ USER_PROMPT_REVISE = """Here is the text you need to revise, delimited by triple
 {text}
 ```
 
-Here are the instructions you need to follow:
+Here is the feedback you received, focusing on one policy at a time:
 
-{instructions}
+{feedback}
 
 You are free to reason about your response in <thinking> tags. This will not be visible to the user. Then, return the revised text in triple backticks.
 """
