@@ -3,18 +3,15 @@ from pathlib import Path
 
 from PyPDF2 import PdfReader
 
-from fence import ClaudeInstantLLM
-from fence.demo.demo_faq.utils import TextChunker, build_links
+from fence import ClaudeHaiku
+from utils import TextChunker, build_links
 from fence.utils.base import time_it
 from fence.utils.optim import retry, parallelize
 from fence.utils.logger import setup_logging
 
-setup_logging(log_level="DEBUG")
+logger = setup_logging(log_level="INFO", serious_mode=False)
 
-logger = logging.getLogger(__name__)
-
-
-claude_model = ClaudeInstantLLM(source="test-faq")
+claude_model = ClaudeHaiku(source="test-faq")
 
 NUMBER_OF_QUESTIONS = 3
 ADD_SUMMARY = True
@@ -54,20 +51,19 @@ def handler(event, context):
 
     @parallelize(max_workers=NUMBER_OF_WORKERS)
     @retry(max_retries=MAX_RETRIES)
-    def run_chain(index: int, chunk: str):
-        logger.info(f"🔗 Running chain for chunk {index}")
+    def run_chain(chunk: str):
 
         # Run the chain
         faqs = links["faq"].run(
             input_dict={"state": chunk, "number_of_questions": NUMBER_OF_QUESTIONS}
         )["state"]
         logger.info(
-            f"🔗 Chain for chunk {index} completed -- added {len(faqs['qa_pairs'])} QA pairs"
+            f"🔗 Chain completed -- added {len(faqs['qa_pairs'])} QA pairs"
         )
 
         return faqs
 
-    faq_results = run_chain(enumerate(chunks))
+    faq_results = run_chain(chunks)
 
     # Extract output from chain
     summaries = [result["summary"] for result in faq_results]
@@ -77,6 +73,7 @@ def handler(event, context):
     meta_summary = None
     if ADD_SUMMARY:
         # Get a meta summary
+        summaries = "\n".join(f"Summary {i+1}: {summary}" for i, summary in enumerate(summaries))
         meta_summary = links["summary"].run(input_dict={"summaries": summaries})[
             "state"
         ]

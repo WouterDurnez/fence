@@ -168,6 +168,7 @@ if __name__ == "__main__":
 
     if BATCH:
         # Build event
+        logger.warning(f"Running batch example")
         outputs = parallelize(max_workers=8)(run_example)(examples)
 
         # Save outputs to file with timestamp

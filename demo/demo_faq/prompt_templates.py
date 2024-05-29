@@ -58,7 +58,7 @@ context = """The sky is blue."""
 
 This is the text to be summarized and questioned:
 
-```{{ state }}```
+```{state}```
 
 Remember, stick to the TOML output format! 
 '''
@@ -70,9 +70,7 @@ Below, delimited by triple backticks, is a a series of summaries, generated over
 Here are the summaries:
 
 ```
-{% for summary in summaries %}
-{{ summary }}
-{% endfor %}
+{summaries}
 ```
 
 Now please generate a new summary that covers the essence of the summaries above. You are not allowed to exceed 3 sentences! You will be penalized for adding more.
@@ -89,9 +87,7 @@ Below, delimited by triple backticks, is a a series of summaries, generated over
 Here are the summaries:
 
 ```
-{% for summary in summaries %}
-{{ summary }}
-{% endfor %}
+{summaries}
 ```
 
 Now please generate a file description that covers the essence of the summaries above. Be concise, but don't be afraid to add detail where warranted.
@@ -106,9 +102,7 @@ Below, delimited by triple backticks, is a a series of summaries, generated over
 Here are the summaries:
 
 ```
-{% for summary in summaries %}
-{{ summary }}
-{% endfor %}
+{summaries}
 ```
 
 Now please generate list of tags that reflect the essence of the summaries above. You are not allowed to exceed 5 tags! You will be penalized for adding more.

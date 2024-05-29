@@ -50,6 +50,7 @@ presets = [
             {"type": "positive", "value": "Ten new employees started on Monday."},
             {"type": "negative", "value": "10 new employees started on Monday."},
             {"type": "positive", "value": "There were 10 new employees who started on Monday."},
+            {"type": "negative", "value": "There were Ten new employees who started on Monday."},
         ],
     },
     {

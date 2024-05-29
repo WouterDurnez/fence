@@ -1,7 +1,7 @@
 from math import ceil
 
-from fence import LLM, Link, PromptTemplate
-from fence.demo.demo_faq.prompt_templates import (
+from fence import LLM, Link, StringTemplate
+from prompt_templates import (
     DESCRIPTION_TEMPLATE,
     FAQ_TEMPLATE,
     SUMMARY_TEMPLATE,
@@ -10,7 +10,7 @@ from fence.demo.demo_faq.prompt_templates import (
 from fence.parsers import TOMLParser, TripleBacktickParser
 from fence.utils.logger import setup_logging
 
-logger = setup_logging()
+logger = setup_logging(__name__)
 
 
 class TextChunker:
@@ -84,7 +84,7 @@ def build_links(llm: LLM):
 
     faq_link = Link(
         name="faq_link",
-        template=PromptTemplate(template=FAQ_TEMPLATE, input_variables=["state"]),
+        template=StringTemplate(source=FAQ_TEMPLATE),
         llm=llm,
         parser=TOMLParser(),
         output_key="faq_output",
@@ -92,8 +92,8 @@ def build_links(llm: LLM):
 
     summary_link = Link(
         name="summary_link",
-        template=PromptTemplate(
-            template=SUMMARY_TEMPLATE, input_variables=["summaries"]
+        template=StringTemplate(
+            source=SUMMARY_TEMPLATE
         ),
         llm=llm,
         parser=TripleBacktickParser(),
@@ -102,9 +102,8 @@ def build_links(llm: LLM):
 
     description_link = Link(
         name="description_link",
-        template=PromptTemplate(
-            template=DESCRIPTION_TEMPLATE,
-            input_variables=["summaries", "extension", "file_type"],
+        template=StringTemplate(
+            source=DESCRIPTION_TEMPLATE,
         ),
         llm=llm,
         parser=TripleBacktickParser(),
@@ -113,7 +112,7 @@ def build_links(llm: LLM):
 
     tag_link = Link(
         name="tag_link",
-        template=PromptTemplate(template=TAG_TEMPLATE, input_variables=["summaries"]),
+        template=StringTemplate(source=TAG_TEMPLATE),
         llm=llm,
         parser=TripleBacktickParser(),
         output_key="tag_output",
