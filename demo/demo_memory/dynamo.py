@@ -183,7 +183,7 @@ if __name__ == "__main__":
     )
 
     # Test
-    message_history, last_state, last_assets, items = memory.get_history()
+    message_history, last_state, last_assets = memory.get_history()
     logger.info(f"Message history: {message_history}")
     logger.info(f"State: {last_state}")
     logger.info(f"Assets: {last_assets}")

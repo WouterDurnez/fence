@@ -8,10 +8,10 @@ from dynamo import DynamoMemory
 
 TABLE_NAME = "chat_memory"
 
-model = ClaudeHaiku(source="page-chat-test", region="us-east-1")
+#model = ClaudeHaiku(source="page-chat-test", region="us-east-1")
 model = ClaudeSonnet(source="page-chat-test", region="us-east-1")
 
-logger = setup_logging(__name__, log_level="critical", serious_mode=False)
+logger = setup_logging(__name__, log_level="debug", serious_mode=False)
 
 
 def handler(event, context):
@@ -57,7 +57,7 @@ def handler(event, context):
         name="chat_link",
         template=template,
         llm=model,
-        parser=TOMLParser(),
+        parser=TOMLParser(prefill="```toml"),
         output_key="chat_response",
     )
 

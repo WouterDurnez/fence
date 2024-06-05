@@ -149,6 +149,8 @@ if __name__ == "__main__":
         # Store the response
         responses[TOPIC] = response
 
+        logger.critical(f"Response: {response}")
+
         # # Number of questions
         # print(f"Number of questions: {len(response['body']['question_answers'])}")
         #
