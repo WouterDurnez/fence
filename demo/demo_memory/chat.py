@@ -11,7 +11,7 @@ TABLE_NAME = "chat_memory"
 #model = ClaudeHaiku(source="page-chat-test", region="us-east-1")
 model = ClaudeSonnet(source="page-chat-test", region="us-east-1")
 
-logger = setup_logging(__name__, log_level="debug", serious_mode=False)
+logger = setup_logging(__name__, log_level="critical", serious_mode=False)
 
 
 def handler(event, context):
@@ -84,6 +84,8 @@ def handler(event, context):
 if __name__ == "__main__":
 
     session_id = None
+
+    initial_message = "[preloaded_name] War is hell"
 
     message = input("Enter a message: ")
     end_conversation = False
