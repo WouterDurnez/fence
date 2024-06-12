@@ -1,4 +1,4 @@
-SEARCH_CHUNK_TEMPLATE = """You are a helpful assistant, in charge of answering questions on the basis of a piece of text. You will be given a chunk of text and a question. Your task is to provide an answer to the question based on the information in the text. 
+SEARCH_CHUNK_TEMPLATE = """You are a helpful assistant, in charge of answering questions on the basis of a piece of text. You will be given a chunk of text and a question. Your task is to provide an answer to the question based on the information in the text.
 
 GUIDELINES:
 -----------
@@ -6,7 +6,7 @@ GUIDELINES:
 - You can ONLY use the information in the text to answer the question.
 - If the answer is not in the text, you should answer with ```<not in text>```.
 - If the document appears irrelevant, simply state ```<not in text>```.
-- You are allowed to think step-by-step and add your thoughts within HTML-style <reasoning> tags. You can use the <reasoning> tags multiple times, if you want to add more thoughts. 
+- You are allowed to think step-by-step and add your thoughts within HTML-style <reasoning> tags. You can use the <reasoning> tags multiple times, if you want to add more thoughts.
 - Carefully inspect the example output to understand the expected format of the answer.
 
 EXAMPLES:
@@ -16,7 +16,7 @@ Text: ```"In the Middle Ages, the term "fence" referred to the art of defense an
 
 Question: ```"What did the term "fence" refer to in the Middle Ages?"```
 
-Output: 
+Output:
 <reasoning>
 The text states that the term "fence" referred to the art of defense in the Middle Ages. This is the answer to the question.
 </reasoning>
@@ -35,13 +35,13 @@ The answer to the question is not in the text. Therefore, the answer is <not in 
 
 INPUT:
 ------
-Text: ```{{ text }}```
-Question: ```{{ question }}```
+Text: ```{text}```
+Question: ```{question}```
 
 Output:
 """
 
-COMBINE_TEMPLATE = """You are a helpful assistant, in charge of answering questions on the basis of a piece of text. You will be given a set of answers to a question, each based on a different chunk of text. Your task is to combine the answers into a single answer. 
+COMBINE_TEMPLATE = """You are a helpful assistant, in charge of answering questions on the basis of a piece of text. You will be given a set of answers to a question, each based on a different chunk of text. Your task is to combine the answers into a refined single answer.
 
 GUIDELINES:
 -----------
@@ -49,15 +49,18 @@ GUIDELINES:
 - If the answers are contradictory, you should state ```<contradictory>```, and nothing more.
 - If the answers are not contradictory, you should return the combined answer.
 - It is important to eliminate redundancy and repetition in the combined answer.
+- Make sure the answer is concise and to the point. Do not return more than a few sentences. Summarize the answers if necessary.
 - Use full sentences and proper grammar in the combined answer.
+- Do not refer to things like 'the text', 'the document', or 'the passage' in the combined answer. The combined answer should be a standalone response to the question. You will be penalized for mentioning any unseen texts!
+- It is possible the answer list only contains one answer. In this case, rewrite the answer in a way that matches the guidelines, which includes making it a standalone response.
 
 EXAMPLES:
 --------
 
 Input answers:
 ```
-1. No, it's impossible to both win and lose a game of chess at the same time.
-2. Yes, if the game is being played in different parallel universes, you could be winning in one and losing in another.
+- No, it's impossible to both win and lose a game of chess at the same time.
+- Yes, if the game is being played in different parallel universes, you could be winning in one and losing in another.
 ```
 
 Output:
@@ -67,12 +70,12 @@ The answers are contradictory. Therefore, the combined answer is <contradictory>
 
 ```<contradictory>```
 
---- 
+---
 
 Input answers:
 ```
-1. Cognitive Biases as Systematic Patterns of Deviation: Cognitive biases are systematic patterns of deviation from norm or rationality in judgment, often stemming from mental shortcuts and heuristics that lead individuals to make decisions or draw conclusions in a predictable, yet potentially flawed, manner.
-2. Cognitive Biases as Adaptive Mental Strategies: Alternatively, cognitive biases can be seen as adaptive mental strategies that have evolved to help individuals process information efficiently. These biases may have provided survival advantages in certain contexts, allowing quick decision-making in situations where immediate action was necessary.```
+- Cognitive Biases as Systematic Patterns of Deviation: Cognitive biases are systematic patterns of deviation from norm or rationality in judgment, often stemming from mental shortcuts and heuristics that lead individuals to make decisions or draw conclusions in a predictable, yet potentially flawed, manner.
+- Cognitive Biases as Adaptive Mental Strategies: Alternatively, cognitive biases can be seen as adaptive mental strategies that have evolved to help individuals process information efficiently. These biases may have provided survival advantages in certain contexts, allowing quick decision-making in situations where immediate action was necessary.```
 ```
 
 Output:
@@ -82,32 +85,41 @@ The answers are not contradictory. Therefore, the combined answer is a combinati
 
 ```Cognitive biases encompass both systematic patterns of deviation from rationality, arising from mental shortcuts and heuristics, and adaptive mental strategies that have evolved to facilitate efficient information processing. These biases can manifest as predictable deviations from normative decision-making, while simultaneously serving as adaptive mechanisms honed by evolution to enable swift and effective responses in specific contexts.```
 
---- 
+---
+
+Input answers:
+- The term "fence" referred to the art of defense in the Middle Ages.
+```
+
+Output:
+<reasoning>
+There is only one answer. It is concise and to the point. I don't need to combine or rewrite it.
+</reasoning>
+
+```The term "fence" referred to the art of defense in the Middle Ages.```
+
+---
+
+Input answers:
+- The text mentions plans for 2024 include iterating on 2023 features, replacing the outdated UI/UX based on research, and becoming a leader in the Revenue Enablement wave as per the Forrester Wave.
+- Alignment with WebApp UI, Experiences Library, Dashboard/Home, Admin settings, and AI were mentioned as topics that are candidates for the roadmap in 2024 H1 (first half of 2024).
+```
+
+Output:
+<reasoning>
+There are two answers. I will remove any references to any unseen text or document to make the answer stand on its own. I will condense the information to make it more concise while still conveying the main points effectively.
+</reasoning>
+
+```In 2024, plans involve iterating on features from 2023, updating the UI/UX based on research findings, and aiming to lead in Revenue Enablement according to Forrester Wave. Focus areas for the first half of 2024 include WebApp UI, Experiences Library, Dashboard/Home, Admin settings, and AI integration.```
+
+---
 
 Here are the input answers:
 ```
-{% for output in search_chunk_outputs %}{{ loop.index0 }}. {{ output }}\n{% endfor %}
+{search_results}
 ```
 
 Output:
 
+According to the text, ...
 """
-
-
-if __name__ == "__main__":
-    from fence.templates import PromptTemplate
-
-    combine_link = PromptTemplate(
-        template=COMBINE_TEMPLATE, input_variables=["search_chunk_outputs"]
-    )
-
-    # Test search_chunk_link
-    search_output_snippets = [
-        "The term 'fence' referred to the art of defense in the Middle Ages.",
-        "The word 'fence' refers to a style of combat with roots that stem from centuries ago.",
-        "The term 'fence' referred to a boundary between different sections of an area.",
-    ]
-
-    print(
-        combine_link.render(input_dict={"search_chunk_outputs": search_output_snippets})
-    )
