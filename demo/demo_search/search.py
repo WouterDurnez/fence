@@ -1,5 +1,5 @@
 import os
-
+import logging
 from langchain_community.embeddings import BedrockEmbeddings
 from langchain_community.vectorstores.chroma import Chroma
 from langchain_core.documents import Document
@@ -16,11 +16,14 @@ claude_model = ClaudeHaiku(source="test-search")
 embeddings = BedrockEmbeddings()
 
 # Set up logging
-logger = setup_logging(__name__, log_level='WARNING', serious_mode=False)
+logger = setup_logging(__name__, log_level='INFO', serious_mode=False)
+
+# Exclude boto3 from logging
+logging.getLogger("boto3").setLevel(logging.CRITICAL)
 
 NUMBER_OF_WORKERS = 5
 MAX_RETRIES = 3
-
+MAX_DOCUMENTS = 10
 VECTOR_DB_PATH = DATA_DIR / "search" / "paper_db"
 
 
@@ -37,7 +40,7 @@ def handler(event: dict, context: any) -> dict:
     docsearch = Chroma(
         persist_directory=str(VECTOR_DB_PATH), embedding_function=embeddings
     )
-    docs = docsearch.similarity_search(query=question, k=5)
+    docs = docsearch.similarity_search(query=question, k=MAX_DOCUMENTS)
     logger.info(f"🔍 Found {len(docs)} relevant documents.")
     print(docs)
 
@@ -47,13 +50,14 @@ def handler(event: dict, context: any) -> dict:
     @parallelize(max_workers=NUMBER_OF_WORKERS)
     @retry(max_retries=MAX_RETRIES)
     def run_chain(document: Document):
-        logger.info("🔗 Running chain for chunk")
+        logger.debug("🔗 Running chain for chunk")
 
         # Run the chain
         search_result = links["search_chunk"].run(
             input_dict={"question": query, "text": document.page_content}
         )["search_chunk_output"]
-        logger.info("🔗 Chain for chunk completed.")
+        logger.debug("🔗 Chain for chunk completed.")
+        logger.info(f"Search result: {search_result}")
 
         if "<not in text>" in search_result:
             return
@@ -117,11 +121,18 @@ def handler(event: dict, context: any) -> dict:
 if __name__ == "__main__":
     responses = []
     questions = [
-        # "What is the traveling salesman problem?",
-        # "What is MMA?",
-        # "What is the capital of France?",
-        # "What is Tropical Storm Brenda?",
+        "What is the traveling salesman problem?",
+        "What is MMA?",
+        "What is the capital of France?",
+        "What is Tropical Storm Brenda?",
         "What is the shape of the earth?",
+        "What is AI?",
+        "How does AI work?",
+        "How does G-Eval work?",
+        "What is low-rank approximation?",
+        "How does Dungeons and Dragons work?",
+        "How does low-rank approximation work?",
+
     ]
 
     for question in questions[:]:

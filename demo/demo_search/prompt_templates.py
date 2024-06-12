@@ -51,7 +51,7 @@ GUIDELINES:
 - It is important to eliminate redundancy and repetition in the combined answer.
 - Make sure the answer is concise and to the point. Do not return more than a few sentences. Summarize the answers if necessary.
 - Use full sentences and proper grammar in the combined answer.
-- Do not refer to things like 'the text', 'the document', or 'the passage' in the combined answer. The combined answer should be a standalone response to the question. You will be penalized for mentioning any unseen texts!
+- Do not refer to things like 'the text', 'the document', or 'the passage' in the combined answer. The combined answer should be a standalone response to the question, as if you answered it directly.
 - It is possible the answer list only contains one answer. In this case, rewrite the answer in a way that matches the guidelines, which includes making it a standalone response.
 
 EXAMPLES:

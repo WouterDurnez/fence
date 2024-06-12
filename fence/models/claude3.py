@@ -186,7 +186,7 @@ class Claude3Base(LLM):
             **self.model_kwargs,
         }
 
-        logger.info(f"Request body: {request_body}")
+        logger.debug(f"Request body: {request_body}")
 
         # Send request
         try:
