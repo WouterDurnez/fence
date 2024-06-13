@@ -120,18 +120,45 @@ class BoolParser(Parser):
 
 
 class TripleBacktickParser(Parser):
+    """
+    A class to parse a string containing triple backticks.
+
+    Example:
+    ```
+    This is a string contained in triple backticks.
+    ```
+
+    returns:
+
+    This is a string contained in triple backticks.
+
+    """
+
+    def __init__(self, prefill: str = None):
+        """
+        Initialize the TripleBacktickParser with the given parameters.
+        :param prefill: string to prefill the string with (as this was also passed as an assistant prefill in the prompt)
+        """
+        super().__init__()
+        self.prefill = prefill
+
     def parse(self, input_string: str):
         """
         Parse a string containing triple backticks and return a dictionary.
         :param input_string: text string containing triple backticks
         :return: dictionary containing the data
         """
+
+        # First, reapply the prefill string to the input string
+        input_string = self.prefill + input_string if self.prefill else input_string
+
         # Extract the string from within the triple backticks
         pattern = re.compile(r"```([\s\S]*?)```")
         match = pattern.search(input_string)
         string = match.group(1).strip()
 
         return string
+
 
 
 class TOMLParser(Parser):

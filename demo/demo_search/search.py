@@ -11,6 +11,8 @@ from fence.models import ClaudeHaiku
 from fence.utils.base import DATA_DIR, time_it
 from fence.utils.optim import retry, parallelize
 from fence.utils.logger import setup_logging
+from fence.utils.nlp import LLMHelper
+
 
 claude_model = ClaudeHaiku(source="test-search")
 embeddings = BedrockEmbeddings()
@@ -40,9 +42,8 @@ def handler(event: dict, context: any) -> dict:
     docsearch = Chroma(
         persist_directory=str(VECTOR_DB_PATH), embedding_function=embeddings
     )
-    docs = docsearch.similarity_search(query=question, k=MAX_DOCUMENTS)
+    docs = docsearch.similarity_search(query=query, k=MAX_DOCUMENTS)
     logger.info(f"🔍 Found {len(docs)} relevant documents.")
-    print(docs)
 
     # Initialize the LLM links
     links = build_links(llm=claude_model)
@@ -79,82 +80,105 @@ def handler(event: dict, context: any) -> dict:
     if all(answer == "<not in text>" for answer in answers):
         logger.info("No valid sources found, all answers are <not in text>")
         return {
-            "input": question,
+            "input": query,
             "documents": docs,
             "search_result": search_results,
             "combine_output": "<not in text>",
             "sources": None,
         }
 
-    # Combine the results: generate a single answer from the multiple answers, or return <contradictory>
-    combined_answer = links["combine"].run(
-        input_dict={
-            "search_results": format_result_list(search_results=answers)}
-    )["combine_output"]
+    @retry(max_retries=MAX_RETRIES)
+    def combine_answers(answers: list) -> str:
+        """
+        Combine the answers
+        :param answers: List of answers
+        :return: Combined answer
+        """
+
+        combined_answer = links["combine"].run(
+            input_dict={
+                "search_results": format_result_list(search_results=answers)}
+        )["combine_output"]
+
+        # Clean up the answer
+        llm_helper = LLMHelper(model=claude_model)
+        combined_answer = llm_helper.remove_text_references(combined_answer)
+
+        return combined_answer
+
+    final_answer = combine_answers(answers)
 
     # If the output is <contradictory>, return early
-    logger.info(f"Combined answer: {combined_answer}")
-    if combined_answer == "<contradictory>":
+    logger.info(f"Combined answer: {final_answer}")
+    if final_answer == "<contradictory>":
         logger.info("Contradictory answers found")
         return {
-            "input": question,
+            "input": query,
             "documents": docs,
             "search_result": search_results,
             "combine_output": "<contradictory>",
             "sources": None,
         }
 
+
+
     # Build the response
     answers = build_response(search_results=search_results,
-                             answer=combined_answer)
+                             answer=final_answer)
     sources = list(set(answers[0]["sources"]))
 
     return {
-        "input": question,
+        "input": query,
         "documents": docs,
         "search_result": search_results,
-        "combine_output": combined_answer,
+        "combine_output": final_answer,
         "sources": sources,
     }
 
 
 if __name__ == "__main__":
-    responses = []
-    questions = [
-        "What is the traveling salesman problem?",
-        "What is MMA?",
-        "What is the capital of France?",
-        "What is Tropical Storm Brenda?",
-        "What is the shape of the earth?",
-        "What is AI?",
-        "How does AI work?",
-        "How does G-Eval work?",
-        "What is low-rank approximation?",
-        "How does Dungeons and Dragons work?",
-        "How does low-rank approximation work?",
 
-    ]
-
-    for question in questions[:]:
-        logger.critical(f"Question: {question}")
-        response = handler(
-            event={
-                "input": question,
-            },
-            context=None,
-        )
-        logger.critical(f"Answer: {response['combine_output']}")
-        logger.critical(
-            f"Sources [{len(response['sources']) if response['sources'] is not None else 0}]: {response['sources']}"
-        )
-        responses.append(response)
-
-    # Question, answer and sources only
-    responses_filtered = [
-        {
-            "question": response["input"],
-            "answer": response["combine_output"],
-            "sources": response["sources"],
-        }
-        for response in responses
-    ]
+    llm_helper = LLMHelper(model=claude_model)
+    test = llm_helper.remove_text_references("The text mentions that 72 hours is a good rest period in between heavy workouts.")
+    test2 = llm_helper.remove_text_references("The text mentions that 72 hours is a good rest period in between heavy workouts.", reference_flags=["text"])
+    #
+    #
+    # responses = []
+    # questions = [
+    #     "What is the traveling salesman problem?",
+    #     "What is MMA?",
+    #     "What is the capital of France?",
+    #     "What is Tropical Storm Brenda?",
+    #     "What is the shape of the earth?",
+    #     "What is AI?",
+    #     "How does AI work?",
+    #     "How does G-Eval work?",
+    #     "What is low-rank approximation?",
+    #     "How does Dungeons and Dragons work?",
+    #     "How does low-rank approximation work?",
+    #
+    # ]
+    #
+    # for question in questions[:]:
+    #     logger.critical(f"Question: {question}")
+    #     response = handler(
+    #         event={
+    #             "input": question,
+    #         },
+    #         context=None,
+    #     )
+    #     logger.critical(f"Answer: {response['combine_output']}")
+    #     logger.critical(
+    #         f"Sources [{len(response['sources']) if response['sources'] is not None else 0}]: {response['sources']}"
+    #     )
+    #     responses.append(response)
+    #
+    # # Question, answer and sources only
+    # responses_filtered = [
+    #     {
+    #         "question": response["input"],
+    #         "answer": response["combine_output"],
+    #         "sources": response["sources"],
+    #     }
+    #     for response in responses
+    # ]

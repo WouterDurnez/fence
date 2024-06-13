@@ -88,6 +88,7 @@ The answers are not contradictory. Therefore, the combined answer is a combinati
 ---
 
 Input answers:
+```
 - The term "fence" referred to the art of defense in the Middle Ages.
 ```
 
@@ -114,6 +115,26 @@ There are two answers. I will remove any references to any unseen text or docume
 
 ---
 
+EXAMPLES OF WHAT NOT TO DO:
+--------------------------
+Input answers:
+```
+- According to the text, the sky is blue because of the way the atmosphere scatters sunlight.
+- The sky is blue because of the way the atmosphere scatters sunlight.
+```
+
+Output:
+<reasoning>
+The answers are redundant. I will combine them into a single answer.
+</reasoning>
+
+```According to the text, the sky is blue because of the way the atmosphere scatters sunlight.```
+
+This  final output is bad because it contains a reference to the text. The combined answer should be standalone and not refer to the text. The correct output could be:
+
+```The sky is blue due to the way the atmosphere scatters sunlight.```
+
+---
 Here are the input answers:
 ```
 {search_results}
@@ -121,5 +142,5 @@ Here are the input answers:
 
 Output:
 
-According to the text, ...
+```
 """
