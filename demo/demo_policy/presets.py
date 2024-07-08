@@ -1,5 +1,7 @@
 presets = [
     {
+        "id": 4,
+        "name": "active-verbs",
         "type": "text",
         "value": "Use active verbs.",
         "examples": [
@@ -8,6 +10,8 @@ presets = [
         ],
     },
     {
+        "id": 7,
+        "name": "sentence-length",
         "type": "text",
         "value": "Keep sentences under 20 words.",
         "examples": [
@@ -22,6 +26,8 @@ presets = [
         ],
     },
     {
+        "id": 5,
+        "name": "american-english",
         "type": "text",
         "value": "Write in American English.",
         "examples": [
@@ -30,6 +36,8 @@ presets = [
         ],
     },
     {
+        "id": 1,
+        "name": "capitalization",
         "type": "text",
         "value": "Do not capitalize random words in the middle of sentences, unless that is grammatically correct.",
         "examples": [
@@ -44,6 +52,8 @@ presets = [
         ],
     },
     {
+        "id": 2,
+        "name": "spell-out-numbers",
         "type": "text",
         "value": "Spell out numbers when they begin a sentence; otherwise, use numerals.",
         "examples": [
@@ -54,20 +64,8 @@ presets = [
         ],
     },
     {
-        "type": "text",
-        "value": "Avoid idioms relating to disability, age, gender, ethnicity, or religion.",
-        "examples": [
-            {
-                "type": "positive",
-                "value": "The seller provided excellent customer service.",
-            },
-            {
-                "type": "negative",
-                "value": "The salesman provided excellent customer service.",
-            },
-        ],
-    },
-    {
+        "id": 3,
+        "name": "spell-out-abbreviations",
         "type": "text",
         "value": "Spell out acronyms upon first mention. Beyond that, use the acronym. Do not use abbreviations.",
         "examples": [
@@ -81,6 +79,32 @@ presets = [
             {"type": "positive", "value": "For your information, we could schedule it tomorrow."},
         ],
     },
+    {
+        "id": 8,
+        'name': 'proper-email-structure',
+        'type': 'text',
+        'value': 'Use proper email structure.',
+        'examples': [
+            {
+                'type': 'positive',
+                'value': 'Start with a greeting (e.g., Hello, Hi, Dear, etc.), followed by the main content, and end with a closing (e.g., Best regards, Best wishes, Talk to you soon, etc.).'
+            },
+            {
+                'type': 'positive',
+                'value': "Hi team, I hope you're all doing well. I wanted to let you know that the meeting is postponed. Let me know if you have any questions. Best regards, John"
+            },
+            {
+                'type': 'negative',
+                'value': 'Hey, the meeting is postponed.'
+            }
+        ]
+    },
+    {
+        "id": 6,
+        "name": "use-we-not-i",
+        "type": "text",
+        "value": "Use the pronoun 'we'/'us' instead of 'I'/'me'."
+    }
 ]
 
 test_cases = [

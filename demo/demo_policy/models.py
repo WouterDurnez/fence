@@ -8,6 +8,8 @@ class Example(BaseModel):
 
 
 class Policy(BaseModel):
+    id: str|int
+    name: str
     policyType: Literal["text"] = "text"
     value: str
-    examples: list[Example] | None = Field(None, max_items=6)
+    examples: list[Example] | None = Field(None, max_length=6)

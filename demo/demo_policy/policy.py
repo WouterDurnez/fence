@@ -1,7 +1,7 @@
 import sys
 from datetime import datetime
 from pprint import pformat
-
+import pandas as pd
 from demo.demo_policy.formatter import PolicyFormatter
 from demo.demo_policy.utils import format_feedback
 from presets import presets
@@ -48,8 +48,8 @@ def handler(event: dict, context: any) -> dict:
     input_text = event.get("input", "")
     policies = event.get("policies", [])
 
-    logger.info(f"Input text: {input_text}")
-    logger.info(f"Policies: {policies}")
+    #logger.info(f"Input text: {input_text}")
+    #logger.info(f"Policies: {policies}")
 
     # Format policies
     formatter = PolicyFormatter()
@@ -82,6 +82,7 @@ def handler(event: dict, context: any) -> dict:
     @retry(max_retries=3)
     def run_link(policy: str):
         result = link.run(text=input_text, policy=policy)["reflect_output"]
+        logger.info(f"Result policy: {result}")
         return result
 
     results = run_link(formatted_policies)
@@ -103,6 +104,7 @@ def handler(event: dict, context: any) -> dict:
             # Create feedback package
             feedback.append(
                 {
+                    "policyId": policy.id,
                     "policy": policy.value,
                     "instructions": instruction,
                     "suggestions": suggestion,
@@ -134,9 +136,6 @@ def handler(event: dict, context: any) -> dict:
     )
 
     # Run link for revised text
-    # revised_text = link.run(
-    #     text=input_text, policies=full_policies, instructions=formatted_instructions
-    # )["revised_output"]
     revised_text = link.run(
         text=input_text, feedback=formatted_feedback
     )["revised_output"]
@@ -144,7 +143,7 @@ def handler(event: dict, context: any) -> dict:
     # Build response
     return {
         "statusCode": 200,
-        "body": {"revised_text": revised_text, "instructions": instructions},
+        "body": {"revised_text": revised_text, "instructions": instructions, "flagged_policies": [policy['policyId'] for policy in feedback]},
     }
 
 
@@ -152,6 +151,14 @@ if __name__ == "__main__":
 
     # Set the policies
     policies = [Policy(**preset) for preset in presets]
+
+    # Load the test data
+    test_data = pd.read_csv("../../data/policy/test_data_june2024.csv")
+    test_data.columns = ['input', 'expected', 'flagged_policies', 'notes']
+
+    # Make sure flagged_policies is a list
+    test_data['flagged_policies'] = test_data['flagged_policies'].apply(lambda x: eval(x))
+    test_data = test_data.to_dict(orient='records')
 
     def run_example(example):
 
@@ -162,27 +169,13 @@ if __name__ == "__main__":
         result = handler(event, None)
 
         # Return
-        return result['body']['revised_text']
+        return result['body']
 
-    BATCH = True
+    point = test_data[2]
+    response = run_example(point['input'])
+    logger.info(f"Expected: {point['expected']}")
+    logger.info(f"Received: {response['revised_text']}")
+    logger.info(f"Expected policies: {point['flagged_policies']}")
+    logger.info(f"Flagged policies: {response['flagged_policies']}")
 
-    if BATCH:
-        # Build event
-        logger.warning(f"Running batch example")
-        outputs = parallelize(max_workers=8)(run_example)(examples)
 
-        # Save outputs to file with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        with open(f"outputs_{timestamp}.txt", "w") as f:
-            for index, (input, output) in enumerate(zip(examples,outputs)):
-                f.write(f"[INPUT {index}]\n")
-                f.write(input)
-                f.write("\n")
-                f.write(f"[OUTPUT {index}]\n")
-                f.write(output)
-                f.write("\n\n")
-    else:
-        single_example = examples[0]
-        revised_text = run_example(single_example)
-        logger.warning(f"Example: {single_example}")
-        logger.critical(f"Revised text: {revised_text}")

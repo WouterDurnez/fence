@@ -238,24 +238,26 @@ class ClaudeSonnet(Claude3Base):
         self.llm_name = "ClaudeSonnet"
 
 
+class Claude35Sonnet(Claude3Base):
+    """Claude Sonnet 3.5 model class"""
+
+    def __init__(self, source: str, **kwargs):
+        """
+        Initialize a Claude Sonnet 3.5 model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(source=source, **kwargs)
+
+        self.model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+        self.llm_name = "ClaudeSonnet3.5"
+
 if __name__ == "__main__":
 
     # Create an instance of the ClaudeHaiku class
-    claude_haiku = ClaudeHaiku(source="test", region="us-east-1")
+    claude_sonnet = Claude35Sonnet(source="test", region="us-east-1")
 
     # Call the invoke method with a prompt
-    response = claude_haiku.invoke(prompt="The sun is shining brightly")
+    response = claude_sonnet.invoke(prompt="The sun is shining brightly")
 
-    # Create an instance of the ClaudeSonnet class
-    claude_sonnet = ClaudeSonnet(source="test", region="us-east-1")
-
-    # Call the invoke method with a prompt
-    prompt = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Shall I compare thee to a summer's day?"}
-            ],
-        }
-    ]
-    response2 = claude_sonnet.invoke(prompt=prompt)
