@@ -6,7 +6,8 @@ import logging
 
 from openai import ChatCompletion, OpenAI
 
-from fence import Message, Messages, setup_logging
+from fence.templates.messages import Message, Messages
+from fence.utils.logger import setup_logging
 from fence.models.base import LLM
 
 logger = setup_logging(log_level="INFO", serious_mode=False)
