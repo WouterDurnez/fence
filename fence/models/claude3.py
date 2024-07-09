@@ -253,6 +253,7 @@ class Claude35Sonnet(Claude3Base):
         self.model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
         self.llm_name = "ClaudeSonnet3.5"
 
+
 if __name__ == "__main__":
 
     # Create an instance of the ClaudeHaiku class
@@ -260,4 +261,3 @@ if __name__ == "__main__":
 
     # Call the invoke method with a prompt
     response = claude_sonnet.invoke(prompt="The sun is shining brightly")
-

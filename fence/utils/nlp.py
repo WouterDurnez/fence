@@ -7,8 +7,15 @@ Helper tools to perform basic LLM-related tasks
 
 from math import ceil
 
-from fence import Claude3Base, ClaudeHaiku, MessagesTemplate, Messages, \
-    Message, BoolParser, Link
+from fence import (
+    BoolParser,
+    Claude3Base,
+    ClaudeHaiku,
+    Link,
+    Message,
+    Messages,
+    MessagesTemplate,
+)
 from fence.parsers import TripleBacktickParser
 from fence.utils.logger import setup_logging
 from fence.utils.optim import retry
@@ -34,9 +41,11 @@ def get_word_count(text: str) -> int:
     """
     return len(text.split())
 
+
 ############
 # Chunking #
 ############
+
 
 class TextChunker:
     def __init__(
@@ -103,6 +112,7 @@ class TextChunker:
 #######
 # LLM #
 #######
+
 
 class LLMHelper:
     """

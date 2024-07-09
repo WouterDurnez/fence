@@ -160,7 +160,6 @@ class TripleBacktickParser(Parser):
         return string
 
 
-
 class TOMLParser(Parser):
     """
     A class to parse a string containing TOML data (possibly within triple backticks). Returns a dictionary with the key-value pairs.
@@ -228,6 +227,8 @@ class TOMLParser(Parser):
                 toml_dict[key] = value.strip()
 
         return toml_dict
+
+
 if __name__ == "__main__":
 
     test_string = "test 12. test"

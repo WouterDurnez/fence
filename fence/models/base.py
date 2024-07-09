@@ -4,6 +4,7 @@ Base class for LLMs
 
 import math
 from abc import ABC, abstractmethod
+from typing import Any
 
 from datadog_lambda.metric import lambda_metric
 
@@ -16,12 +17,13 @@ class LLM(ABC):
     model_name = None
     llm_name = None
     inference_type = None
+    source = None
 
-    def __call__(self, prompt: str, **kwargs) -> str:
+    def __call__(self, prompt: str | Any, **kwargs) -> str:
         return self.invoke(prompt, **kwargs)
 
     @abstractmethod
-    def invoke(self, prompt: str | list) -> str:
+    def invoke(self, prompt: str | list, **kwargs) -> str:
         raise NotImplementedError
 
     def invocation_logging(self):

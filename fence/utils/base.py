@@ -51,10 +51,12 @@ def time_it(f=None, threshold: int = 300, only_warn: bool = True):
 
     return timed
 
+
 def setup_demo():
 
     import sys
     from pathlib import Path
+
     parent_dir = Path(__file__).resolve().parents[2]
     print(parent_dir)
     sys.path.append(parent_dir)

@@ -16,6 +16,7 @@ from fence import (
     MessagesTemplate,
     TOMLParser,
     ClaudeHaiku,
+    Claude35Sonnet,
     ClaudeSonnet,
 )
 from fence.parsers import TripleBacktickParser
@@ -40,7 +41,7 @@ def handler(event: dict, context: any) -> dict:
     logger.info("👋 Let's rock!")
 
     # Set model
-    claude_model = ClaudeHaiku(
+    claude_model = Claude35Sonnet(
         source="test_policies", region="us-east-1", temperature=0
     )
 
@@ -157,7 +158,7 @@ if __name__ == "__main__":
     test_data.columns = ['input', 'expected', 'flagged_policies', 'notes']
 
     # Make sure flagged_policies is a list
-    test_data['flagged_policies'] = test_data['flagged_policies'].apply(lambda x: eval(x))
+    test_data['flagged_policies'] = test_data['flagged_policies'].apply(lambda x: eval(x) if type(x) == str else x)
     test_data = test_data.to_dict(orient='records')
 
     def run_example(example):
@@ -171,11 +172,11 @@ if __name__ == "__main__":
         # Return
         return result['body']
 
-    point = test_data[2]
+    point = test_data[-1]
     response = run_example(point['input'])
     logger.info(f"Expected: {point['expected']}")
     logger.info(f"Received: {response['revised_text']}")
     logger.info(f"Expected policies: {point['flagged_policies']}")
-    logger.info(f"Flagged policies: {response['flagged_policies']}")
+    logger.info(f"Flagged policies: {sorted(response['flagged_policies'])}")
 
 
