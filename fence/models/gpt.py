@@ -20,7 +20,7 @@ httpx_logger.setLevel(logging.WARNING)
 class GPTBase(LLM):
     """Base class for GPT models"""
 
-    model_id = None
+    model_name = None
     llm_name = None
     inference_type = "openai"
 
@@ -92,9 +92,9 @@ class GPTBase(LLM):
 
             # Get messages
             messages = [
-                message.model.dump(exclude_none=True) for message in prompt.messages
+                message.model_dump(exclude_none=True) for message in prompt.messages
             ]
-            system_message = prompt.system_message
+            system_message = prompt.system
 
             # Extract system message
             if system_message:
@@ -114,7 +114,7 @@ class GPTBase(LLM):
         request_body = {
             **self.model_kwargs,
             "messages": messages,
-            "model": self.model_id,
+            "model": self.model_name,
         }
 
         logger.debug(f"Request body: {request_body}")
@@ -171,7 +171,7 @@ class GPT4o(GPTBase):
     GPT-4o model
     """
 
-    model_id = "gpt-4o"
+    model_name = "gpt-4o"
     llm_name = "gpt-4o"
 
     def __init__(self, source: str, **kwargs):
