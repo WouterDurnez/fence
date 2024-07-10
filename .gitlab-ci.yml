@@ -1,0 +1,33 @@
+default:
+  image: python:3.12
+
+before_script:
+  - pip install poetry
+  - poetry install
+  - source `poetry env info --path`/bin/activate
+
+stages:
+  - test
+  - build
+
+testing:
+  stage: test
+  script:
+    - echo "🧪 Running tests..."
+    - cd tests
+    - python3 -m pytest --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+
+building:
+    stage: build
+    script:
+        - echo "🏗️ Building the package..."
+        - poetry build
+    artifacts:
+        paths:
+        - dist/*
+        expire_in: 1 week
+
