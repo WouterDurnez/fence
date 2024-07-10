@@ -5,7 +5,7 @@ Base class for LLMs
 import math
 from abc import ABC, abstractmethod
 from typing import Any
-
+from fence.templates.messages import Messages
 from datadog_lambda.metric import lambda_metric
 
 
@@ -23,20 +23,9 @@ class LLM(ABC):
         return self.invoke(prompt, **kwargs)
 
     @abstractmethod
-    def invoke(self, prompt: str | list, **kwargs) -> str:
+    def invoke(self, prompt: str | Messages, **kwargs) -> str:
         raise NotImplementedError
 
-    def invocation_logging(self):
-        lambda_metric(
-            metric_name="showpad.data_science.llm.exam_generation.invocation",
-            value=1,
-            tags=[
-                "team:data-science",
-                f"llm:{self.llm_name}",
-                f"source:{self.source}",
-                f"inference_type:{self.inference_type}",
-            ],
-        )
 
     @staticmethod
     def calculate_token_metrics(text: str) -> tuple[int, int]:
