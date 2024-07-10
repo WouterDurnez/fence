@@ -44,7 +44,7 @@ class GPTBase(LLM):
 
         self.client = OpenAI()
 
-    def invoke(self, prompt: str, **kwargs) -> str:
+    def invoke(self, prompt: str | Messages, **kwargs) -> str:
         """
         Call the model with the given prompt
         :param prompt: text to feed the model
