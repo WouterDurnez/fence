@@ -16,18 +16,18 @@ testing:
     - echo "🧪 Running tests..."
     - cd tests
     - python3 -m pytest --junitxml=report.xml
+    - ls -la  # Debugging step to verify the presence of report.xml
   artifacts:
     when: always
     reports:
-      junit: report.xml
+      junit: tests/report.xml  # Adjusted path to report.xml
 
 building:
-    stage: build
-    script:
-        - echo "🏗️ Building the package..."
-        - poetry build
-    artifacts:
-        paths:
-        - dist/*
-        expire_in: 1 week
-
+  stage: build
+  script:
+    - echo "🏗️ Building the package..."
+    - poetry build
+  artifacts:
+    paths:
+      - dist/*
+    expire_in: 1 week
