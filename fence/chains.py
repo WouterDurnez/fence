@@ -57,11 +57,11 @@ class BaseChain(ABC):
         input_keys_set = set(
             input_variable for link in self.links for input_variable in link.input_keys
         )
-        output_keys = set(link.output_key for link in self.links)
-        required_keys = input_keys_set - output_keys
+        output_keys_set = set(link.output_key for link in self.links)
+        required_keys = input_keys_set - output_keys_set
         logger.debug(
             f"Input keys: {input_keys_set}"
-            f"Output keys: {set(link.output_key for link in self.links)}"
+            f"Output keys: {output_keys_set}"
         )
 
         # For more than one link, we do not require a state key, as one is always provided by the previous link
@@ -77,7 +77,8 @@ class BaseChain(ABC):
         # Check if all required keys are present
         if not required_keys.issubset(input_keys):
             raise ValueError(
-                f"The following input keys are required: {required_keys}. Missing: {required_keys - set(input_keys)}"
+                f"The following input keys are required: {required_keys}."
+                f" Missing: {required_keys - set(input_keys)}"
             )
 
     @abstractmethod
@@ -159,6 +160,12 @@ class Chain(BaseChain):
     def _topological_sort(self):
         """
         Perform topological sorting of the Links based on the dependencies in the graph.
+
+        We use depth-first search to find the topological order of the Links.
+        If a cycle is detected, an error is raised. We'll use a set to keep
+        track of visited nodes and a stack to keep track of the current path.
+        The stack represents the current path of the DFS traversal. If we
+        revisit a node in the stack, we have a cycle.
         """
         visited = set()
         stack = set()
@@ -170,7 +177,7 @@ class Chain(BaseChain):
             :param link: Link to start the search from.
             :return: None
             """
-            nonlocal visited, stack, sorted_links
+            nonlocal visited, stack, sorted_links # nonlocal keyword is used to work with variables inside nested functions
 
             # If the link is already in the stack, we are revisiting it,
             # which means there is a cycle
@@ -186,6 +193,7 @@ class Chain(BaseChain):
                 for dependent_link in self.graph[link]:
                     depth_first_search(dependent_link)
 
+                # Add the link to the sorted list
                 stack.remove(link)
                 sorted_links.insert(0, link)
 
