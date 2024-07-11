@@ -18,6 +18,7 @@ ruff = "^0.4.3"
 isort = "^5.13.2"
 pytest = "^8.2.0"
 black = "^24.4.2"
+pre-commit = "^3.7.1"
 
 [build-system]
 requires = ["poetry-core"]
