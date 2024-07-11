@@ -1,6 +1,6 @@
 """
 LINKS
-are atomic LLM interactions. They transform input data into a prompt, send it to an LLM model, parse the output, and return the result. 
+are atomic LLM interactions. They transform input data into a prompt, send it to an LLM model, parse the output, and return the result.
 """
 
 import logging
@@ -9,6 +9,7 @@ from typing import Callable, Iterable
 
 from fence.models.base import LLM
 from fence.models.claude3 import Claude3Base
+from fence.models.gpt import GPTBase
 from fence.parsers import Parser
 from fence.templates import MessagesTemplate, StringTemplate
 from fence.utils.base import time_it
@@ -116,7 +117,9 @@ class TransformationLink(BaseLink):
         :param kwargs: Additional keyword arguments for the LLM model.
         :return:
         """
-        logger.debug(f"Executing {f'<{self.name}> ' if self.name else ''}Link")
+        logger.info(
+            f"Executing {f'<{self.name}> ' if self.name else ''}Transformation Link"
+        )
 
         # Validate the input dictionary
         self._validate_input(input_dict)
@@ -166,7 +169,7 @@ class Link(BaseLink):
 
         # If the template is a MessagesTemplate, we only accept Claude3 type models
         if isinstance(template, MessagesTemplate):
-            if not isinstance(llm, Claude3Base):
+            if not isinstance(llm, (Claude3Base, GPTBase)):
                 raise ValueError(
                     f"MessagesTemplate can only be used with Claude3 models. Got {llm.model_name}."
                 )
@@ -192,7 +195,7 @@ class Link(BaseLink):
         :return:
         """
 
-        logger.debug(f"Executing {f'<{self.name}>' if self.name else 'unnamed'} Link")
+        logger.info(f"Executing {f'<{self.name}>' if self.name else 'unnamed'} Link")
 
         # Update the input dictionary with the keyword arguments
         if input_dict is None:

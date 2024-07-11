@@ -142,6 +142,9 @@ class ClaudeBase(LLM):
         except Exception as e:
             raise ValueError(f"Error raised by bedrock service: {e}")
 
+    def invocation_logging(self) -> None:
+        pass
+
 
 class ClaudeInstant(ClaudeBase):
     """Claude Instant model class"""

@@ -205,6 +205,13 @@ class Claude3Base(LLM):
         except Exception as e:
             raise ValueError(f"Error raised by bedrock service: {e}")
 
+    def invocation_logging(self) -> None:
+        """
+        Log invocation
+        :return:
+        """
+        pass
+
 
 class ClaudeHaiku(Claude3Base):
     """Claude Haiku model class"""
