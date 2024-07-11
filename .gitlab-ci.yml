@@ -33,3 +33,5 @@ building:
     paths:
       - dist/*
     expire_in: 1 week
+    only:
+      - main
