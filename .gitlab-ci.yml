@@ -9,6 +9,7 @@ before_script:
 stages:
   - test
   - build
+  - release
 
 testing:
   stage: test
@@ -17,11 +18,11 @@ testing:
     - cd tests
     - export OPENAI_API_KEY=$OPENAI_API_KEY
     - python3 -m pytest --junitxml=report.xml
-    - ls -la  # Debugging step to verify the presence of report.xml
+    - ls -la # Debugging step to verify the presence of report.xml
   artifacts:
     when: always
     reports:
-      junit: tests/report.xml  # Adjusted path to report.xml
+      junit: tests/report.xml # Adjusted path to report.xml
 
 building:
   stage: build
@@ -32,3 +33,17 @@ building:
     paths:
       - dist/*
     expire_in: 1 week
+
+release:
+  stage: release
+  dependencies:
+    - build
+  before_script:
+    - curl -sSL https://install.python-poetry.org | python3 -
+    - export PATH="$HOME/.poetry/bin:$PATH"
+  script:
+    - poetry config repositories.gitlab "https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/packages/pypi"
+    - poetry config http-basic.gitlab $CI_JOB_TOKEN
+    - poetry publish --build -r gitlab
+  only:
+    - tags

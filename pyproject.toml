@@ -23,8 +23,3 @@ pre-commit = "^3.7.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[[tool.poetry.source]]
-name = "gitlab"
-url = "https://gitlab.com/showpad-code/hackity-hack/fence/-/packages/pypi"
-default = true
