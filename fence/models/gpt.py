@@ -3,15 +3,15 @@ OpenAI GPT models
 """
 
 import json
-import logging
 import os
 
 import requests
 
 from fence.models.base import LLM
 from fence.templates.messages import Message, Messages
+from fence.utils.logger import setup_logging
 
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__, log_level="info")
 
 
 class GPTBase(LLM):
