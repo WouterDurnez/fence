@@ -2,19 +2,16 @@
 OpenAI GPT models
 """
 
+import json
 import logging
+import os
 
-from openai import ChatCompletion, OpenAI
+import requests
 
-from fence.templates.messages import Message, Messages
-from fence.utils.logger import setup_logging
 from fence.models.base import LLM
+from fence.templates.messages import Message, Messages
 
-logger = setup_logging(log_level="INFO", serious_mode=False)
-
-# Suppress httpx logging message (nobody asked for you)
-httpx_logger = logging.getLogger("httpx")
-httpx_logger.setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 
 class GPTBase(LLM):
@@ -24,7 +21,7 @@ class GPTBase(LLM):
     llm_name = None
     inference_type = "openai"
 
-    def __init__(self, source: str, **kwargs):
+    def __init__(self, source: str, api_key: str | None = None, **kwargs):
         """
         Initialize a GPT model
 
@@ -42,7 +39,15 @@ class GPTBase(LLM):
             "max_tokens": self.max_tokens,
         }
 
-        self.client = OpenAI()
+        # Find API key
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", None)
+        if not self.api_key:
+            raise ValueError(
+                "OpenAI API key must be provided, either as an argument or in the environment variable 'OPENAI_API_KEY'"
+            )
+
+        # Initialize the client
+        self.url = "https://api.openai.com/v1/chat/completions"
 
     def invoke(self, prompt: str | Messages, **kwargs) -> str:
         """
@@ -55,11 +60,11 @@ class GPTBase(LLM):
         response = self._invoke(prompt=prompt)
 
         # Get input and output tokens
-        input_token_count = response.usage.prompt_tokens
-        output_token_count = response.usage.completion_tokens
+        input_token_count = response["usage"]["prompt_tokens"]
+        output_token_count = response["usage"]["completion_tokens"]
 
         # Get response completion
-        completion = response.choices[0].message.content
+        completion = response["choices"][0]["message"]["content"]
 
         # Get input and output word count
         if isinstance(prompt, str):
@@ -79,7 +84,7 @@ class GPTBase(LLM):
         # Calculate token metrics for the response and send them to Datadog
         return completion
 
-    def _invoke(self, prompt: str | Messages) -> ChatCompletion:
+    def _invoke(self, prompt: str | Messages) -> dict:
         """
         Handle the API request to the service
         :param prompt: text to feed the model
@@ -121,7 +126,24 @@ class GPTBase(LLM):
 
         # Send request
         try:
-            response = self.client.chat.completions.create(**request_body)
+
+            # Send request to OpenAI
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            }
+
+            # Send request to OpenAI
+            response = requests.post(
+                url=self.url, headers=headers, data=json.dumps(request_body)
+            )
+
+            # Check status code
+            if response.status_code != 200:
+                raise ValueError(f"Error raised by OpenAI service: {response.text}")
+
+            # Parse response
+            response = response.json()
 
             return response
 
