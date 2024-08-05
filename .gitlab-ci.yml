@@ -23,6 +23,8 @@ testing:
     when: always
     reports:
       junit: tests/report.xml # Adjusted path to report.xml
+  only:
+    - main
 
 building:
   stage: build
