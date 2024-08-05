@@ -2,11 +2,44 @@
 Base class for LLMs
 """
 
-import math
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Callable
+
 from fence.templates.messages import Messages
-from datadog_lambda.metric import lambda_metric
+
+# Type alias for the logging callback function
+# The logging callback function should accept two arguments:
+# - a dictionary of metrics and their values
+# - a list of tags
+LogCallback = Callable[[dict, list], None]
+
+# Global variable to hold the logging callback function
+_global_log_callback: LogCallback | None = None
+
+# Default tags for logging
+_global_log_tags: dict | None = None
+
+
+def register_log_callback(log_callback: Callable):
+    """Register a global logging callback function."""
+    global _global_log_callback
+    _global_log_callback = log_callback
+
+
+def register_log_tags(tags: dict):
+    """Register global tags for logging."""
+    global _global_log_tags
+    _global_log_tags = tags
+
+
+def get_log_callback():
+    """Retrieve the global logging callback function."""
+    return _global_log_callback
+
+
+def get_log_tags():
+    """Retrieve the global logging tags."""
+    return _global_log_tags
 
 
 class LLM(ABC):
@@ -25,21 +58,3 @@ class LLM(ABC):
     @abstractmethod
     def invoke(self, prompt: str | Messages, **kwargs) -> str:
         raise NotImplementedError
-
-
-    @staticmethod
-    def calculate_token_metrics(text: str) -> tuple[int, int]:
-        words = text.split()
-
-        # Link to OpenAI helpcenter article, on how to calculate tokens
-        # https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them
-
-        # 1 token ≈ ¾ words
-        num_words = len(words)
-        token_words = math.ceil(num_words / 0.75)
-
-        # 1 token ≈ 4 chars in English
-        num_characters = sum(len(word) for word in words)
-        token_characters = math.ceil(num_characters / 4)
-
-        return token_words, token_characters
