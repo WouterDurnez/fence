@@ -37,3 +37,11 @@ building:
     expire_in: 1 week
   only:
     - main
+
+publishing:
+  stage: release
+  script:
+    - echo "🚀 Publishing the package..."
+    - poetry publish --build
+  only:
+    - main
