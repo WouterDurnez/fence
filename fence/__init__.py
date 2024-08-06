@@ -10,7 +10,6 @@ from fence.templates.string import StringTemplate
 from fence.utils.logger import setup_logging
 
 __all__ = [
-    "BaseLink",
     "Link",
     "TransformationLink",
     "LLM",
