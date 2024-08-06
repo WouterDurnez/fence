@@ -59,10 +59,7 @@ class BaseChain(ABC):
         )
         output_keys_set = set(link.output_key for link in self.links)
         required_keys = input_keys_set - output_keys_set
-        logger.debug(
-            f"Input keys: {input_keys_set}"
-            f"Output keys: {output_keys_set}"
-        )
+        logger.debug(f"Input keys: {input_keys_set}" f"Output keys: {output_keys_set}")
 
         # For more than one link, we do not require a state key, as one is always provided by the previous link
         if len(self.links) > 1:
@@ -177,7 +174,7 @@ class Chain(BaseChain):
             :param link: Link to start the search from.
             :return: None
             """
-            nonlocal visited, stack, sorted_links # nonlocal keyword is used to work with variables inside nested functions
+            nonlocal visited, stack, sorted_links  # nonlocal keyword is used to work with variables inside nested functions
 
             # If the link is already in the stack, we are revisiting it,
             # which means there is a cycle
