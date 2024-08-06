@@ -1,13 +1,19 @@
 <img src="docs/fence.jpg" alt="tests" height="200"/>
 
+[![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![black](https://img.shields.io/badge/code%20style-black-000000.svg)
+](https://github.com/psf/black)
+[![license: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 # 🤺 Fence
 
-No, not that kind of fence. The once with the interlinked pieces of metal. Like a chain fence? 
+No, not that kind of fence. The once with the interlinked pieces of metal. Like a chain fence?
 
 Why? Well, I got fed up with LangChain being so bloated, and I wanted to make a quick little repo
 that covers some of the basic functionality of LangChain, but in a much smaller package. Also, if
 we're calling the things Chains now, then a single component should be a Link (I don't care that it's
-confusing, it's a good name). Extrapolating the concept gives us Fence. 
+confusing, it's a good name). Extrapolating the concept gives us Fence.
 
 ## What is it?
 
