@@ -1,3 +1,7 @@
+#####################################
+# FENCE - GitLab CI/CD Configuration #
+#####################################
+
 default:
   image: python:3.12
 
@@ -10,6 +14,19 @@ stages:
   - test
   - build
   - release
+
+# Define cache
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  POETRY_CACHE_DIR: "$CI_PROJECT_DIR/.cache/poetry"
+
+cache:
+  key: "$CI_COMMIT_REF_NAME"
+  paths:
+    - .cache/pip
+    - .cache/poetry
+
+### Stages ###
 
 testing:
   stage: test
@@ -38,10 +55,12 @@ building:
   only:
     - main
 
-publishing:
+publish:
   stage: release
   script:
     - echo "🚀 Publishing the package..."
-    - poetry publish --build
+    - poetry config repositories.gitlab "https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/packages/pypi"
+    - poetry config pypi-token.gitlab $CI_JOB_TOKEN
+    - poetry publish --build -r gitlab
   only:
     - main
