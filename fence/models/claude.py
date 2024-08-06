@@ -3,6 +3,7 @@ Claude Gen 1/2 models
 """
 
 import json
+import logging
 
 import boto3
 
@@ -12,6 +13,8 @@ from fence.models.base import (
     register_log_callback,
     register_log_tags,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ClaudeBase(LLM):
@@ -81,18 +84,25 @@ class ClaudeBase(LLM):
 
         # Log all metrics if a log callback is registered
         if log_callback := get_log_callback():
-            log_callback(
+            prefix = ".".join(
+                item for item in [self.metric_prefix, self.source] if item
+            )
+            log_args = [
                 # Add metrics
                 {
-                    f"{self.metric_prefix}.{self.source}.invocation": 1,
-                    f"{self.metric_prefix}.{self.source}.input_token_count": input_token_count,
-                    f"{self.metric_prefix}.{self.source}.output_token_count": output_token_count,
-                    f"{self.metric_prefix}.{self.source}.input_word_count": input_word_count,
-                    f"{self.metric_prefix}.{self.source}.output_word_count": output_word_count,
+                    f"{prefix}.invocation": 1,
+                    f"{prefix}.input_token_count": input_token_count,
+                    f"{prefix}.output_token_count": output_token_count,
+                    f"{prefix}.input_word_count": input_word_count,
+                    f"{prefix}.output_word_count": output_word_count,
                 },
-                # Format tags as ['key:value', 'key:value', ...]
-                [f"{k}:{v}" for k, v in self.logging_tags.items()],
-            )
+                # Add tags
+                self.logging_tags,
+            ]
+
+            # Log metrics
+            logger.debug(f"Logging args: {log_args}")
+            log_callback(*log_args)
 
         return completion
 
@@ -139,7 +149,7 @@ class ClaudeInstant(ClaudeBase):
         super().__init__(source=source, **kwargs)
 
         self.model_id = "anthropic.claude-instant-v1"
-        self.llm_name = "ClaudeInstant"
+        self.model_name = "ClaudeInstant"
 
 
 class ClaudeV2(ClaudeBase):
@@ -155,10 +165,11 @@ class ClaudeV2(ClaudeBase):
         super().__init__(source=source, **kwargs)
 
         self.model_id = "anthropic.anthropic.claude-v2"
-        self.llm_name = "ClaudeV2"
+        self.model_name = "ClaudeV2"
 
 
 if __name__ == "__main__":
+
     # Register logging callback
     register_log_callback(lambda metrics, tags: print(metrics, tags))
 

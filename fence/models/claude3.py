@@ -94,18 +94,25 @@ class Claude3Base(LLM, MessagesMixin):
 
         # Log all metrics if a log callback is registered
         if log_callback := get_log_callback():
-            log_callback(
+            prefix = ".".join(
+                item for item in [self.metric_prefix, self.source] if item
+            )
+            log_args = [
                 # Add metrics
                 {
-                    f"{self.metric_prefix}.{self.source}.invocation": 1,
-                    f"{self.metric_prefix}.{self.source}.input_token_count": input_token_count,
-                    f"{self.metric_prefix}.{self.source}.output_token_count": output_token_count,
-                    f"{self.metric_prefix}.{self.source}.input_word_count": input_word_count,
-                    f"{self.metric_prefix}.{self.source}.output_word_count": output_word_count,
+                    f"{prefix}.invocation": 1,
+                    f"{prefix}.input_token_count": input_token_count,
+                    f"{prefix}.output_token_count": output_token_count,
+                    f"{prefix}.input_word_count": input_word_count,
+                    f"{prefix}.output_word_count": output_word_count,
                 },
-                # Format tags as ['key:value', 'key:value', ...]
-                [f"{k}:{v}" for k, v in self.logging_tags.items()],
-            )
+                # Add tags
+                self.logging_tags,
+            ]
+
+            # Log metrics
+            logger.debug(f"Logging args: {log_args}")
+            log_callback(*log_args)
 
         return completion
 
@@ -184,7 +191,7 @@ class ClaudeHaiku(Claude3Base):
         super().__init__(source=source, **kwargs)
 
         self.model_id = MODEL_ID_HAIKU
-        self.llm_name = "ClaudeHaiku"
+        self.model_name = "ClaudeHaiku"
 
 
 class ClaudeSonnet(Claude3Base):
@@ -200,7 +207,7 @@ class ClaudeSonnet(Claude3Base):
         super().__init__(source=source, **kwargs)
 
         self.model_id = MODEL_ID_SONNET
-        self.llm_name = "ClaudeSonnet"
+        self.model_name = "ClaudeSonnet"
 
 
 class Claude35Sonnet(Claude3Base):
@@ -216,7 +223,7 @@ class Claude35Sonnet(Claude3Base):
         super().__init__(source=source, **kwargs)
 
         self.model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
-        self.llm_name = "ClaudeSonnet3.5"
+        self.model_name = "ClaudeSonnet3.5"
 
 
 if __name__ == "__main__":

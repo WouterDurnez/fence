@@ -11,7 +11,7 @@ from fence.templates.messages import Messages
 # The logging callback function should accept two arguments:
 # - a dictionary of metrics and their values
 # - a list of tags
-LogCallback = Callable[[dict, list], None]
+LogCallback = Callable[[dict, dict], None]
 
 # Global variable to hold the logging callback function
 _global_log_callback: LogCallback | None = None
@@ -53,7 +53,7 @@ class LLM(ABC):
     """
 
     model_id: str | None = None
-    llm_name: str = None
+    model_name: str = None
     inference_type = None
     source: str = None
     logging_tags: dict = {}
