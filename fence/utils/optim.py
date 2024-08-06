@@ -4,7 +4,6 @@ Optimization utils
 
 import functools
 import queue
-import random as rnd
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Callable, Iterable
@@ -130,58 +129,3 @@ def parallelize(f: Callable = None, max_workers: int = 4):
         return results
 
     return wrapper
-
-
-@parallelize
-def test_threaded_execution(item: str, other_kw_arg="test"):
-    time.sleep(rnd.uniform(0, 3))
-    logger.critical(
-        f"Testing threaded_execution: thread {item} with kw arg {other_kw_arg}"
-    )
-
-    return item
-
-
-if __name__ == "__main__":
-    # @retry(max_retries=3, delay=1)
-    # def test_retry():
-    #     print("Testing function")
-    #     raise Exception("This is a test exception")
-    #
-    #
-    # try:
-    #     test_retry()
-    # except Exception as e:
-    #     print("Final exception: ", e)
-
-    # Test the time_it decorator
-    # @time_it(only_warn=False)
-    # def test_time_it():
-    #     print("Testing time_it")
-    #
-    #
-    # test_time_it()
-
-    # Test the threaded_execution decorator
-    import random as rnd
-
-    results = test_threaded_execution(["this", "is", "a", "test"], other_kw_arg="test")
-
-    # Test with a class method
-    class TestClass:
-        def __init__(self):
-            pass
-
-        @parallelize
-        def test_threaded_execution(self, item: str, other_kw_arg="test"):
-            time.sleep(rnd.uniform(0, 3))
-            logger.critical(
-                f"Testing threaded_execution: thread {item} with kw arg {other_kw_arg}"
-            )
-
-            return item
-
-    test_class = TestClass()
-    results = test_class.test_threaded_execution(
-        ["this", "is", "a", "test"], other_kw_arg="test"
-    )

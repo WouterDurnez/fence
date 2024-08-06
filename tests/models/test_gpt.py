@@ -1,7 +1,10 @@
-import pytest
 from unittest.mock import Mock
-from fence.models.gpt import GPTBase, GPT4o
-from fence.templates.messages import Messages, Message
+
+import pytest
+
+from fence.models.gpt import GPT4o
+from fence.templates.messages import Message, Messages
+
 
 def test_gpt_base_invoke_with_string_prompt():
     """
@@ -12,6 +15,7 @@ def test_gpt_base_invoke_with_string_prompt():
     mock_llm.invoke.return_value = "mocked response"
     response = mock_llm.invoke(prompt="Hello, how are you today?")
     assert response == "mocked response"
+
 
 def test_gpt_base_invoke_with_messages_prompt():
     """
@@ -27,6 +31,7 @@ def test_gpt_base_invoke_with_messages_prompt():
     response = mock_llm.invoke(prompt=messages)
     assert response == "mocked response"
 
+
 def test_gpt_base_invoke_with_invalid_prompt():
     """
     Test case for the invoke method of the GPTBase class with an invalid prompt.
@@ -36,6 +41,7 @@ def test_gpt_base_invoke_with_invalid_prompt():
     with pytest.raises(ValueError):
         gpt.invoke(prompt=123)
 
+
 def test_gpt4o_init():
     """
     Test case for the __init__ method of the GPT4o class.
@@ -43,5 +49,5 @@ def test_gpt4o_init():
     """
     gpt = GPT4o(source="test")
     assert gpt.source == "test"
+    assert gpt.model_id == "gpt-4o"
     assert gpt.model_name == "gpt-4o"
-    assert gpt.llm_name == "gpt-4o"

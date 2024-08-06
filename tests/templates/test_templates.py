@@ -5,6 +5,7 @@ import pytest
 
 from fence.templates.string import StringTemplate
 
+
 def file_opener():
     return "test"
 
@@ -96,5 +97,3 @@ def temp_template_file():
     temp_file.close()
     yield temp_file.name
     os.unlink(temp_file.name)  # Remove the temporary file after the test
-
-

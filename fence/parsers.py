@@ -227,10 +227,3 @@ class TOMLParser(Parser):
                 toml_dict[key] = value.strip()
 
         return toml_dict
-
-
-if __name__ == "__main__":
-
-    test_string = "test 12. test"
-    int_parser = IntParser()
-    print(int_parser.parse(test_string))

@@ -3,40 +3,49 @@ OpenAI GPT models
 """
 
 import json
+import logging
 import os
 
 import requests
 
-from fence.models.base import LLM
+from fence.models.base import LLM, MessagesMixin, get_log_callback
 from fence.templates.messages import Message, Messages
-from fence.utils.logger import setup_logging
 
-logger = setup_logging(__name__, log_level="info")
+logger = logging.getLogger(__name__)
 
 
-class GPTBase(LLM):
+class GPTBase(LLM, MessagesMixin):
     """Base class for GPT models"""
 
+    model_id = None
     model_name = None
-    llm_name = None
     inference_type = "openai"
 
-    def __init__(self, source: str, api_key: str | None = None, **kwargs):
+    def __init__(
+        self,
+        source: str,
+        metric_prefix: str | None = None,
+        extra_tags: dict | None = None,
+        api_key: str | None = None,
+        **kwargs,
+    ):
         """
         Initialize a GPT model
 
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param str|None metric_prefix: Prefix for the metric names
+        :param dict|None extra_tags: Additional tags to add to the logging tags
+        :param str|None api_key: OpenAI API key
         :param **kwargs: Additional keyword arguments
         """
 
-        self.source = source
-
-        self.temperature = kwargs.get("temperature", 1)
-        self.max_tokens = kwargs.get("max_tokens", None)
-
+        super().__init__(
+            source=source, metric_prefix=metric_prefix, extra_tags=extra_tags
+        )
+        # Model parameters
         self.model_kwargs = {
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
+            "temperature": kwargs.get("temperature", 1),
+            "max_tokens": kwargs.get("max_tokens", None),
         }
 
         # Find API key
@@ -46,7 +55,7 @@ class GPTBase(LLM):
                 "OpenAI API key must be provided, either as an argument or in the environment variable 'OPENAI_API_KEY'"
             )
 
-        # Initialize the client
+        # OpenAI parameters
         self.url = "https://api.openai.com/v1/chat/completions"
 
     def invoke(self, prompt: str | Messages, **kwargs) -> str:
@@ -77,9 +86,23 @@ class GPTBase(LLM):
             )
         output_word_count = len(completion.split())
 
-        logger.debug(
-            f"Token and word counts: {input_token_count=}, {output_token_count=}, {input_word_count=}, {output_word_count=} "
-        )  # TODO: Remove once we can send this to Datadog
+        # Log all metrics if a log callback is registered
+        if log_callback := get_log_callback():
+            prefix = ".".join(
+                item for item in [self.metric_prefix, self.source] if item
+            )
+            log_callback(
+                # Add metrics
+                {
+                    f"{prefix}.invocation": 1,
+                    f"{prefix}.input_token_count": input_token_count,
+                    f"{prefix}.output_token_count": output_token_count,
+                    f"{prefix}.input_word_count": input_word_count,
+                    f"{prefix}.output_word_count": output_word_count,
+                },
+                # Format tags as ['key:value', 'key:value', ...]
+                self.logging_tags,
+            )
 
         # Calculate token metrics for the response and send them to Datadog
         return completion
@@ -103,7 +126,7 @@ class GPTBase(LLM):
 
             # Extract system message
             if system_message:
-                messages.insert(0, {"role": "system", "content": "system_message"})
+                messages.insert(0, {"role": "system", "content": system_message})
         elif isinstance(prompt, str):
             messages = [
                 {
@@ -111,7 +134,6 @@ class GPTBase(LLM):
                     "content": prompt,
                 }
             ]
-
         else:
             raise ValueError("Prompt must be a string or a list of messages")
 
@@ -119,7 +141,7 @@ class GPTBase(LLM):
         request_body = {
             **self.model_kwargs,
             "messages": messages,
-            "model": self.model_name,
+            "model": self.model_id,
         }
 
         logger.debug(f"Request body: {request_body}")
@@ -150,51 +172,14 @@ class GPTBase(LLM):
         except Exception as e:
             raise ValueError(f"Error raised by OpenAI service: {e}")
 
-    @staticmethod
-    def count_words_in_messages(messages: Messages):
-        """
-        Count the number of words in a list of messages. Takes all roles into account. Type must be 'text'
-        :param messages: list of messages
-        :return: word count (int)
-        """
-
-        # Get user and assistant messages
-        user_assistant_messages = messages.messages
-
-        # Get system message
-        system_messages = messages.system
-
-        # Initialize word count
-        word_count = 0
-
-        # Loop through messages
-        for message in user_assistant_messages:
-
-            # Get content
-            content = message.content
-
-            # Content is either a string, or a list of content objects
-            if isinstance(content, str):
-                word_count += len(content.split())
-            elif isinstance(content, list):
-                for content_object in content:
-                    if content_object.type == "text":
-                        word_count += len(content_object.text.split())
-
-        # Add system message to word count
-        if system_messages:
-            word_count += len(system_messages.split())
-
-        return word_count
-
 
 class GPT4o(GPTBase):
     """
     GPT-4o model
     """
 
+    model_id = "gpt-4o"
     model_name = "gpt-4o"
-    llm_name = "gpt-4o"
 
     def __init__(self, source: str, **kwargs):
         """
@@ -220,7 +205,7 @@ if __name__ == "__main__":
 
     # Test with Messages
     messages = Messages(
-        system="Respond in a very rude manner",
+        system="Respond in a all caps",
         messages=[Message(role="user", content="Hello, how are you today?")],
     )
 
