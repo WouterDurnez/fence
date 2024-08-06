@@ -9,7 +9,6 @@ import boto3
 from fence.models.base import (
     LLM,
     get_log_callback,
-    get_log_tags,
     register_log_callback,
     register_log_tags,
 )
@@ -18,10 +17,7 @@ from fence.models.base import (
 class ClaudeBase(LLM):
     """Base class for Claude (gen 1/2) models"""
 
-    model_name: str | None = None
-    llm_name: str | None = None
     inference_type = "bedrock"
-    logging_tags: dict = {}
 
     def __init__(
         self,
@@ -39,52 +35,19 @@ class ClaudeBase(LLM):
         :param **kwargs: Additional keyword arguments
         """
 
-        self.source = source
+        super().__init__(
+            source=source, metric_prefix=metric_prefix, extra_tags=extra_tags
+        )
 
         # LLM parameters
-        self.temperature = kwargs.get("temperature", 0.01)
-        self.max_tokens_to_sample = kwargs.get("max_tokens_to_sample", 2048)
         self.model_kwargs = {
-            "temperature": self.temperature,
-            "max_tokens_to_sample": self.max_tokens_to_sample,
+            "temperature": kwargs.get("temperature", 0.01),
+            "max_tokens_to_sample": kwargs.get("max_tokens_to_sample", 2048),
         }
 
         # AWS parameters
         self.region = kwargs.get("region", "eu-central-1")
         self.client = boto3.client("bedrock-runtime", self.region)
-
-        # Logging parameters
-        self.metric_prefix = metric_prefix or ""
-        self.logging_tags = get_log_tags() or {}
-        self.logging_tags.update(extra_tags or {})
-
-    # def send_token_metrics(
-    #     self, metric_suffix: str, token_count: int, word_count: int
-    # ) -> None:
-    #     """
-    #     Send word and character token metrics to Datadog
-    #     :param metric_suffix: metric suffix to concatenate to the metric name
-    #     :param token_count: token count
-    #     :param word_count: word count
-    #     :return:
-    #     """
-    #
-    #     # Note: keeping this here because other models may include token metrics
-    #     # in their response, so we don't need to calculate them again.
-    #
-    #     metric_prefix = "showpad.data_science.llm.tokens"
-    #     metric_name = f"{metric_prefix}.{metric_suffix}"
-    #     tags = [
-    #         "team:data-science",
-    #         f"llm:{self.llm_name}",
-    #         f"source:{self.source}",
-    #         f"inference_type:{self.inference_type}",
-    #     ]
-    #
-    #     lambda_metric(metric_name=f"{metric_name}_words", value=word_count, tags=tags)
-    #     lambda_metric(
-    #         metric_name=f"{metric_name}_characters", value=token_count, tags=tags
-    #     )
 
     def invoke(self, prompt: str, **kwargs) -> str:
         """
@@ -118,7 +81,6 @@ class ClaudeBase(LLM):
 
         # Log all metrics if a log callback is registered
         if log_callback := get_log_callback():
-
             log_callback(
                 # Add metrics
                 {
@@ -153,7 +115,7 @@ class ClaudeBase(LLM):
         try:
             response = self.client.invoke_model(
                 body=body,
-                modelId=self.model_name,
+                modelId=self.model_id,
                 accept=accept,
                 contentType=contentType,
             )
@@ -176,7 +138,7 @@ class ClaudeInstant(ClaudeBase):
 
         super().__init__(source=source, **kwargs)
 
-        self.model_name = "anthropic.claude-instant-v1"
+        self.model_id = "anthropic.claude-instant-v1"
         self.llm_name = "ClaudeInstant"
 
 
@@ -192,12 +154,11 @@ class ClaudeV2(ClaudeBase):
 
         super().__init__(source=source, **kwargs)
 
-        self.model_name = "anthropic.anthropic.claude-v2"
+        self.model_id = "anthropic.anthropic.claude-v2"
         self.llm_name = "ClaudeV2"
 
 
 if __name__ == "__main__":
-
     # Register logging callback
     register_log_callback(lambda metrics, tags: print(metrics, tags))
 
