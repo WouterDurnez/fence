@@ -2,10 +2,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from fence.models.base import LLM
 from fence.chains import BaseChain, Chain, LinearChain
 from fence.links import BaseLink, Link, TransformationLink
+from fence.models.base import LLM
 from fence.templates.string import StringTemplate
+
 
 @pytest.fixture
 def llm():
@@ -48,7 +49,7 @@ def test_transformation_link_run_method_returns_transformed_input():
     This test checks if the run method correctly transforms the input using the provided function.
     """
     transformation_link = TransformationLink(
-        input_keys=["A"], output_key="B", function=lambda x: x['A'].upper()
+        input_keys=["A"], output_key="B", function=lambda x: x["A"].upper()
     )
     result = transformation_link.run(input_dict={"A": "test"})
     assert result["state"] == "TEST"
@@ -64,8 +65,6 @@ def test_link_run_method_without_llm_raises_error():
         link.run(input_dict={"A": "test"})
 
 
-
-
 def test_chain_run_method_without_llm_raises_error():
     """
     Test case for the run method of the Chain class without providing an LLM.
@@ -77,8 +76,6 @@ def test_chain_run_method_without_llm_raises_error():
         chain.run(input_dict={"A": "test"})
 
 
-
-
 def test_linear_chain_run_method_without_llm_raises_error():
     """
     Test case for the run method of the LinearChain class without providing an LLM.
@@ -88,5 +85,3 @@ def test_linear_chain_run_method_without_llm_raises_error():
     linear_chain = LinearChain(links=[link])
     with pytest.raises(ValueError):
         linear_chain.run(input_dict={"A": "test"})
-
-
