@@ -59,8 +59,17 @@ publish:
   stage: release
   script:
     - echo "🚀 Publishing the package..."
-    - poetry config repositories.gitlab "https://gitlab.com/api/v4/projects/$CI_PROJECT_ID/packages/pypi"
-    - poetry config pypi-token.gitlab $CI_JOB_TOKEN
-    - poetry publish --build -r gitlab
+    # Build the package (creates .whl and .tar.gz files)
+    - poetry build
+
+    # Set GitLab as the package repository
+    - poetry config repositories.gitlab ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi
+
+    # Ignoring certificates can be needed for self-hosted GitLab instances
+    # - poetry config certificates.gitlab.cert false
+
+    # Publish the package to the GitLab repository
+    - poetry publish --repository gitlab -u gitlab-ci-token -p ${CI_JOB_TOKEN}
+
   only:
     - main
