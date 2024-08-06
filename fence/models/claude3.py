@@ -6,9 +6,14 @@ import json
 import logging
 
 import boto3
-from datadog_lambda.metric import lambda_metric
 
-from fence.models.base import LLM
+from fence.models.base import (
+    LLM,
+    MessagesMixin,
+    get_log_callback,
+    register_log_callback,
+    register_log_tags,
+)
 from fence.templates.models import Messages
 
 MODEL_ID_SONNET = "anthropic.claude-3-sonnet-20240229-v1:0"
@@ -17,96 +22,46 @@ MODEL_ID_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
 logger = logging.getLogger(__name__)
 
 
-class Claude3Base(LLM):
+class Claude3Base(LLM, MessagesMixin):
     """Base class for Claude (gen 3) models"""
 
-    model_id = None
-    llm_name = None
     inference_type = "bedrock"
 
-    def __init__(self, source: str, full_response: bool = False, **kwargs):
+    def __init__(
+        self,
+        source: str,
+        full_response: bool = False,
+        metric_prefix: str | None = None,
+        extra_tags: dict | None = None,
+        **kwargs,
+    ):
         """
         Initialize a Claude model
 
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
-        :param full_response: whether to return the full response or just the TEXT completion
+        :param bool full_response: whether to return the full response or just the TEXT completion
+        :param str|None metric_prefix: Prefix for the metric names
+        :param dict|None extra_tags: Additional tags to add to the logging tags
         :param **kwargs: Additional keyword arguments
         """
 
-        self.source = source
-        self.full_response = full_response
-        self.region = kwargs.get("region", "eu-central-1")
+        super().__init__(
+            source=source, metric_prefix=metric_prefix, extra_tags=extra_tags
+        )
 
+        self.full_response = full_response
+
+        # LLM parameters
         self.model_kwargs = {
             "temperature": kwargs.get("temperature", 0.01),
             "max_tokens": kwargs.get("max_tokens", 2048),
         }
 
+        # AWS parameters
+        self.region = kwargs.get("region", "eu-central-1")
         self.client = boto3.client("bedrock-runtime", self.region)
 
-    @staticmethod
-    def count_words_in_messages(messages: Messages):
-        """
-        Count the number of words in a list of messages. Takes all roles into account. Type must be 'text'
-        :param messages: list of messages
-        :return: word count (int)
-        """
-
-        # Get user and assistant messages
-        user_assistant_messages = messages.messages
-
-        # Get system message
-        system_messages = messages.system
-
-        # Initialize word count
-        word_count = 0
-
-        # Loop through messages
-        for message in user_assistant_messages:
-
-            # Get content
-            content = message.content
-
-            # Content is either a string, or a list of content objects
-            if isinstance(content, str):
-                word_count += len(content.split())
-            elif isinstance(content, list):
-                for content_object in content:
-                    if content_object.type == "text":
-                        word_count += len(content_object.text.split())
-
-        # Add system message to word count
-        if system_messages:
-            word_count += len(system_messages.split())
-
-        return word_count
-
-    def send_token_metrics(
-        self, metric_suffix: str, token_count: int, word_count: int
-    ) -> None:
-        """
-        Send word and character token metrics to Datadog
-        :param metric_suffix: metric suffix to concatenate to the metric name
-        :param token_count: token count
-        :param word_count: word count
-        :return:
-        """
-
-        metric_prefix = "showpad.data_science.llm.tokens"
-        metric_name = f"{metric_prefix}.{metric_suffix}"
-        tags = [
-            "team:data-science",
-            f"llm:{self.llm_name}",
-            f"source:{self.source}",
-            f"inference_type:{self.inference_type}",
-        ]
-
-        lambda_metric(metric_name=f"{metric_name}_words", value=word_count, tags=tags)
-        lambda_metric(
-            metric_name=f"{metric_name}_characters", value=token_count, tags=tags
-        )
-
-    def invoke(self, prompt: str | Messages) -> str:
+    def invoke(self, prompt: str | Messages, **kwargs) -> str:
         """
         Call the model with the given prompt
         :param prompt: text to feed the model
@@ -137,17 +92,20 @@ class Claude3Base(LLM):
             )
         output_word_count = len(completion.split())
 
-        # Calculate token metrics for the response and send them to Datadog
-        self.send_token_metrics(
-            metric_suffix="input",
-            token_count=input_token_count,
-            word_count=input_word_count,
-        )
-        self.send_token_metrics(
-            metric_suffix="output",
-            token_count=output_token_count,
-            word_count=output_word_count,
-        )
+        # Log all metrics if a log callback is registered
+        if log_callback := get_log_callback():
+            log_callback(
+                # Add metrics
+                {
+                    f"{self.metric_prefix}.{self.source}.invocation": 1,
+                    f"{self.metric_prefix}.{self.source}.input_token_count": input_token_count,
+                    f"{self.metric_prefix}.{self.source}.output_token_count": output_token_count,
+                    f"{self.metric_prefix}.{self.source}.input_word_count": input_word_count,
+                    f"{self.metric_prefix}.{self.source}.output_word_count": output_word_count,
+                },
+                # Format tags as ['key:value', 'key:value', ...]
+                [f"{k}:{v}" for k, v in self.logging_tags.items()],
+            )
 
         return completion
 
@@ -263,8 +221,16 @@ class Claude35Sonnet(Claude3Base):
 
 if __name__ == "__main__":
 
+    # Register logging callback
+    register_log_callback(lambda metrics, tags: print(metrics, tags))
+
+    # Register logging tags
+    register_log_tags({"team": "data-science-test", "project": "fence"})
+
     # Create an instance of the ClaudeHaiku class
-    claude_sonnet = Claude35Sonnet(source="test", region="us-east-1")
+    claude_sonnet = Claude35Sonnet(
+        source="test", metric_prefix="yolo", region="us-east-1"
+    )
 
     # Call the invoke method with a prompt
     response = claude_sonnet.invoke(prompt="The sun is shining brightly")

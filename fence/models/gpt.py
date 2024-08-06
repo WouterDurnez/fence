@@ -7,17 +7,17 @@ import os
 
 import requests
 
-from fence.models.base import LLM
+from fence.models.base import LLM, MessagesMixin
 from fence.templates.messages import Message, Messages
 from fence.utils.logger import setup_logging
 
 logger = setup_logging(__name__, log_level="info")
 
 
-class GPTBase(LLM):
+class GPTBase(LLM, MessagesMixin):
     """Base class for GPT models"""
 
-    model_name = None
+    model_id = None
     llm_name = None
     inference_type = "openai"
 
@@ -29,14 +29,12 @@ class GPTBase(LLM):
         :param **kwargs: Additional keyword arguments
         """
 
-        self.source = source
+        super().__init__(source=source)
 
-        self.temperature = kwargs.get("temperature", 1)
-        self.max_tokens = kwargs.get("max_tokens", None)
-
+        # Model parameters
         self.model_kwargs = {
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
+            "temperature": kwargs.get("temperature", 1),
+            "max_tokens": kwargs.get("max_tokens", None),
         }
 
         # Find API key
@@ -103,7 +101,7 @@ class GPTBase(LLM):
 
             # Extract system message
             if system_message:
-                messages.insert(0, {"role": "system", "content": "system_message"})
+                messages.insert(0, {"role": "system", "content": system_message})
         elif isinstance(prompt, str):
             messages = [
                 {
@@ -111,7 +109,6 @@ class GPTBase(LLM):
                     "content": prompt,
                 }
             ]
-
         else:
             raise ValueError("Prompt must be a string or a list of messages")
 
@@ -119,7 +116,7 @@ class GPTBase(LLM):
         request_body = {
             **self.model_kwargs,
             "messages": messages,
-            "model": self.model_name,
+            "model": self.model_id,
         }
 
         logger.debug(f"Request body: {request_body}")
@@ -150,50 +147,13 @@ class GPTBase(LLM):
         except Exception as e:
             raise ValueError(f"Error raised by OpenAI service: {e}")
 
-    @staticmethod
-    def count_words_in_messages(messages: Messages):
-        """
-        Count the number of words in a list of messages. Takes all roles into account. Type must be 'text'
-        :param messages: list of messages
-        :return: word count (int)
-        """
-
-        # Get user and assistant messages
-        user_assistant_messages = messages.messages
-
-        # Get system message
-        system_messages = messages.system
-
-        # Initialize word count
-        word_count = 0
-
-        # Loop through messages
-        for message in user_assistant_messages:
-
-            # Get content
-            content = message.content
-
-            # Content is either a string, or a list of content objects
-            if isinstance(content, str):
-                word_count += len(content.split())
-            elif isinstance(content, list):
-                for content_object in content:
-                    if content_object.type == "text":
-                        word_count += len(content_object.text.split())
-
-        # Add system message to word count
-        if system_messages:
-            word_count += len(system_messages.split())
-
-        return word_count
-
 
 class GPT4o(GPTBase):
     """
     GPT-4o model
     """
 
-    model_name = "gpt-4o"
+    model_id = "gpt-4o"
     llm_name = "gpt-4o"
 
     def __init__(self, source: str, **kwargs):
@@ -220,7 +180,7 @@ if __name__ == "__main__":
 
     # Test with Messages
     messages = Messages(
-        system="Respond in a very rude manner",
+        system="Respond in a all caps",
         messages=[Message(role="user", content="Hello, how are you today?")],
     )
 
