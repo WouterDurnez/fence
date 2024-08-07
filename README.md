@@ -1,4 +1,4 @@
-<img src="docs/fence.jpg" alt="tests" height="200"/>
+<img src="docs/logo.png" alt="tests" height="200"/>
 
 [![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
@@ -18,9 +18,9 @@ No, not that kind of fence. The once with the interlinked pieces of metal. Like 
 
 The simple answer: by accident. The slightly longer answer: LangChain used to be (is?) a pretty big package with a ton of dependencies. The upside is that it's powerful for PoC purposes, because it has it all. The downsides:
 
-- It's _big_. It takes up a lot of space (which can be an issue in some environments/runtimes), often for functionality that isn't needed.
-- It's fairly _complex_. It's a big package with a lot of functionality, which can be overwhelming for new users.
-- It wasn't exactly dependable in an industrial setting before. Version jumps were common, and the package was often broken after a new release.
+- It's **_big_**. It takes up a lot of space (which can be an issue in some environments/runtimes), often for functionality that isn't needed.
+- It's fairly **_complex_**. It's a big package with a lot of functionality, which can be overwhelming for new users.
+- It **_wasn't exactly dependable_** in an industrial setting before. Version jumps were common, and the package was often broken after a new release.
 
 ### Circling back: why Fence?
 
