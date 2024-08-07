@@ -1,6 +1,6 @@
-# Contributing to [Your Project Name]
+# Contributing to Fence
 
-Thank you for considering contributing to [Your Project Name]! We welcome contributions from everyone. Below are some guidelines to help you get started.
+Thank you for considering contributing to Fence! We welcome contributions from everyone. Below are some guidelines to help you get started.
 
 ## Table of Contents
 
