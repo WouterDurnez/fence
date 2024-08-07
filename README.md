@@ -10,18 +10,30 @@
 
 No, not that kind of fence. The once with the interlinked pieces of metal. Like a chain fence?
 
-Why? Well, I got fed up with LangChain being so bloated, and I wanted to make a quick little repo
-that covers some of the basic functionality of LangChain, but in a much smaller package. Also, if
-we're calling the things Chains now, then a single component should be a Link (I don't care that it's
-confusing, it's a good name). Extrapolating the concept gives us Fence.
+`Fence` is a simple, lightweight library for LLM communication. A lot of the functionality derived from LangChain (the OG LLM package) basics, since that's how the package was born - as a stripped down version of LangChain functionality, with cooler names.
 
-## What is it?
+## 🤔 Raison d'être
 
-Fence is a simple, lightweight library for LLM communication. A lot of the functionality derived from LangChain basics, since that's how the package was born - as a stripped down version of LangChain functionality, with cooler names.
+### Why does this exist?
 
-## How do I use it?
+The simple answer: by accident. The slightly longer answer: LangChain used to be (is?) a pretty big package with a ton of dependencies. The upside is that it's powerful for PoC purposes, because it has it all. The downsides:
 
-Fence just has a few basic components.
+- It's _big_. It takes up a lot of space (which can be an issue in some environments/runtimes), often for functionality that isn't needed.
+- It's fairly _complex_. It's a big package with a lot of functionality, which can be overwhelming for new users.
+- It wasn't exactly dependable in an industrial setting before. Version jumps were common, and the package was often broken after a new release.
 
-1. First, we need [to hook up with our Large Language Models](fence/models). Fence contains classes for all models in the Claude family. Using these models automatically logs usage (invocations, token counts, etc.) in DataDog.
-2. These models need input. Older Claude models used string-based input (with the infamous Human: ... Assistant:) formatting. Third generation Claude models (Haiku, Sonnet, and Opus) use a new, OpenAI inspired API
+### Circling back: why Fence?
+
+Since our work was in a production environment, mostly dealing with Bedrock, we just started building some **basic components** from scratch. We needed a way to communicate with our models, which turned out to as the `Link` class (_wink wink_).
+Then, some other things were added left and right, and this eventually turned into a miniature package. It's not as powerful as LangChain or some of the other things out there, but it does the job in a lightweight, simple way. It's also meant to be a lot more stable, since we're not adding new features all the time.
+
+### What can I do with Fence?
+
+- **Uniform interface for `LLMs`**. Since our main use case was Bedrock, we built Fence to work with Bedrock models. However, it also has openAI support, and it's easy to extend to other models (contributors welcome!)
+- **Links and Chains** help you build complex pipelines with multiple models. This is a feature that's been around since LangChain, and it's still here. You can parametrize templates, and pass the output of one model to another.
+- **Template classes** that handle the basics, and that work across models (e.g., a MessageTemplate can be sent to a Bedrock Claude3 model, _or_ to an openAI model - system/user/assistant formatting is handled under the hood).
+- **Basic utils on board** for typical tasks like retries, parallelization, logging, output parsers, etc.
+
+## 🗺️ How do I use it?
+
+Fence just has a few basic components. See the [notebooks](notebooks) for examples on how to use them. Documentation is coming soon, but for now, you can check out the [source code](fence) for more details.

@@ -2,20 +2,23 @@
 # FENCE - GitLab CI/CD Configuration #
 #####################################
 
+# Set the default image for all jobs
 default:
   image: python:3.12
 
+# Global setup before each job
 before_script:
-  - pip install poetry
-  - poetry install
-  - source `poetry env info --path`/bin/activate
+  - pip install poetry # Install Poetry for dependency management
+  - poetry install # Install dependencies from pyproject.toml
+  - source `poetry env info --path`/bin/activate # Activate the virtual environment
 
+# Define pipeline stages
 stages:
-  - test
-  - build
-  - release
+  - test # Run tests
+  - build # Build the package
+  - release # Publish the package
 
-# Define cache
+# Define cache settings to speed up builds
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   POETRY_CACHE_DIR: "$CI_PROJECT_DIR/.cache/poetry"
@@ -28,48 +31,43 @@ cache:
 
 ### Stages ###
 
+# Testing stage
 testing:
   stage: test
   script:
     - echo "🧪 Running tests..."
     - cd tests
     - export OPENAI_API_KEY=$OPENAI_API_KEY
-    - python3 -m pytest --junitxml=report.xml
+    - python3 -m pytest --junitxml=report.xml # Run tests and generate a report
     - ls -la # Debugging step to verify the presence of report.xml
   artifacts:
     when: always
     reports:
       junit: tests/report.xml # Adjusted path to report.xml
   only:
-    - main
+    - main # Only run on the main branch
 
+# Building stage
 building:
   stage: build
   script:
     - echo "🏗️ Building the package..."
-    - poetry build
+    - poetry build # Build the package
   artifacts:
     paths:
-      - dist/*
-    expire_in: 1 week
+      - dist/* # Save the built package artifacts
+    expire_in: 1 week # Artifacts expire in 1 week
   only:
-    - main
+    - main # Only run on the main branch
 
+# Publishing stage (manual trigger)
 publish:
   stage: release
   script:
     - echo "🚀 Publishing the package..."
-    # Build the package (creates .whl and .tar.gz files)
-    - poetry build
-
-    # Set GitLab as the package repository
-    - poetry config repositories.gitlab ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi
-
-    # Ignoring certificates can be needed for self-hosted GitLab instances
-    # - poetry config certificates.gitlab.cert false
-
-    # Publish the package to the GitLab repository
-    - poetry publish --repository gitlab -u gitlab-ci-token -p ${CI_JOB_TOKEN}
-
+    - poetry build # Build the package (creates .whl and .tar.gz files)
+    - poetry config repositories.gitlab ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi # Set GitLab as the package repository
+    - poetry publish --repository gitlab -u gitlab-ci-token -p ${CI_JOB_TOKEN} # Publish the package to the GitLab repository
+  when: manual # Only run when manually triggered
   only:
-    - main
+    - main # Only run on the main branch
