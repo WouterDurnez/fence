@@ -34,13 +34,10 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
 
-      - name: Activate virtual environment
-        run: source `poetry env info --path`/bin/activate
-
       - name: Run tests
         run: |
           cd tests
-          python3 -m pytest --junitxml=report.xml
+          poetry run python3 -m pytest --junitxml=tests/report.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@v3
