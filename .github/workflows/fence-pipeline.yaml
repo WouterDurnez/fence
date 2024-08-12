@@ -75,30 +75,30 @@ jobs:
           retention-days: 7
 
   # Job for publishing the package
-  publish:
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-
-      - name: Install Poetry
-        run: pip install poetry
-
-      - name: Install dependencies
-        run: poetry install
-
-      - name: Build the package
-        run: poetry build
-
-      - name: Publish to GitHub Packages
-        run: |
-          poetry config repositories.github "https://pypi.pkg.github.com/${{ github.repository_owner }}"
-          poetry publish --repository github -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#  publish:
+#    runs-on: ubuntu-latest
+#    needs: build
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v3
+#
+#      - name: Set up Python
+#        uses: actions/setup-python@v4
+#        with:
+#          python-version: "3.12"
+#
+#      - name: Install Poetry
+#        run: pip install poetry
+#
+#      - name: Install dependencies
+#        run: poetry install
+#
+#      - name: Build the package
+#        run: poetry build
+#
+#      - name: Publish to GitHub Packages
+#        run: |
+#          poetry config repositories.github "https://pypi.pkg.github.com/${{ github.repository_owner }}"
+#          poetry publish --repository github -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
