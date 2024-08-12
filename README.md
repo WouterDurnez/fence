@@ -5,6 +5,7 @@
 [![black](https://img.shields.io/badge/code%20style-black-000000.svg)
 ](https://github.com/psf/black)
 [![license: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](code_of_conduct.md)
 
 # 🤺 Fence
 
@@ -26,6 +27,8 @@ The simple answer: by accident. The slightly longer answer: LangChain used to be
 
 Since our work was in a production environment, mostly dealing with Bedrock, we just started building some **basic components** from scratch. We needed a way to communicate with our models, which turned out to as the `Link` class (_wink wink_).
 Then, some other things were added left and right, and this eventually turned into a miniature package. Not in small part because it was fun to go down this road. It's not as powerful as LangChain or some of the other things out there, but it does the job in a lightweight, simple way. It's also meant to be a lot more stable, since we're not adding new features all the time.
+
+## 💪 Features
 
 ### What can I do with Fence?
 
@@ -52,12 +55,48 @@ Fence just has a few basic components. See the [notebooks](notebooks) for exampl
 
 ## 📦 Installation
 
-You can install Fence via pip:
+Eventually, you will be install to Fence via pip:
 
 ```bash
 pip install fence
 ```
 
-## ?? Contributing
+For now, you can clone the repo and install it locally:
+
+```bash
+git clone git@gitlab.com:showpad-code/hackity-hack/fence.git
+cd fence
+pip install -e .
+```
+
+## 🗺️ Roadmap
+
+- [ ] Add more models
+- [ ] Add more tests
+- [ ] Add some basic design patterns (e.g., CoT, MapReduce)
+- [ ] Add agentic components (e.g., a simple agent that can interact with a model, use tools, etc)
+
+## 🤝 Contributing
 
 We welcome contributions! Check out the [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+
+## 🙋🏻‍♂️ Open issues or obstacles
+
+- [ ] Bedrock access depends on profile being set through `assume-it` ➡️ How can we add SigV4, or another type of auth?
+
+## 🛣️ Road to Open Source
+
+- [x] Pick a good name
+- [ ] Review the commit history -- create orphan branch, clean up, and push
+- [ ] Provide a README / wiki / documentation
+- [x] Add Contributing guidelines
+- [x] Add a Code of conduct (see [Contributor Covenant](https://www.contributor-covenant.org/))
+- [x] Add a license (see further)
+- [x] Add known open issues to the public facing site -- Not needed yet
+- [x] Get automated testing in a good shape, facilitate adding ease of collaboration, but consider the effort
+- [ ] Release management (versions, tagging, stable vs dev, etc)
+- [ ] Security scanning tools + updates
+- [x] Dependency management
+- [x] Changelog -- Future requirement
+- [x] Roadmap
+- [ ] Gitter / slack channel / other ways to communicate + rules of engagement
