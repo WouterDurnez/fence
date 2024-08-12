@@ -37,13 +37,13 @@ jobs:
       - name: Run tests
         run: |
           cd tests
-          poetry run python3 -m pytest --junitxml=tests/report.xml
+          poetry run python3 -m pytest --junitxml=report.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@v3
         with:
           name: test-results
-          path: tests/report.xml
+          path: fence/tests/report.xml
 
   # Job for building the package
   build:
