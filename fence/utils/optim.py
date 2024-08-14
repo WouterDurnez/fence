@@ -3,6 +3,7 @@ Optimization utils
 """
 
 import functools
+import inspect
 import queue
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -63,68 +64,88 @@ def retry(f=None, max_retries=3, delay=0.2):
 
 
 def parallelize(f: Callable = None, max_workers: int = 4):
-    """
-    Parallelize decorator: runs a function in parallel.
-    :param f: function to run in parallel
-    :param max_workers: maximum number of workers
+    """Decorator that parallelizes function execution across multiple inputs.
+
+    :param f: Function to be parallelized.
+    :param max_workers: Maximum number of worker threads, defaults to 4.
+    :return: Wrapped function that performs parallel execution.
     """
 
-    # Check if the decorator is used without parentheses
     if f is None:
-        # ...if so, return a lambda function that takes the function as an argument
         return lambda func: parallelize(func, max_workers=max_workers)
 
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
-        """
-        Wrapper function for the parallelize decorator. We need this to pass the function's arguments to the decorator.
-        """
-        # Create a queue to store the results. We do not use a list because doing so is, in principle, not thread-safe.
-        # It probably could be, due to the GIL, but it's better to be safe than sorry.
         results_queue = queue.Queue()
 
-        # Define the function to run in parallel
         def run_func(index, *args, **kwargs):
-            logger.debug(f"[Thread {index}] Running function {f.__name__}")
-            result = f(*args, **kwargs)
+            """Execute the original function and handle exceptions.
 
-            # Put the result in the queue, along with the index to keep track of the order
-            results_queue.put((index, result))
-            logger.debug(f"[Thread {index}] Function {f.__name__} completed")
-
-        # Check if first argument is an iterable, if not, split the args into a list
-        first_arg_iterable = isinstance(args[0], Iterable)
-        if not first_arg_iterable:
-            self_arg = args[0]
-            args = args[1:]
+            :param index: Index of the current execution for ordering results.
+            """
             logger.debug(
-                f"First argument is not an iterable. Using {self_arg} as self."
+                f"[Thread {index}] Running function {f.__name__} with {args=}, {kwargs=}"
             )
+            try:
+                result = f(*args, **kwargs)
+                results_queue.put((index, result))
+                logger.debug(f"[Thread {index}] Function {f.__name__} completed")
+            except Exception as e:
+                logger.error(f"[Thread {index}] Error in function {f.__name__}: {e}")
+                results_queue.put((index, e))
+
+        # Handle empty input case
+        if not args:
+            return []
+
+        # Check if the function is a method (i.e., first argument is 'self')
+        is_method = inspect.ismethod(f) or (
+            len(args) > 1 and not isinstance(args[0], Iterable)
+        )
+
+        if is_method:
+            self_arg = args[0]  # Store the 'self' argument
+            args_to_parallelize = args[1]  # The iterable of argument tuples
         else:
             self_arg = None
-            logger.debug("First argument is an iterable. Not using self.")
+            args_to_parallelize = args[
+                0
+            ]  # For standalone functions, use the first argument
 
-        # Use ThreadPoolExecutor to run the functions in parallel
+        # Handle single input case
+        if not isinstance(args_to_parallelize, Iterable) or isinstance(
+            args_to_parallelize, str
+        ):
+            args_to_parallelize = [args_to_parallelize]
+
+        # Use a ThreadPoolExecutor to run the functions in parallel
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            if not first_arg_iterable:
-                futures = [
-                    executor.submit(run_func, index, self_arg, *args, **kwargs)
-                    for index, args in enumerate(zip(*args))
-                ]
-            else:
-                futures = [
-                    executor.submit(run_func, index, *args, **kwargs)
-                    for index, args in enumerate(zip(*args))
-                ]
+            futures = []
+            for index, parallel_args in enumerate(args_to_parallelize):
+                # Ensure parallel_args is a tuple, even if it's a single item
+                if not isinstance(parallel_args, tuple):
+                    parallel_args = (parallel_args,)
+
+                # Prepend 'self' for methods
+                if self_arg is not None:
+                    full_args = (self_arg,) + parallel_args
+                else:
+                    full_args = parallel_args
+
+                # Submit the task to the executor
+                futures.append(executor.submit(run_func, index, *full_args, **kwargs))
 
         # Wait for all tasks to complete
         wait(futures)
 
-        # Convert the queue to a list
+        # Collect and order the results
         results = list(results_queue.queue)
-
-        # Sort the results by index and remove the index
         results = [result[1] for result in sorted(results, key=lambda x: x[0])]
+
+        # Check if any of the results is an exception
+        exceptions = [r for r in results if isinstance(r, Exception)]
+        if exceptions:
+            raise exceptions[0]  # Raise the first exception encountered
 
         return results
 
