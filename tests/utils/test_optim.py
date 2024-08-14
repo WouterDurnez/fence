@@ -1,5 +1,7 @@
+import random
 import random as rnd
 import time
+from unittest.mock import patch
 
 import pytest
 
@@ -7,7 +9,13 @@ from fence.utils.base import time_it
 from fence.utils.logger import setup_logging
 from fence.utils.optim import parallelize, retry
 
-logger = setup_logging(__name__)
+logger = setup_logging(__name__, log_level="DEBUG")
+
+
+def mock_api_call(id):
+    """Simulate an API call with random delay and response."""
+    time.sleep(rnd.uniform(0.1, 0.5))  # Simulate network delay
+    return {"id": id, "data": f"Result for {id}"}
 
 
 class DummyClass:
@@ -78,7 +86,7 @@ class TestParallelizeDecorator:
     def test_error_handling(self):
         """Test error handling in parallelized functions."""
 
-        @parallelize
+        @parallelize(raise_exceptions=True)
         def raise_exception(x):
             raise ValueError("Test Error")
 
@@ -151,6 +159,123 @@ class TestParallelizeDecorator:
         assert results == [
             x * 2 for x in inputs
         ], "Results should be correct even with more workers than available"
+
+    @patch("test_optim.mock_api_call", side_effect=mock_api_call)
+    def test_parallelize_api_calls(self, mock_api):
+        """Test parallelizing API calls."""
+
+        mock_api.reset_mock()  # Reset the mock at the start of the test
+
+        @parallelize(max_workers=5)
+        def fetch_data(id):
+            result = mock_api_call(id)
+            logger.debug(f"Called with id: {id}, result: {result}")
+            return result
+
+        ids = list(range(10))
+        results = fetch_data(ids)
+
+        logger.debug(f"Number of mock calls: {mock_api.call_count}")
+        logger.debug(f"Call arguments: {mock_api.call_args_list}")
+
+        assert len(results) == 10, f"Should have 10 results, but got {len(results)}"
+        assert all(r["id"] in ids for r in results), "All IDs should be in the results"
+        assert all(
+            r["data"].startswith("Result for") for r in results
+        ), "All results should have correct data format"
+
+        # Check if the mock was called the correct number of times
+        assert (
+            mock_api.call_count == 10
+        ), f"API should be called 10 times, but was called {mock_api.call_count} times"
+
+        # Log all the results
+        logger.debug(f"Results: {results}")
+
+    @patch("test_optim.mock_api_call", side_effect=mock_api_call)
+    def test_parallelize_api_calls_with_errors(self, mock_api):
+        """Test parallelizing API calls with some errors."""
+        mock_api.reset_mock()  # Reset the mock at the start of the test
+
+        def api_with_errors(id):
+            if id % 3 == 0:
+                logger.debug(f"Raising error for id: {id}")
+                raise ValueError(f"Error for id {id}")
+            result = mock_api_call(id)
+            logger.debug(f"Called with id: {id}, result: {result}")
+            return result
+
+        @parallelize(max_workers=5)
+        def fetch_data_with_errors(id):
+            return api_with_errors(id)
+
+        ids = list(range(10))
+
+        try:
+            results = fetch_data_with_errors(ids)  # noqa
+        except ValueError as e:
+            logger.debug(f"Caught ValueError: {str(e)}")
+
+        logger.debug(f"Number of mock calls: {mock_api.call_count}")
+        logger.debug(f"Call arguments: {mock_api.call_args_list}")
+
+        # Check if the mock was called the correct number of times
+        # Should not be called for ids 0, 3, 6, 9, so should be called 6 times
+        assert (
+            mock_api.call_count == 6
+        ), f"API should be called 7 times, but was called {mock_api.call_count} times"
+
+        # Log all the call arguments
+        for call in mock_api.call_args_list:
+            logger.debug(f"Call argument: {call}")
+
+    @patch("test_optim.mock_api_call", side_effect=mock_api_call)
+    def test_parallelize_api_calls_at_scale(self, mock_api):
+        """Test parallelizing API calls at scale with timeout."""
+
+        @parallelize(max_workers=20)
+        def fetch_data(id):
+            time.sleep(
+                random.uniform(0.01, 0.05)
+            )  # Simulate variable API response time
+            if random.random() < 0.05:  # 5% chance of failure
+                raise ValueError(f"Random error for id {id}")
+            return {"id": id, "data": f"Result for {id}"}
+
+        num_calls = 1000
+        ids = list(range(num_calls))
+
+        logger.debug(f"Starting scale test with {num_calls} calls")
+        start_time = time.time()
+
+        try:
+            results = fetch_data(ids)
+        except Exception as e:
+            logger.error(f"Unexpected error during parallel execution: {str(e)}")
+
+        end_time = time.time()
+        parallel_time = end_time - start_time
+
+        logger.debug(f"Parallel execution completed in {parallel_time:.2f} seconds")
+        logger.debug(f"Number of successful calls: {len(results)}")
+
+        assert (
+            len(results) < num_calls
+        ), "Some calls should have failed due to random errors"
+        assert (
+            parallel_time < 60
+        ), f"Parallel execution took too long: {parallel_time:.2f} seconds"
+
+        # Verify results
+        for result in results:
+            assert isinstance(result, dict), f"Expected dict, got {type(result)}"
+            assert "id" in result, "Result should have 'id' key"
+            assert "data" in result, "Result should have 'data' key"
+            assert result["data"].startswith(
+                "Result for"
+            ), f"Unexpected data format: {result['data']}"
+
+        logger.debug(f"All assertions passed for scale test with {num_calls} calls")
 
 
 class TestOtherDecorators:

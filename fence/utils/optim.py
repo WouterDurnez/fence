@@ -63,16 +63,21 @@ def retry(f=None, max_retries=3, delay=0.2):
     return wrapper_retry
 
 
-def parallelize(f: Callable = None, max_workers: int = 4):
+def parallelize(
+    f: Callable = None, max_workers: int = 4, raise_exceptions: bool = False
+):
     """Decorator that parallelizes function execution across multiple inputs.
 
     :param f: Function to be parallelized.
     :param max_workers: Maximum number of worker threads, defaults to 4.
+    :param raise_exceptions: If True, raises the first encountered exception. If False, logs exceptions and returns successful results.
     :return: Wrapped function that performs parallel execution.
     """
 
     if f is None:
-        return lambda func: parallelize(func, max_workers=max_workers)
+        return lambda func: parallelize(
+            func, max_workers=max_workers, raise_exceptions=raise_exceptions
+        )
 
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
@@ -142,11 +147,25 @@ def parallelize(f: Callable = None, max_workers: int = 4):
         results = list(results_queue.queue)
         results = [result[1] for result in sorted(results, key=lambda x: x[0])]
 
-        # Check if any of the results is an exception
-        exceptions = [r for r in results if isinstance(r, Exception)]
-        if exceptions:
-            raise exceptions[0]  # Raise the first exception encountered
+        # Filter out exceptions and log them
+        successful_results = []
+        exceptions = []
+        for result in results:
+            if isinstance(result, Exception):
+                exceptions.append(result)
+            else:
+                successful_results.append(result)
 
-        return results
+        if exceptions:
+            logger.warning(
+                f"Encountered {len(exceptions)} errors during parallel execution"
+            )
+            for e in exceptions[:5]:  # Log the first 5 exceptions
+                logger.warning(f"Error encountered: {str(e)}")
+
+            if raise_exceptions:
+                raise exceptions[0]
+
+        return successful_results
 
     return wrapper
