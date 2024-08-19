@@ -187,19 +187,17 @@ class Ollama(OllamaBase):
         self.model_name = f"{model_id.capitalize()}"
 
 
-class Llama3_1(OllamaBase):
+class Llama3_1(Ollama):
     """Llama 3.1 model"""
 
     def __init__(self, source: str, **kwargs):
         """
         Initialize the Llama 3.1 model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(source=source, **kwargs)
-
-        self.model_id = "llama3.1"
-        self.model_name = "Llama 3.1"
+        super().__init__(model_id="llama3.1", source=source, **kwargs)
 
 
 if __name__ == "__main__":
