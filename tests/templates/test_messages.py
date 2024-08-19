@@ -59,15 +59,15 @@ def test_messages_template_add(messages_template):
     This test checks if the __add__ method correctly combines two MessagesTemplate instances.
     """
     other_messages = Messages(
-        system="Other system message {{other_system_var}}",
+        system="Other system message {other_system_var}",
         messages=[
             Message(
                 role="user",
-                content=[TextContent(text="Other user message {{other_user_var}}")],
+                content=[TextContent(text="Other user message {other_user_var}")],
             ),
             Message(
                 role="assistant",
-                content="Other assistant message {{other_assistant_var}}",
+                content="Other assistant message {other_assistant_var}",
             ),
         ],
     )

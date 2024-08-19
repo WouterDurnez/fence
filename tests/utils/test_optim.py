@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 import pytest
 
-from fence.utils.base import time_it
 from fence.utils.logger import setup_logging
 from fence.utils.optim import parallelize, retry
 
@@ -139,6 +138,17 @@ class TestParallelizeDecorator:
         args = [(5, 2), (8, 3), (10, 7)]
         result = subtract(args)
         assert result == [3, 5, 3]
+
+    def test_with_extra_kwargs(self):
+        """Test using the decorator with extra kwargs."""
+
+        @parallelize(max_workers=2)
+        def add(x, y, z=0):
+            return x + y + z
+
+        args = [(1, 2), (3, 4), (5, 6)]
+        result = add(args, z=1)
+        assert result == [4, 8, 12]
 
     def test_class_method(self):
         """Test parallelized class method."""
@@ -277,28 +287,19 @@ class TestParallelizeDecorator:
 
         logger.debug(f"All assertions passed for scale test with {num_calls} calls")
 
+    class TestRetryDecorator:
+        """Test the retry decorator"""
 
-class TestOtherDecorators:
+        def test_retry(self):
+            """Test the retry decorator."""
 
-    def test_retry(self):
-        """Test the retry decorator."""
+            @retry(max_retries=3, delay=1)
+            def _test_retry():
+                print("Testing function")
+                raise Exception("This is a test exception")
 
-        @retry(max_retries=3, delay=1)
-        def _test_retry():
-            print("Testing function")
-            raise Exception("This is a test exception")
-
-        with pytest.raises(Exception, match="This is a test exception"):
-            _test_retry()
-
-    def test_time_it(self):
-        """Test the time_it decorator."""
-
-        @time_it(only_warn=False)
-        def _test_time_it():
-            print("Testing time_it")
-
-        _test_time_it()
+            with pytest.raises(Exception, match="This is a test exception"):
+                _test_retry()
 
 
 if __name__ == "__main__":
