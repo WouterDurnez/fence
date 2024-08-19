@@ -37,8 +37,17 @@ class OllamaBase(LLM):
             source=source, metric_prefix=metric_prefix, extra_tags=extra_tags
         )
 
-        # Set default endpoint
-        self.endpoint = endpoint or "http://localhost:11434/api/generate"
+        # Set default generate endpoint
+        self.endpoint = endpoint or "http://localhost:11434/api"
+        self.generate_endpoint = self.endpoint + "/generate"
+        self.tag_endpoint = self.endpoint + "/tags"
+        self.pull_endpoint = self.endpoint + "/pull"
+
+        # Check if the endpoint is valid
+        try:
+            requests.get(self.tag_endpoint)
+        except requests.exceptions.ConnectionError:
+            raise ValueError(f"No Ollama service found at {self.endpoint}")
 
         # LLM parameters
         self.model_kwargs = {
@@ -109,12 +118,73 @@ class OllamaBase(LLM):
 
         # Send request
         try:
-            response = requests.post(url=self.endpoint, json=payload)
+            response = requests.post(url=self.generate_endpoint, json=payload)
+
+        except Exception as e:
+            raise ValueError(f"Error raised by Ollama service: {e}")
+
+        # Check if the response is valid
+        if response.status_code != 200 and response.text.__contains__("not found"):
+            logger.warning(
+                f"Model {self.model_id} not found in Ollama service - trying to pull it"
+            )
+            self._pull_model(model_id=self.model_id)
+
+            # Retry the request
+            try:
+                response = requests.post(url=self.generate_endpoint, json=payload)
+            except Exception as e:
+                raise ValueError(f"Error raised by Ollama service: {e}")
+
+        return response.json()
+
+    def _pull_model(self, model_id: str) -> dict:
+        """
+        Pull the model from the Ollama service
+        :param model_id: model name
+        :return: model
+        """
+
+        # Send request
+        try:
+            response = requests.post(
+                url=self.pull_endpoint, json={"name": model_id}, stream=False
+            )
 
         except Exception as e:
             raise ValueError(f"Error raised by Ollama service: {e}")
 
         return response.json()
+
+    def _get_model_list(self) -> list[str]:
+        """
+        Get the list of available models from the Ollama service
+        :return: list of model names
+        """
+
+        # Send request
+        try:
+            response = requests.get(url=self.tag_endpoint)
+
+        except Exception as e:
+            raise ValueError(f"Error raised by Ollama service: {e}")
+
+        return response.json()["models"]
+
+
+class Ollama(OllamaBase):
+    """Generic Ollama interface"""
+
+    def __init__(self, model_id: str, source: str, **kwargs):
+        """
+        Initialize the Ollama model
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(source=source, **kwargs)
+
+        self.model_id = model_id
+        self.model_name = f"{model_id.capitalize()}"
 
 
 class Llama3_1(OllamaBase):
@@ -136,6 +206,15 @@ if __name__ == "__main__":
 
     # Initialize the model
     model = Llama3_1(source="test")
+
+    # List available models
+    model_list = model._get_model_list()
+
+    # Call the model
+    response = model("Hello, how are you?")
+
+    # Try a non-existent model
+    model = Ollama(model_id="gemma2", source="test")
 
     # Call the model
     response = model("Hello, how are you?")
