@@ -2,8 +2,10 @@
 Various utils
 """
 
+import functools
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from pathlib import Path
 
 CONF_DIR = Path(__file__).resolve().parent.parent.parent / "conf"
@@ -50,6 +52,40 @@ def time_it(f=None, threshold: int = 300, only_warn: bool = True):
         return res
 
     return timed
+
+
+def time_out(f=None, seconds: int = 60):
+    """Decorator that adds a timeout to a function.
+
+    :param f: Function to be executed.
+    :param seconds: Timeout in seconds.
+    :return: Wrapped function with a timeout.
+    """
+
+    if f is None:
+        return lambda func: time_out(func, seconds=seconds)
+
+    @functools.wraps(f)
+    def wrapper_timeout(*args, **kwargs):
+        """Wrapper function for the timeout decorator."""
+
+        def run_func(*args, **kwargs):
+            """Execute the original function and handle exceptions."""
+            try:
+                return f(*args, **kwargs)
+            except Exception as e:
+                raise e
+
+        # Use a ThreadPoolExecutor to run the function in a separate thread
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(run_func, *args, **kwargs)
+
+            try:
+                return future.result(timeout=seconds)
+            except TimeoutError:
+                raise TimeoutError(f"Function call <{f.__name__}> timed out")
+
+    return wrapper_timeout
 
 
 def setup_demo():
