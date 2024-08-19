@@ -3,6 +3,7 @@ This module contains the MessagesTemplate class, which is used to render a list 
 The module was created to accommodate the Claude3 model API format.
 """
 
+from fence import StringTemplate
 from fence.templates.base import BaseTemplate
 from fence.templates.models import Message, Messages, TextContent
 
@@ -134,6 +135,39 @@ class MessagesTemplate(BaseTemplate):
                 )
 
         return list(placeholders)
+
+    def to_string_template(self) -> StringTemplate:
+        """
+        Convert the MessagesTemplate object to a StringTemplate object.
+
+        :return: StringTemplate object.
+        :rtype: StringTemplate
+        """
+
+        # If the source is a string, return a StringTemplate object
+        if isinstance(self.source, str):
+            return StringTemplate(source=self.source)
+
+        # If the source is a Messages object, convert it to a string
+        messages = self.source
+
+        # Initialize the string
+        new_source = ""
+
+        # Add the system message
+        if messages.system:
+            new_source += messages.system + "\n"
+
+        # Add the user/assistant messages
+        for message in messages.messages:
+            if isinstance(message.content, str):
+                new_source += message.content + "\n"
+            elif isinstance(message.content, list):
+                for content in message.content:
+                    if content.type == "text":
+                        new_source += content.text + "\n"
+
+        return StringTemplate(source=new_source)
 
     def __str__(self):
         return f"MessagesTemplate: {self.source}"
