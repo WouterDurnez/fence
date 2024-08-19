@@ -21,6 +21,7 @@ pytest = "^8.2.0"
 black = "^24.4.2"
 pre-commit = "^3.7.1"
 pytest-mock = "^3.14.0"
+jupyterlab = "^4.2.4"
 
 [build-system]
 requires = ["poetry-core"]
