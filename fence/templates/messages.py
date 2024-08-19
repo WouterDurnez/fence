@@ -3,9 +3,9 @@ This module contains the MessagesTemplate class, which is used to render a list 
 The module was created to accommodate the Claude3 model API format.
 """
 
-from fence import StringTemplate
 from fence.templates.base import BaseTemplate
 from fence.templates.models import Message, Messages, TextContent
+from fence.templates.string import StringTemplate
 
 
 class MessagesTemplate(BaseTemplate):
