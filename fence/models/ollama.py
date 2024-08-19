@@ -47,7 +47,9 @@ class OllamaBase(LLM):
         try:
             requests.get(self.tag_endpoint)
         except requests.exceptions.ConnectionError:
-            raise ValueError(f"No Ollama service found at {self.endpoint}")
+            raise ValueError(
+                f"No Ollama service found at {self.endpoint}. Try installing it using `brew install ollama`."
+            )
 
         # LLM parameters
         self.model_kwargs = {
@@ -154,7 +156,7 @@ class OllamaBase(LLM):
         except Exception as e:
             raise ValueError(f"Error raised by Ollama service: {e}")
 
-        return response.json()
+        return response
 
     def _get_model_list(self) -> list[str]:
         """
@@ -215,4 +217,4 @@ if __name__ == "__main__":
     model = Ollama(model_id="gemma2", source="test")
 
     # Call the model
-    response = model("Hello, how are you?")
+    response_gemma = model("Hello, which model are you?")
