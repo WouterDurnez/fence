@@ -173,13 +173,27 @@ class GPTBase(LLM, MessagesMixin):
             raise ValueError(f"Error raised by OpenAI service: {e}")
 
 
-class GPT4o(GPTBase):
+class GPT(GPTBase):
+    """
+    GPT model
+    """
+
+    def __init__(self, model_id: str, source: str, **kwargs):
+        """
+        Initialize a GPT model
+        :param model_id: The model ID
+        :param source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(source=source, **kwargs)
+        self.model_id = self.model_name = model_id
+
+
+class GPT4o(GPT):
     """
     GPT-4o model
     """
-
-    model_id = "gpt-4o"
-    model_name = "gpt-4o"
 
     def __init__(self, source: str, **kwargs):
         """
@@ -187,14 +201,28 @@ class GPT4o(GPTBase):
         :param source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
+        super().__init__(model_id="gpt-4o", source=source, **kwargs)
 
-        super().__init__(source=source, **kwargs)
+
+class GPT4(GPT):
+    """
+    GPT-4 model
+    """
+
+    def __init__(self, source: str, **kwargs):
+        """
+        Initialize a GPT-4 model
+        :param source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+        super().__init__(model_id="gpt-4", source=source, **kwargs)
 
 
 if __name__ == "__main__":
 
     # Initialize GPT model
-    gpt = GPT4o(source="test")
+    # gpt = GPT4o(source="test")
+    gpt = GPT(model_id="gpt-4", source="test")
 
     # Test prompt
     prompt = "Hello, how are you today?"
