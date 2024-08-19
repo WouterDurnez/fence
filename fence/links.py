@@ -171,7 +171,7 @@ class Link(BaseLink):
         if isinstance(template, MessagesTemplate):
             if not isinstance(llm, (Claude3Base, GPTBase)):
                 raise ValueError(
-                    f"MessagesTemplate can only be used with Claude3 models. Got {llm.model_id}."
+                    f"MessagesTemplate can only be used with Claude3 or GPT models. Got {llm.model_id}."
                 )
 
         # Get the input keys from the template

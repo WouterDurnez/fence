@@ -5,6 +5,7 @@ Ollama models
 import logging
 
 import requests
+from requests import Response
 
 from fence.models.base import LLM, get_log_callback
 
@@ -140,7 +141,7 @@ class OllamaBase(LLM):
 
         return response.json()
 
-    def _pull_model(self, model_id: str) -> dict:
+    def _pull_model(self, model_id: str) -> Response:
         """
         Pull the model from the Ollama service
         :param model_id: model name
@@ -177,13 +178,16 @@ class OllamaBase(LLM):
 class Ollama(OllamaBase):
     """Generic Ollama interface"""
 
-    def __init__(self, model_id: str, source: str, **kwargs):
+    def __init__(self, model_id: str, source: str, auto_pull: bool = True, **kwargs):
         """
         Initialize the Ollama model
+        :param str model_id: The model ID as defined in the Ollama service
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param bool auto_pull: Whether to automatically pull the model if it is not found
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(source=source, **kwargs)
+        super().__init__(source=source, auto_pull=auto_pull, **kwargs)
 
         self.model_id = model_id
         self.model_name = f"{model_id.capitalize()}"
