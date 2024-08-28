@@ -27,7 +27,7 @@ class BaseTemplate(ABC):
         self.input_variables = []
 
         # We have no time for anything other than strings or Messages
-        if self.type not in [str, Messages]:
+        if not isinstance(source, (str, Messages)):
             raise TypeError("Template must be a string or a Messages object.")
 
     def __call__(self, input_dict: dict = None, **kwargs):

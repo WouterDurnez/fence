@@ -1,5 +1,6 @@
-import ast
 from abc import ABC
+
+import numexpr
 
 from fence import (
     LLM,
@@ -13,7 +14,7 @@ from fence import (
 from fence.models.gpt import GPT4o
 from fence.prompts.agents import react_prompt
 
-logger = setup_logging(__name__, log_level="debug", serious_mode=False)
+logger = setup_logging(__name__, log_level="info", serious_mode=False)
 
 
 class Tool(ABC):
@@ -69,19 +70,32 @@ class PrimeTool(Tool):
 class CalculatorTool(Tool):
     """Perform mathematical calculations"""
 
-    def run(self, expression: str) -> float:
+    def run(self, expression: str) -> float | str:
         """Evaluate the mathematical expression"""
         try:
 
-            # Preprocess the expression
-            expression = expression.replace("^", "**")
+            result = numexpr.evaluate(expression)
 
-            # Remove whitespaces
-            expression = expression.replace(" ", "")
-
-            return ast.literal_eval(expression)
         except Exception as e:
-            return str(e)
+            logger.error(f"Error evaluating expression: {e}", exc_info=True)
+            return f"Error evaluating expression {expression} - {e}"
+        return result
+
+
+class Memory(Messages):
+
+    messages: list[Message] = []
+
+    def add_message(self, role: str, content: str):
+
+        if role == "system":
+            self.system = content
+        elif role in ["user", "assistant"]:
+            self.messages.append(Message(role=role, content=content))
+        else:
+            raise ValueError(
+                f"Role must be 'system', 'user', or 'assistant'. Got {role}"
+            )
 
 
 class Agent:
@@ -97,13 +111,14 @@ class Agent:
             f"Creating an agent with model: {model} and tools: {self.tool_names}"
         )
 
-        self.history = []
+        self.context = Memory()
+        self.context.add_message(role="system", content=react_prompt)
 
     def run(self, prompt: str) -> str:
         """Run the agent with the given prompt"""
 
         # Add the prompt to the history
-        self.history.append(Message(role="user", content=prompt))
+        self.context.add_message(role="user", content=prompt)
 
         # Format tools for the prompt
         formatted_tools = "".join(tool.format_toml() for tool in self.tools)
@@ -117,9 +132,7 @@ class Agent:
             link = Link(
                 name="agent_step_link",
                 model=self.model,
-                template=MessagesTemplate(
-                    source=Messages(system=react_prompt, messages=self.history)
-                ),
+                template=MessagesTemplate(source=self.context),
             )
 
             response = link.run(input_dict={"tools": formatted_tools})["state"]
@@ -173,12 +186,10 @@ class Agent:
                     prompt = "Invalid action"
 
             # Add the response to the history
-            self.history.append(
-                Message(
-                    role="assistant",
-                    content=response
-                    + (f"[OBSERVATION] {tool_response}" if tool_response else ""),
-                )
+            self.context.add_message(
+                role="assistant",
+                content=response
+                + (f"[OBSERVATION] {tool_response}" if tool_response else ""),
             )
 
             # If the response contains an answer, break the loop
