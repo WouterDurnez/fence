@@ -135,7 +135,7 @@ class Chain(BaseChain):
         """
 
         # Check if an LLM model was provided
-        if self.llm is None and any(link.llm is None for link in self.links):
+        if self.llm is None and any(link.model is None for link in self.links):
             raise ValueError("An LLM model must be provided.")
 
         # Validate the input keys
@@ -147,7 +147,7 @@ class Chain(BaseChain):
         # Iterate through Links in topological order
         for link in self._topological_sort():
             # Run the Link with Chain's LLM model if the Link doesn't have one
-            if link.llm is None:
+            if link.model is None:
                 output_dict.update(link.run(input_dict=output_dict, llm=self.llm))
             else:
                 output_dict.update(link.run(input_dict=output_dict))
@@ -223,7 +223,7 @@ class LinearChain(BaseChain):
 
     def run(self, input_dict):
         # Check if an LLM model was provided
-        if self.llm is None and any(link.llm is None for link in self.links):
+        if self.llm is None and any(link.model is None for link in self.links):
             raise ValueError("An LLM model must be provided.")
 
         # Validate the input keys
@@ -244,7 +244,7 @@ class LinearChain(BaseChain):
                 )
 
             # Run the Link with Chain's LLM model if the Link doesn't have one
-            if link.llm is None:
+            if link.model is None:
                 response_dict = link.run(input_dict=state_dict, llm=self.llm)
             else:
                 response_dict = link.run(input_dict=state_dict)

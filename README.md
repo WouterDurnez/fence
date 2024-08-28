@@ -11,22 +11,28 @@
 
 No, not that kind of fence. The once with the interlinked pieces of metal. Like a chain fence?
 
-`Fence` is a simple, lightweight library for LLM communication. A lot of the functionality derived from LangChain (the OG LLM package) basics, since that's how the package was born - as a stripped down version of LangChain functionality, with cooler names.
+`Fence` is a simple, lightweight library for LLM communication. A lot of the functionality was inspired by/derived of LangChain (the OG LLM package) basics, since that's how the package was born - as a stripped down version of LangChain functionality, with cooler names.
 
 ## 🤔 Raison d'être
 
 ### Why does this exist?
 
-The simple answer: by accident. The slightly longer answer: LangChain used to be (is?) a pretty big package with a ton of dependencies. The upside is that it's powerful for PoC purposes, because it has it all. The downsides:
+The simple answer: by accident. The slightly longer answer: LangChain used to be (is?) a pretty big package with a ton of dependencies. The upside is that it's powerful for PoC purposes, because it has it all.
+
+The downsides:
 
 - It's **_big_**. It takes up a lot of space (which can be an issue in some environments/runtimes), often for functionality that isn't needed.
 - It's fairly **_complex_**. It's a big package with a lot of functionality, which can be overwhelming for new users.
 - It **_wasn't exactly dependable_** in an industrial setting before. Version jumps were common, and the package was often broken after a new release.
 
+As a result, many developers (particularly those working in large production environments) have advocated for more lightweight, custom functionality that favors stability and robustness.
+
 ### Circling back: why Fence?
 
 Since our work was in a production environment, mostly dealing with Bedrock, we just started building some **basic components** from scratch. We needed a way to communicate with our models, which turned out to as the `Link` class (_wink wink_).
-Then, some other things were added left and right, and this eventually turned into a miniature package. Not in small part because it was fun to go down this road. It's not as powerful as LangChain or some of the other things out there, but it does the job in a lightweight, simple way. It's also meant to be a lot more stable, since we're not adding new features all the time.
+Then, some other things were added left and right, and this eventually turned into a miniature package. Not in small part because it was fun to go down this road. But mostly because it strikes the right balance between convenience and flexiblity.
+
+Naturally, it's nowhere as powerful as, for instance, LangChain. If you want to build a quick PoC with relatively complex logic, maybe go for the OG instead. If you want to be set on your way with a simple, lightweight package that's easy to understand and extend, Fence might be the way to go.
 
 ## 💪 Features
 
@@ -49,13 +55,13 @@ The OG, no explanation needed.
 
 A more recent package, with a lot of cool features! Great for building PoCs, too. Built by ex-AWS folks, and promises to be a lot more industry-oriented.
 
-## 🗺️ How do I use it?
+## 🛠️ How do I use it?
 
 Fence just has a few basic components. See the [notebooks](notebooks) for examples on how to use them. Documentation is coming soon, but for now, you can check out the [source code](fence) for more details.
 
 ## 📦 Installation
 
-Eventually, you will be install to Fence via pip:
+Eventually, you will be able install to Fence via pip (once it's on PyPi):
 
 ```bash
 pip install fence

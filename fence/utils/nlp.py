@@ -157,7 +157,7 @@ class LLMHelper:
         )
         relevancy_link = Link(
             template=relevancy_template,
-            llm=self.model,
+            model=self.model,
             name="relevancy_checker",
             output_key="is_relevant",
             parser=BoolParser(),
@@ -197,12 +197,12 @@ class LLMHelper:
                  the reader cannot see. The answer must stand on its own. If it already does, you should
                     reply with the same text. Otherwise, you should remove any references to the text or passage.
                     Reply with the edited or original text, delimited by triple backticks. Make sure to use proper spelling and grammar.
-    
+
                  EXAMPLE:
-    
+
                  Input: According to the text, the sky is blue because of Rayleigh scattering, which is the scattering of light by air molecules.
                  Output: The sky is blue because of Rayleigh scattering, which is the scattering of light by air molecules.
-    
+
                  Input: The key reason given in the text for not using unit tests is that they are time-consuming.
                  Output: The key reason for not using unit tests is that they are time-consuming.
                  """,
@@ -224,7 +224,7 @@ class LLMHelper:
         )
         rewrite_link = Link(
             template=rewrite_template,
-            llm=self.model,
+            model=self.model,
             name="text_cleaner",
             output_key="cleaned_text",
             parser=TripleBacktickParser(prefill="```"),

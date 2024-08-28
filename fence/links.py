@@ -35,7 +35,7 @@ class BaseLink(ABC):
         :param input_keys: A list of input keys.
         :param output_key: The output key.
         """
-        self.llm = None
+        self.model = None
         self.input_keys = None
         self.output_key = output_key
         self.name = name
@@ -151,7 +151,7 @@ class Link(BaseLink):
         self,
         template: StringTemplate | MessagesTemplate,
         output_key: str = "state",
-        llm: LLM = None,
+        model: LLM = None,
         name: str = None,
         parser: Parser = None,
     ):
@@ -159,19 +159,25 @@ class Link(BaseLink):
         Initialize the Link object.
 
         :param name: Name of the Link.
-        :param llm: An LLM model object.
+        :param model: An LLM model object.
         :param template: A PromptTemplate object.
         """
         self.template = template
         super().__init__(output_key=output_key, name=name)
-        self.llm = llm
+        self.model = model
         self.template = template
+
+        # If no LLM model is provided, raise an error
+        if model is None:
+            logger.warning(
+                "A `Link` takes a mandatory `llm` argument! Please provide one."
+            )
 
         # If the template is a MessagesTemplate, we only accept Claude3 type models
         if isinstance(template, MessagesTemplate):
-            if not isinstance(llm, (Claude3Base, GPTBase)):
+            if not isinstance(model, (Claude3Base, GPTBase)):
                 raise ValueError(
-                    f"MessagesTemplate can only be used with Claude3 or GPT models. Got {llm.model_id}."
+                    f"MessagesTemplate can only be used with Claude3 or GPT models. Got {model.model_id if model else None}."
                 )
 
         # Get the input keys from the template
@@ -203,7 +209,7 @@ class Link(BaseLink):
         input_dict.update(kwargs)
 
         # Check if an LLM model was provided
-        if self.llm is None and kwargs.get("llm") is None:
+        if self.model is None and kwargs.get("llm") is None:
             raise ValueError("An LLM model must be provided.")
 
         # Validate the input dictionary
@@ -215,7 +221,7 @@ class Link(BaseLink):
 
         # Determine if the LLM model is provided as a keyword argument,
         # otherwise use the LLM model of the Link
-        llm = kwargs.pop("llm", self.llm)
+        llm = kwargs.pop("llm", self.model)
 
         # Call the LLM model
         response = llm.invoke(prompt=prompt)
