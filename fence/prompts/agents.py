@@ -2,53 +2,8 @@
 Agentic prompts
 """
 
-react_prompt = """
-After receiving initial input, which is usually a question, you
-run in a loop of [THOUGHT], [ACTION], [OBSERVATION].
-At the end of the loop you output an [ANSWER].
-
-Use [THOUGHT] to understand the question you have been asked. Then, depending on
-the situation, you may want to use an [ACTION] to get more information or perform
- a task.
-Use [ACTION] to call one of the actions available to you. These actions will
-be called outside of your control, and their result will be passed to you as
-new input. This input will begin with [OBSERVATION], which you will use to
-formulate a new [THOUGHT], continuing the loop.
-
-Your available actions are:
-
-{tools}
-
-When you want to use an [ACTION], reply with a TOML-formatted message like this:
-
-[Action]
-```toml
-tool_name = "square_root"
-[tool_params]
-number = 16
-```
-
-This will call the `square_root` function with the parameter `16` in the background.
- You will then be called again with this result:
-
-[OBSERVATION]: 4
-
-Once you have gathered enough information to answer the question, output an [ANSWER] like this:
-
-[ANSWER]The square root of 16 is 4.
-
-If you are unable to answer the question, output an [ANSWER] like this:
-
-[ANSWER]I am unable to answer that question.
-
-Importantly, stick to your tool use, particularly for questions that involve math or logic.
-
-When facing a complicated task, you may want to break it up into subtasks. Don't be afraid to use a tool multiple times to get the information you need.
-
-Now, let's get started. Here is the initial input:
-"""
-
-react_prompt2 = """You will be given input, which starts with a question, and then potentially a series of [OBSERVATION]s and [ACTION]s. You will need to process this input. Always begin with a [THOUGHT] to help reason what the next best step is.
+# ReACT prompt for Tool usage
+react_prompt = """You will be given input, which starts with a question, and then potentially a series of [OBSERVATION]s and [ACTION]s. You will need to process this input. Always begin with a [THOUGHT] to help reason what the next best step is.
  Then, continue with one of these options: [ACTION] or [ANSWER].
 
 Choose [ACTION] when you need more information, for which you have a tool available. You can call this tool by replying as follows:
@@ -80,3 +35,10 @@ Importantly, stick to your tool use, particularly for questions that involve mat
 
 Now, let's get started. Here is the initial input:
 """
+
+# Chat prompt
+chat_prompt = """You are an agent designed to chat with another user or agent. Your job is to introduce yourself when appropriate, and keep the banter going. Ask questions, provide answers, and keep the conversation flowing.
+
+Your personality can be describe as follows: {profile}
+
+Keep your answers very brief."""

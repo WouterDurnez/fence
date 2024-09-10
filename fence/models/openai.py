@@ -3,15 +3,17 @@ OpenAI GPT models
 """
 
 import json
-import logging
 import os
 
 import requests
 
+__all__ = ["GPT", "GPT4o", "GPT4", "GPT4omini"]
+
 from fence.models.base import LLM, MessagesMixin, get_log_callback
 from fence.templates.messages import Message, Messages
+from fence.utils.logger import setup_logging
 
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__, log_level="info", serious_mode=False)
 
 
 class GPTBase(LLM, MessagesMixin):
@@ -218,11 +220,26 @@ class GPT4(GPT):
         super().__init__(model_id="gpt-4", source=source, **kwargs)
 
 
+class GPT4omini(GPT):
+    """
+    GPT-4mini model
+    """
+
+    def __init__(self, source: str, **kwargs):
+        """
+        Initialize a GPT-4mini model
+        :param source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+        super().__init__(model_id="gpt-4o-mini", source=source, **kwargs)
+
+
 if __name__ == "__main__":
 
     # Initialize GPT model
     # gpt = GPT4o(source="test")
-    gpt = GPT(model_id="gpt-4", source="test")
+    # gpt = GPT(model_id="gpt-4", source="test")
+    gpt = GPT4omini(source="test")
 
     # Test prompt
     prompt = "Hello, how are you today?"

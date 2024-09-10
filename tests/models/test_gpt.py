@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from fence.models.gpt import GPT4o
+from fence.models.openai import GPT4o
 from fence.templates.messages import Message, Messages
 
 

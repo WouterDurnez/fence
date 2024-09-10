@@ -9,7 +9,7 @@ from typing import Callable, Iterable
 
 from fence.models.base import LLM
 from fence.models.claude3 import Claude3Base
-from fence.models.gpt import GPTBase
+from fence.models.openai import GPTBase
 from fence.parsers import Parser
 from fence.templates import MessagesTemplate, StringTemplate
 from fence.utils.base import time_it
@@ -176,9 +176,12 @@ class Link(BaseLink):
         # If the template is a MessagesTemplate, we only accept Claude3 type models
         if isinstance(template, MessagesTemplate):
             if not isinstance(model, (Claude3Base, GPTBase)):
-                raise ValueError(
+                logger.warning(
                     f"MessagesTemplate can only be used with Claude3 or GPT models. Got {model.model_id if model else None}."
                 )
+
+                # Reformat the template to a StringTemplate
+                template = template.to_string_template()
 
         # Get the input keys from the template
         self.input_keys = template.input_variables

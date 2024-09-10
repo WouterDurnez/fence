@@ -1,10 +1,16 @@
+"""
+Tool using agent
+"""
+
 from fence import LLM, Link, MessagesTemplate, TOMLParser, setup_logging
+from fence.agents.base import BaseAgent
 from fence.links import logger as link_logger
-from fence.memory import FleetingMemory
-from fence.models.gpt import GPT4o
-from fence.prompts.agents import react_prompt2
+from fence.memory import BaseMemory, FleetingMemory
+from fence.models.openai import GPT4omini
+from fence.prompts.agents import react_prompt
 from fence.tools.base import BaseTool
 from fence.tools.math import CalculatorTool, PrimeTool
+from fence.tools.text import TextInverterTool
 
 logger = setup_logging(__name__, log_level="info", serious_mode=False)
 
@@ -12,17 +18,22 @@ logger = setup_logging(__name__, log_level="info", serious_mode=False)
 link_logger.setLevel("INFO")
 
 
-class Agent:
+class ToolAgent(BaseAgent):
     """An LLM-based Agent, capable of using tools and models to generate responses"""
 
-    def __init__(self, model: LLM = None, tools: list[BaseTool] = None):
+    def __init__(
+        self, model: LLM = None, tools: list[BaseTool] = None, memory: BaseMemory = None
+    ):
         """
         Initialize the Agent object.
 
         :param model: An LLM model object.
         :param tools: A list of Tool objects.
         """
-        self.model = model
+
+        super().__init__(model=model)
+
+        # Store the tools and their names
         self.tools = tools or []
         self.tool_names = [tool.__class__.__name__ for tool in self.tools]
 
@@ -31,8 +42,8 @@ class Agent:
         )
 
         # Create a memory context for the agent
-        self.context = FleetingMemory()
-        self.context.add_message(role="system", content=react_prompt2)
+        self.context = (memory or FleetingMemory)()
+        self.context.add_message(role="system", content=react_prompt)
 
         # Format tools for the prompt
         self.formatted_tools = "".join(tool.format_toml() for tool in self.tools)
@@ -153,23 +164,24 @@ class Agent:
     def clear_memory(self):
         """Clear the memory context"""
         self.context = FleetingMemory()
-        self.context.add_message(role="system", content=react_prompt2)
+        self.context.add_message(role="system", content=react_prompt)
 
 
 if __name__ == "__main__":
+
     # Define the tools available to the agent
-    tools = [CalculatorTool(), PrimeTool()]
+    tools = [CalculatorTool(), PrimeTool(), TextInverterTool()]
 
     # Create an agent with a model and tools
-    agent = Agent(model=GPT4o(source="agent"), tools=tools)
+    agent = ToolAgent(model=GPT4omini(source="agent"), tools=tools)
 
     for q in [
         # "How much is 9 + 10?",
         # "Is 1172233 a prime number?",
         # "What is the square root of 16?",
         # Math question we don't have a tool for
-        "Find the first 2 prime numbers beyond 10000",
-        "Find the sum of the first 2 prime numbers beyond 10000",
+        # "Find the first 2 prime numbers beyond 10000",
+        "Find the sum of the first 2 prime numbers beyond 10000, take the number as a string and reverse it",
     ]:
         logger.critical(f"Running agent with prompt: {q}")
         response = agent.run(q)
