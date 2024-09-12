@@ -7,7 +7,7 @@ from fence.agents.base import BaseAgent
 from fence.links import logger as link_logger
 from fence.memory import BaseMemory, FleetingMemory
 from fence.models.openai import GPT4omini
-from fence.prompts.agents import chat_prompt
+from fence.prompts.agents import CHAT_PROMPT
 
 logger = setup_logging(__name__, log_level="info", serious_mode=False)
 
@@ -21,6 +21,7 @@ class ChatAgent(BaseAgent):
     def __init__(
         self,
         model: LLM | None = None,
+        description: str | None = None,
         memory: BaseMemory | None = None,
         name: str | None = None,
         profile: str | None = None,
@@ -29,12 +30,13 @@ class ChatAgent(BaseAgent):
         Initialize the Agent object.
 
         :param model: An LLM model object.
+        :param description: A description of the agent.
         :param memory: A memory object.
         :param name: The name of the agent. Will be used in multi-agent conversations.
         :param profile: The name of the user or profile
         """
 
-        super().__init__(model=model)
+        super().__init__(model=model, description=description)
 
         logger.info(f"Creating an agent with model: {model.model_name} ")
 
@@ -44,7 +46,7 @@ class ChatAgent(BaseAgent):
         # Create a memory context for the agent
         self.context = (memory or FleetingMemory)()
         self.context.add_message(
-            role="system", content=chat_prompt.format(profile=profile)
+            role="system", content=CHAT_PROMPT.format(profile=profile)
         )
 
     def run(self, prompt: str) -> str:

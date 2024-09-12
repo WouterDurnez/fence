@@ -1,14 +1,14 @@
 """
-Tool using agent
+Agent class to orchestrate a flow that potentially calls tools or other, specialized agents.
 """
 
 from fence import LLM, Link, MessagesTemplate, TOMLParser, setup_logging
 from fence.agents.base import BaseAgent
+from fence.agents.tool import ToolAgent
 from fence.links import logger as link_logger
 from fence.memory import BaseMemory, FleetingMemory
 from fence.models.openai import GPT4omini
-from fence.prompts.agents import REACT_PROMPT
-from fence.tools.base import BaseTool
+from fence.prompts.agents import REACT_MULTI_AGENT_PROMPT
 from fence.tools.math import CalculatorTool, PrimeTool
 from fence.tools.text import TextInverterTool
 
@@ -18,33 +18,32 @@ logger = setup_logging(__name__, log_level="info", serious_mode=False)
 link_logger.setLevel("INFO")
 
 
-class ToolAgent(BaseAgent):
-    """An LLM-based Agent, capable of using tools and models to generate responses"""
+class RefereeAgent(BaseAgent):
+    """An LLM-based Agent, capable of delegating to other agents"""
 
     def __init__(
         self,
         model: LLM = None,
         description: str | None = None,
-        tools: list[BaseTool] = None,
+        agents: list[BaseAgent] = None,
         memory: BaseMemory = None,
     ):
         """
-        Initialize the Agent object.
+        Initialize the Referee agent object.
 
         :param model: An LLM model object.
-        :param description: A description of the agent. Important for MultiAgent flows
-        :param tools: A list of Tool objects.
+        :param agents: A list of Agent objects, to which the Referee can delegate.
         :param memory: A memory class.
         """
 
         super().__init__(model=model, description=description)
 
         # Store the tools and their names
-        self.tools = tools or []
-        self.tool_names = [tool.__class__.__name__ for tool in self.tools]
+        self.agents = agents or []
+        self.agent_names = [agent.__class__.__name__ for agent in self.agents]
 
         logger.info(
-            f"Creating an agent with model: {model} and tools: {self.tool_names}"
+            f"Creating an agent with model: {model} and tools: {self.agent_names}"
         )
 
         # Create a memory context for the agent
@@ -53,8 +52,8 @@ class ToolAgent(BaseAgent):
         self.wipe_context(memory=self.memory)
 
         # Format tools for the prompt
-        self.formatted_tools = "".join(tool.format_toml() for tool in self.tools)
-        logger.debug(f"Tools: {self.formatted_tools}")
+        self.formatted_agents = "".join(agent.format_toml() for agent in self.agents)
+        logger.debug(f"Tools: {self.formatted_agents}")
 
     def run(self, prompt: str) -> str:
         """Run the agent with the given prompt"""
@@ -80,12 +79,12 @@ class ToolAgent(BaseAgent):
 
             # Base link
             link = Link(
-                name="agent_step",
+                name="referee_step",
                 model=self.model,
                 template=MessagesTemplate(source=self.context),
             )
 
-            response = link.run(input_dict={"tools": self.formatted_tools})["state"]
+            response = link.run(input_dict={"agents": self.formatted_agents})["state"]
             logger.info(f"Model response: {response}")
 
             # Add the response to the history
@@ -97,66 +96,70 @@ class ToolAgent(BaseAgent):
                 break
 
             # Check if the response contains a tool action
-            tool_response = None
-            if "[ACTION]" in response:
+            delegate_response = None
+            if "[DELEGATE]" in response:
 
-                logger.debug("Found an action in the response")
+                logger.debug("Found an agent in the response")
 
                 # Extract the action from the response
-                action = response.split("[ACTION]")[-1].strip()
-                logger.debug(f"Action: {action}")
+                delegate = response.split("[DELEGATE]")[-1].strip()
+                logger.debug(f"Delegate: {delegate}")
 
                 # Extract the tool name and parameters
                 parser = TOMLParser()
                 try:
-                    action_parsed = parser.parse(input_string=action)
-                    logger.debug(f"Action Parsed: {action_parsed}")
+                    delegate_parsed = parser.parse(input_string=delegate)
+                    logger.debug(f"Delegate Parsed: {delegate_parsed}")
                 except Exception as e:
-                    logger.error(f"Failed to parse action: {e}")
-                    prompt = "Invalid action"
-                    self.context.add_message(role="assistant", content="Invalid action")
+                    logger.error(f"Failed to parse delegate agent: {e}")
+                    prompt = "Invalid delegate"
+                    self.context.add_message(
+                        role="assistant", content="Invalid delegate"
+                    )
                     continue
 
                 # If the action is valid, run the tool
                 if (
-                    action_parsed
-                    and "tool_name" in action_parsed
-                    and "tool_params" in action_parsed
+                    delegate_parsed
+                    and "agent_name" in delegate_parsed
+                    and "agent_input" in delegate_parsed
                 ):
-                    tool_name = action_parsed["tool_name"]
-                    tool_params = action_parsed["tool_params"]
+                    delegate_name = delegate_parsed["agent_name"]
+                    delegate_input = delegate_parsed["agent_input"]
                     logger.info(
-                        f"Executing tool: {tool_name} with params: {tool_params}"
+                        f"Executing tool: {delegate_name} with input: {delegate_input}"
                     )
 
                     # Check if the tool exists
-                    if tool_name in self.tool_names:
+                    if delegate_name in self.agent_names:
                         logger.debug(
-                            f"Running tool: {tool_name} with params: {tool_params}"
+                            f"Running tool: {delegate_name} with input: {delegate_input}"
                         )
-                        tool = self.tools[self.tool_names.index(tool_name)]
+                        delegate = self.agents[self.agent_names.index(delegate_name)]
                         try:
-                            tool_response = tool.run(**tool_params)
-                            logger.info(f"Tool Response: {tool_response}")
+                            delegate_response = delegate.run(prompt=delegate_input)
+                            logger.info(f"Delegate Response: {delegate_response}")
                         except Exception as e:
-                            logger.error(f"Error running tool {tool_name}: {e}")
-                            tool_response = "Tool execution failed"
+                            logger.error(f"Error running delegate {delegate_name}: {e}")
+                            delegate_response = "Delegate execution failed"
                     else:
-                        logger.error(f"Tool {tool_name} not found")
-                        tool_response = "Tool not found"
+                        logger.error(f"Delegate {delegate_name} not found")
+                        delegate_response = "Delegate not found"
                         continue
                 else:
-                    prompt = "Invalid action"
-                    self.context.add_message(role="assistant", content="Invalid action")
+                    prompt = "Invalid delegate"
+                    self.context.add_message(
+                        role="assistant", content="Invalid delegate"
+                    )
                     continue
 
             # Add the response to the history
             self.context.add_message(
                 role="user",
                 content=(
-                    f"[OBSERVATION] {tool_response}"
-                    if tool_response is not None
-                    else "No tool response"
+                    f"[OBSERVATION] {delegate_response}"
+                    if delegate_response is not None
+                    else "No delegate response"
                 ),
             )
 
@@ -170,25 +173,20 @@ class ToolAgent(BaseAgent):
         self.context = (
             memory if isinstance(memory, BaseMemory) else (memory or FleetingMemory)()
         )
-        self.context.add_message(role="system", content=REACT_PROMPT)
+        self.context.add_message(role="system", content=REACT_MULTI_AGENT_PROMPT)
 
 
 if __name__ == "__main__":
 
-    # Define the tools available to the agent
-    tools = [CalculatorTool(), PrimeTool(), TextInverterTool()]
+    # Create the delegate agent
+    delegate = ToolAgent(
+        model=GPT4omini(source="test"),
+        description="An swiss army knife agent, with math and basic string manipulation tools",
+        tools=[CalculatorTool(), PrimeTool(), TextInverterTool()],
+    )
 
-    # Create an agent with a model and tools
-    agent = ToolAgent(model=GPT4omini(source="agent"), tools=tools)
+    # Create the referee agent
+    agent = RefereeAgent(model=GPT4omini(source="test"), agents=[delegate])
 
-    for q in [
-        # "How much is 9 + 10?",
-        # "Is 1172233 a prime number?",
-        # "What is the square root of 16?",
-        # Math question we don't have a tool for
-        # "Find the first 2 prime numbers beyond 10000",
-        "Find the sum of the first 2 prime numbers beyond 10000, take the number as a string and reverse it",
-    ]:
-        logger.critical(f"Running agent with prompt: {q}")
-        response = agent.run(q)
-        logger.critical(f"Response: {response}")
+    # Trigger the agent
+    agent.run(prompt="What is 2+2?")
