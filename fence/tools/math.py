@@ -2,11 +2,20 @@
 Math based tools
 """
 
-import numexpr
+import logging
+import os
 
 from fence import setup_logging
 
 from .base import BaseTool
+
+# Set up numexpr logging early, to suppress annoying logs
+numexpr_logger = logging.getLogger("numexpr")
+numexpr_logger.setLevel(logging.WARNING)
+os.environ["NUMEXPR_MAX_THREADS"] = "4"
+from numexpr.utils import set_num_threads  # noqa
+
+set_num_threads(4)
 
 logger = setup_logging(__name__, log_level="info", serious_mode=False)
 
@@ -34,6 +43,7 @@ class CalculatorTool(BaseTool):
 
         logger.info(f"{self.__class__.__name__} was called: {expression}")
         try:
+            import numexpr
 
             result = numexpr.evaluate(expression)
 

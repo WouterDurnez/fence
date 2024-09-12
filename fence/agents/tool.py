@@ -44,7 +44,7 @@ class ToolAgent(BaseAgent):
         self.tool_names = [tool.__class__.__name__ for tool in self.tools]
 
         logger.info(
-            f"Creating an agent with model: {model} and tools: {self.tool_names}"
+            f"Creating an agent with model <{model.model_name}> and tools: {self.tool_names}"
         )
 
         # Create a memory context for the agent

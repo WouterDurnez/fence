@@ -25,25 +25,25 @@ class RefereeAgent(BaseAgent):
         self,
         model: LLM = None,
         description: str | None = None,
-        agents: list[BaseAgent] = None,
+        delegates: list[BaseAgent] = None,
         memory: BaseMemory = None,
     ):
         """
         Initialize the Referee agent object.
 
         :param model: An LLM model object.
-        :param agents: A list of Agent objects, to which the Referee can delegate.
+        :param delegates: A list of Agent objects, to which the Referee can delegate.
         :param memory: A memory class.
         """
 
         super().__init__(model=model, description=description)
 
         # Store the tools and their names
-        self.agents = agents or []
-        self.agent_names = [agent.__class__.__name__ for agent in self.agents]
+        self.delegates = delegates or []
+        self.delegate_names = [agent.__class__.__name__ for agent in self.delegates]
 
         logger.info(
-            f"Creating an agent with model: {model} and tools: {self.agent_names}"
+            f"Creating an agent with model <{model.model_name}> and delegates: {self.delegate_names}"
         )
 
         # Create a memory context for the agent
@@ -52,7 +52,7 @@ class RefereeAgent(BaseAgent):
         self.wipe_context(memory=self.memory)
 
         # Format tools for the prompt
-        self.formatted_agents = "".join(agent.format_toml() for agent in self.agents)
+        self.formatted_agents = "".join(agent.format_toml() for agent in self.delegates)
         logger.debug(f"Tools: {self.formatted_agents}")
 
     def run(self, prompt: str) -> str:
@@ -131,11 +131,13 @@ class RefereeAgent(BaseAgent):
                     )
 
                     # Check if the tool exists
-                    if delegate_name in self.agent_names:
+                    if delegate_name in self.delegate_names:
                         logger.debug(
                             f"Running tool: {delegate_name} with input: {delegate_input}"
                         )
-                        delegate = self.agents[self.agent_names.index(delegate_name)]
+                        delegate = self.delegates[
+                            self.delegate_names.index(delegate_name)
+                        ]
                         try:
                             delegate_response = delegate.run(prompt=delegate_input)
                             logger.info(f"Delegate Response: {delegate_response}")
@@ -185,8 +187,15 @@ if __name__ == "__main__":
         tools=[CalculatorTool(), PrimeTool(), TextInverterTool()],
     )
 
+    # Create an intermediary referee agent
+    intermediary = RefereeAgent(
+        model=GPT4omini(source="test"),
+        delegates=[delegate],
+        description="An intermediary agent that can delegate to a tool agent",
+    )
+
     # Create the referee agent
-    agent = RefereeAgent(model=GPT4omini(source="test"), agents=[delegate])
+    master = RefereeAgent(model=GPT4omini(source="test"), delegates=[intermediary])
 
     # Trigger the agent
-    agent.run(prompt="What is 2+2?")
+    master.run(prompt="What is 2+2?")
