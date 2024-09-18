@@ -1,103 +1,53 @@
 name: Fence publish Pipeline
 
-# Define when the workflow should run
+# This will run the workflow when a new tag is pushed
+#on:
+#  push:
+#    tags:
+#      - '*.*.*'
+
+# This will trigger on any push to the main branch
 on:
   push:
     branches:
       - main
-  workflow_dispatch: # Allows manual triggering of the workflow
 
-# Define permissions for the workflow
 permissions:
-  id-token: write # Required for OIDC to authenticate with PyPI
-  contents: read # To read repository contents
+  contents: read
 
-# Define global environment variables
-env:
-  PIP_CACHE_DIR: ${{ github.workspace }}/.cache/pip
-  POETRY_CACHE_DIR: ${{ github.workspace }}/.cache/poetry
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # Secrets are stored in GitHub Secrets
-
-# Define jobs to run in the workflow
 jobs:
-  # Job for running tests
-  test:
+  pypi-publish:
+    name: Upload release to PyPI
     runs-on: ubuntu-latest
-    environment: tests
+    environment:
+      name: testpypi
+      url: https://testpypi.org/project/wdurneztest/fence/
+    permissions:
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install Poetry
-        run: pip install poetry
-
-      - name: Install dependencies
-        run: poetry install --with dev
-
-      - name: Run tests
         run: |
-          cd tests
-          poetry run python3 -m pytest --junitxml=report.xml
+          curl -sSL https://install.python-poetry.org | python - -y
 
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: fence/tests/report.xml
+      - name: Update PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-  # Job for building the package
-  build:
-    runs-on: ubuntu-latest
-    needs: test # Only run if the test job passes
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Poetry
-        run: pip install poetry
+      - name: Update Poetry configuration
+        run: poetry config virtualenvs.create false
 
       - name: Install dependencies
-        run: poetry install
+        run: poetry install --sync --no-interaction
 
-      - name: Build the package
+      - name: Package project
         run: poetry build
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/*
-          retention-days: 7
-
-  # Job for publishing the package to PyPI
-  publish:
-    runs-on: ubuntu-latest
-    needs: build # Only run if the build job passes
-    if: ${{ github.event_name == 'workflow_dispatch' }} # Ensures this job runs only on manual trigger
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install Poetry
-        run: pip install poetry
-
-      - name: Install dependencies
-        run: poetry install
-
-      - name: Publish to PyPI using OIDC
-        run: poetry publish --build --repository testpypi
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
