@@ -23,6 +23,7 @@ class ToolAgent(BaseAgent):
 
     def __init__(
         self,
+        identifier: str | None = None,
         model: LLM = None,
         description: str | None = None,
         tools: list[BaseTool] = None,
@@ -31,13 +32,14 @@ class ToolAgent(BaseAgent):
         """
         Initialize the Agent object.
 
+        :param identifier: An identifier for the agent. If none is provided, the class name will be used.
         :param model: An LLM model object.
         :param description: A description of the agent. Important for MultiAgent flows
         :param tools: A list of Tool objects.
         :param memory: A memory class.
         """
 
-        super().__init__(model=model, description=description)
+        super().__init__(identifier=identifier, model=model, description=description)
 
         # Store the tools and their names
         self.tools = tools or []

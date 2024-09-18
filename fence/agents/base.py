@@ -16,13 +16,20 @@ link_logger.setLevel("INFO")
 class BaseAgent:
     """Base Agent class"""
 
-    def __init__(self, model: LLM = None, description: str | None = None):
+    def __init__(
+        self,
+        identifier: str | None = None,
+        model: LLM = None,
+        description: str | None = None,
+    ):
         """
         Initialize the Agent object.
 
+        :param identifier: An identifier for the agent. If none is provided, the class name will be used.
         :param model: An LLM model object.
         :param description: A description of the agent.
         """
+        self.identifier = identifier or self.__class__.__name__
         self.model = model
         self.description = description
 
@@ -43,7 +50,7 @@ class BaseAgent:
 
         # Preformat the arguments
         toml_string = f"""[[agents]]
-agent_name = "{self.__class__.__name__}"
+agent_name = "{self.identifier}"
 agent_description = "{self.description or self.__doc__}"
 """
 

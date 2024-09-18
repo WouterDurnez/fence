@@ -20,6 +20,7 @@ class ChatAgent(BaseAgent):
 
     def __init__(
         self,
+        identifier: str | None = None,
         model: LLM | None = None,
         description: str | None = None,
         memory: BaseMemory | None = None,
@@ -29,14 +30,15 @@ class ChatAgent(BaseAgent):
         """
         Initialize the Agent object.
 
+        :param identifier: An identifier for the agent. If none is provided, the class name will be used.
         :param model: An LLM model object.
         :param description: A description of the agent.
         :param memory: A memory object.
         :param name: The name of the agent. Will be used in multi-agent conversations.
-        :param profile: The name of the user or profile
+        :param profile: A behavioral profile of the agent.
         """
 
-        super().__init__(model=model, description=description)
+        super().__init__(identifier=identifier, model=model, description=description)
 
         logger.info(f"Creating an agent with model: {model.model_name} ")
 
@@ -46,7 +48,7 @@ class ChatAgent(BaseAgent):
         # Create a memory context for the agent
         self.context = (memory or FleetingMemory)()
         self.context.add_message(
-            role="system", content=CHAT_PROMPT.format(profile=profile)
+            role="system", content=CHAT_PROMPT.format(profile=profile or description)
         )
 
     def run(self, prompt: str) -> str:
