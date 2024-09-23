@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fence-llm"
-version = "0.0.5"
+version = "0.0.6"
 description = "Keep the bloat out! - A lightweight LLM interaction library"
 authors = ["wouter.durnez <wouter.durnez@gmail.com>"]
 readme = "README.md"
@@ -8,6 +8,10 @@ license = "MIT"
 packages = [
     { include = "fence", from = "." },
 ]
+
+[project.urls]
+Homepage = "https://github.com/WouterDurnez/fence"
+Issues = "https://github.com/WouterDurnez/fence/issues"
 
 [tool.poetry.dependencies]
 python = "^3.12"
