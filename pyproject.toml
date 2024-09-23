@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fence-llm"
-version = "0.0.6"
+version = "0.0.7"
 description = "Keep the bloat out! - A lightweight LLM interaction library"
 authors = ["wouter.durnez <wouter.durnez@gmail.com>"]
 readme = "README.md"
@@ -8,10 +8,11 @@ license = "MIT"
 packages = [
     { include = "fence", from = "." },
 ]
-
-[project.urls]
-Homepage = "https://github.com/WouterDurnez/fence"
-Issues = "https://github.com/WouterDurnez/fence/issues"
+include = ["pyproject.toml", "README.md", "LICENSE"]
+repository = "https://github.com/WouterDurnez/fence"
+homepage = "https://github.com/WouterDurnez/fence"
+documentation = "https://github.com/WouterDurnez/fence"
+keywords = ["openai", "llm", "gpt", "ai", "nlp", "language", "model", "api", "anthropic", "claude", "wrapper", "fence"]
 
 [tool.poetry.dependencies]
 python = "^3.12"
