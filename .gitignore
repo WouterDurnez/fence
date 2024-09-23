@@ -10,6 +10,9 @@ __pycache__/
 # Pycache files
 .idea
 
+# System files
+.DS_Store
+
 # Requirements base file
 /requirements.in
 
