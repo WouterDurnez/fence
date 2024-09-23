@@ -1,10 +1,9 @@
 name: Fence publish Pipeline
 
-# This will run the workflow when a new tag is pushed to main
 on:
   push:
-    tags:
-      - "*"
+    branches:
+      - main
 
 permissions:
   contents: read
