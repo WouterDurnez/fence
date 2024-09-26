@@ -21,6 +21,7 @@ class BaseAgent:
         identifier: str | None = None,
         model: LLM = None,
         description: str | None = None,
+        environment: dict | None = None,
     ):
         """
         Initialize the Agent object.
@@ -28,7 +29,9 @@ class BaseAgent:
         :param identifier: An identifier for the agent. If none is provided, the class name will be used.
         :param model: An LLM model object.
         :param description: A description of the agent.
+        :param environment: A dictionary of environment variables to pass to delegates and tools.
         """
+        self.environment = environment if environment else {}
         self.identifier = identifier or self.__class__.__name__
         self.model = model
         self.description = description
