@@ -6,7 +6,7 @@ from fence.tools.base import BaseTool
 class EnvTool(BaseTool):
     """Tool to access environment variables"""
 
-    def execute_tool(self, **kwargs) -> dict:
+    def execute_tool(self, **kwargs) -> str:
         """Print the environment"""
         environment = kwargs.get("environment", {})
         env_vars = ", ".join([f"{k}: {v}" for k, v in environment.items()])
