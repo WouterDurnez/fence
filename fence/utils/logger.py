@@ -6,18 +6,127 @@ import logging
 import logging.config
 from enum import Enum
 
+from wcwidth import wcswidth
+
 DEFAULT_LOGGING_FORMAT = "[%(levelname)s][%(name)s.%(funcName)s:%(lineno)d] %(message)s"
+
 
 #####################
 # Base configuration #
 #####################
 
 
-class ColorFormatter(logging.Formatter):
-    """
-    A custom formatter that adds joy to the log messages.
-    """
+class LogLevels(Enum):
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
+
+#####################
+# Formatter classes #
+#####################
+
+
+class BaseFixedWidthFormatter(logging.Formatter):
+    def __init__(
+        self,
+        fmt: str = None,
+        datefmt: str = None,
+        width: int = 60,
+        timestamp: bool = True,
+        function_trace: bool = True,
+    ):
+        """
+        Initialize the BaseFixedWidthFormatter object.
+
+        :param fmt: The format string for the formatter.
+        :param datefmt: The date format string for the formatter.
+        :param width: The width of the log message.
+        :param timestamp: Whether to include the timestamp in the log message.
+        :param function_trace: Whether to include the function line in the log message.
+        """
+        super().__init__(fmt, datefmt)
+        self.width = width
+        self.timestamp = timestamp
+        self.func_name = function_trace
+
+    def format(self, record: logging.LogRecord) -> str:
+        """
+        Format the log record.
+        """
+
+        # Save the original format
+        format_orig = self._style._fmt
+
+        # Replace the original format with one customized by logging level
+        self._style._fmt = "%(message)s"
+
+        # Call the original formatter class
+        formatted_message = super().format(record)
+
+        # Restore the original format
+        self._style._fmt = format_orig
+
+        # Get the non-message part
+        non_message_part = self.get_non_message_part(record)
+
+        # Calculate padding
+        visual_width = self.get_visual_width(non_message_part)
+        padding_needed = max(0, self.width - visual_width)
+
+        # Format the final message
+        final_message = self.format_final_message(
+            non_message_part, formatted_message, padding_needed
+        )
+
+        return self.apply_styling(final_message, record)
+
+    def get_non_message_part(self, record: logging.LogRecord) -> str:
+        """
+        Get the non-message part of the log record, such as the timestamp, log level, and function trace.
+        """
+
+        parts = []
+        if self.timestamp:
+            parts.append(self.formatTime(record, "%Y-%m-%d %H:%M:%S"))
+        parts.append(record.levelname)
+        if self.func_name:
+            parts.append(f"{record.module}.{record.funcName}:{record.lineno}")
+        return " ".join(f"[{part}]" for part in parts if part)
+
+    def get_visual_width(self, text: str):
+        """
+        Get the visual width of the text.
+        """
+        return wcswidth(text)
+
+    def format_final_message(
+        self, non_message_part: str, formatted_message: str, padding_needed: int
+    ) -> str:
+        """
+        Format the final message. This method should be overridden by subclasses.
+        """
+        lines = formatted_message.splitlines()
+        final_message = f"{non_message_part} {' ' * padding_needed}{lines[0]}"
+        if len(lines) > 1:
+            final_message += "".join(
+                "\n"
+                + " " * (self.get_visual_width(non_message_part) + padding_needed)
+                + line
+                for line in lines[1:]
+            )
+        return final_message
+
+    def apply_styling(self, message: str, record: logging.LogRecord) -> str:
+        """
+        Apply styling to the message. This method should be overridden by subclasses.
+        """
+        return message  # No styling in base class
+
+
+class ColorFormatter(BaseFixedWidthFormatter):
     COLORS = {
         "DEBUG": "\033[1;34m",  # Bold blue
         "INFO": "\033[1;32m",  # Bold green
@@ -33,46 +142,67 @@ class ColorFormatter(logging.Formatter):
         "CRITICAL": "🚨",
     }
 
-    def format(self, record):
+    def __init__(self, color_dict: dict = None, emoji_dict: dict = None, **kwargs):
+        """
+        Initialize the ColorFormatter object.
+
+        :param color_dict: A dictionary of log level to color mappings.
+        :param emoji_dict: A dictionary of log level to emoji mappings.
+        """
+        super().__init__(**kwargs)
+        self.COLORS = color_dict or self.COLORS
+        self.EMOJIS = emoji_dict or self.EMOJIS
+
+    def get_non_message_part(self, record: logging.LogRecord) -> str:
+        """
+        Get the non-message part of the log record, such as the timestamp, log level, and function trace. Here, we add emojis because REASONS.
+        """
+        parts = []
+        if self.timestamp:
+            parts.append(self.formatTime(record, "%Y-%m-%d %H:%M:%S"))
+        parts.append(f"{self.EMOJIS.get(record.levelname, '')} {record.levelname}")
+        if self.func_name:
+            parts.append(f"{record.module}.{record.funcName}:{record.lineno}")
+        return " ".join(f"[{part}]" for part in parts if part)
+
+    def apply_styling(self, message, record):
+        """
+        Apply styling to the message. Here, we add color to the log level.
+        """
         level_color = self.COLORS.get(record.levelname, "\033[0m")  # Default to reset
         reset_color = "\033[0m"
-
-        # Format the message with the LOGGING_FORMAT
-        formatted_message = super().format(record)
-
-        # Add timestamp, level, and color to the message
-        time = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
-        formatted_message = f"[{time}] [{record.levelname}] {self.EMOJIS.get(record.levelname, '')} [{record.module}.{record.funcName}:{record.lineno}] {formatted_message}"
-
-        return f"{level_color}{formatted_message}{reset_color}"
+        return f"{level_color}{message}{reset_color}"
 
 
-class LogLevels(Enum):
-    DEBUG = "DEBUG"
-    INFO = "INFO"
-    WARNING = "WARNING"
-    ERROR = "ERROR"
-    CRITICAL = "CRITICAL"
-
-
-def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool = None):
-    """
-    Setup logging for use in applications.
-    :param name: name of the logger
-    :param log_level: log level as a string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    :param serious_mode: whether to use the serious mode
-    :return: logger instance
-    """
-
+def setup_logging(
+    name: str = "root",
+    log_level: str = None,
+    width: int = 60,
+    timestamp: bool = True,
+    function_name: bool = True,
+    serious_mode: bool = True,
+):
     # Base configuration
     config_dict = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
             "simple": {
-                "format": "%(asctime)s [%(levelname)s] [%(name)s.%(funcName)s:%(lineno)d] %(message)s"
+                "()": BaseFixedWidthFormatter,
+                "fmt": "%(asctime)s [%(levelname)s] [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+                "width": width,
+                "timestamp": timestamp,
+                "function_name": function_name,
             },
-            "color": {"()": ColorFormatter},
+            "color": {
+                "()": ColorFormatter,
+                "fmt": "%(asctime)s [%(levelname)s] [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+                "width": width,
+                "timestamp": timestamp,
+                "function_name": function_name,
+            },
         },
         "handlers": {
             "console": {
@@ -85,7 +215,7 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
         "root": {"level": "INFO", "handlers": ["console"]},
     }
 
-    # Set the log level if it is not provided
+    # Set the log level if it is provided
     if log_level is not None:
         if log_level.upper() not in LogLevels.__members__:
             raise ValueError(
@@ -94,23 +224,28 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
         config_dict["root"]["level"] = log_level.upper()
         config_dict["handlers"]["console"]["level"] = log_level.upper()
 
-    # Set the serious mode if it is not provided
-    if serious_mode is not None:
-        config_dict["handlers"]["console"]["formatter"] = (
-            "simple" if serious_mode else "color"
-        )
+    # Set the formatter based on serious_mode
+    config_dict["handlers"]["console"]["formatter"] = (
+        "simple" if serious_mode else "color"
+    )
 
-    # Configure the logging module with the config file
+    # Configure the logging module with the config dictionary
     logging.config.dictConfig(config_dict)
 
-    logger = logging.getLogger(name)
-
-    return logger
+    return logging.getLogger(name)
 
 
 if __name__ == "__main__":
+    logger = setup_logging(log_level="debug", serious_mode=True, timestamp=True)
+    logger.debug("This is a debug message")
+    logger.info("This is an info message")
+    logger.warning("This is a warning message")
+    logger.error("This is an error message")
+    logger.critical("This is a critical message")
 
-    logger = setup_logging(log_level="debug", serious_mode=False)
+    logger = setup_logging(
+        log_level="debug", serious_mode=False, timestamp=True, function_name=True
+    )
     logger.debug("This is a debug message")
     logger.info("This is an info message")
     logger.warning("This is a warning message")
