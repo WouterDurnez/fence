@@ -54,7 +54,7 @@ class GPTBase(LLM, MessagesMixin):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", None)
         if not self.api_key:
             raise ValueError(
-                "OpenAI API key must be provided, either as an argument or in the environment variable 'OPENAI_API_KEY'"
+                "OpenAI API key must be provided, either as an argument or in the environment variable `OPENAI_API_KEY`"
             )
 
         # OpenAI parameters
