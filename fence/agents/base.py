@@ -31,7 +31,7 @@ class BaseAgent:
         :param description: A description of the agent.
         :param environment: A dictionary of environment variables to pass to delegates and tools.
         """
-        self.environment = environment if environment else {}
+        self.environment = environment or {}
         self.identifier = identifier or self.__class__.__name__
         self.model = model
         self.description = description

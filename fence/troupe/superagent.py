@@ -9,9 +9,6 @@ from fence.memory import BaseMemory, FleetingMemory
 from fence.models.openai import GPT4omini
 from fence.prompts.agents import REACT_MULTI_AGENT_TOOL_PROMPT
 from fence.tools.base import BaseTool
-from fence.tools.math import CalculatorTool, PrimeTool
-from fence.tools.scratch import EnvTool
-from fence.tools.text import TextInverterTool
 
 logger = setup_logging(__name__, log_level="debug", serious_mode=False)
 
@@ -27,6 +24,7 @@ class SuperAgent(BaseAgent):
         identifier: str | None = None,
         model: LLM | None = None,
         description: str | None = None,
+        role: str | None = None,
         delegates: list[BaseAgent] | None = None,
         tools: list[BaseTool] | None = None,
         memory: BaseMemory | None = None,
@@ -37,17 +35,24 @@ class SuperAgent(BaseAgent):
 
         :param identifier: An identifier for the agent. If none is provided, the class name will be used.
         :param model: An LLM model object.
-        :param description: A description of the agent.
+        :param description: A description of the agent. Used to represent the agent to other agents.
+        :param role: The role of the agent. A description for the agent itself, detailing its purpose.
         :param delegates: A list of delegate agents.
         :param tools: A list of Tool objects.
-        :param memory: A memory class.
+        :param memory: A memory class. Defaults to FleetingMemory.
         :param environment: A dictionary of environment variables to pass to delegates and tools.
         """
         super().__init__(
             identifier=identifier,
             model=model,
             description=description,
-            environment=environment if environment else {},
+            environment=environment or {},
+        )
+
+        # Set role
+        self.role = (
+            role
+            or "You are a general purpose agent, capable of delegating tasks to other agents or tools."
         )
 
         # Delegates and tools initialization
@@ -58,13 +63,19 @@ class SuperAgent(BaseAgent):
         )
         # Add environment variables to delegates
         for delegate in self.delegates.values():
-            delegate.environment.update(environment)
+            delegate.environment.update(self.environment)
 
-        self.tools = {tool.__class__.__name__: tool for tool in tools} if tools else {}
+        # Initialize tools with environment variables
+        if tools:
+            for tool in tools:
+                tool.environment.update(self.environment)
+            self.tools = {tool.__class__.__name__: tool for tool in tools}
+        else:
+            self.tools = {}
 
         # Logging agent creation details
         logger.info(
-            f"Initialized agent with model <{model.model_name}>, delegates: {self.delegates.keys()}, tools: {self.tools.keys()}"
+            f"Initialized agent with model <{model.model_name}>, delegates: {list(self.delegates.keys())}, tools: {list(self.tools.keys())}"
         )
 
         # Memory setup
@@ -95,7 +106,7 @@ class SuperAgent(BaseAgent):
         while iteration_count < max_iterations:
 
             link = Link(
-                name=f"referee_step_{iteration_count}",
+                name=f"{self.identifier or 'agent'}_step_{iteration_count}",
                 model=self.model,
                 template=MessagesTemplate(source=self.context),
             )
@@ -133,7 +144,9 @@ class SuperAgent(BaseAgent):
         self.context.add_message(
             role="system",
             content=REACT_MULTI_AGENT_TOOL_PROMPT.format(
-                delegates=self.formatted_delegates, tools=self.formatted_tools
+                role=self.role,
+                delegates=self.formatted_delegates,
+                tools=self.formatted_tools,
             ),
         )
 
@@ -188,7 +201,7 @@ class SuperAgent(BaseAgent):
             if tool_name in self.tools:
                 tool = self.tools[tool_name]
                 tool_response = tool.run(**tool_params, environment=self.environment)
-                logger.debug(f"Tool <{tool_name}> response: {tool_response}")
+                logger.info(f"Tool <{tool_name}> response: {tool_response}")
                 return tool_response
             else:
                 logger.error(f"Tool {tool_name} not found.")
@@ -235,25 +248,53 @@ if __name__ == "__main__":
     #     prompt="What is the secret string? Then, invert it. Finally, ask for advice on how to best phrase this. It is important the inverted string is in the final response."
     # )
 
-    # Define the tools available to the agent
-    tools = [CalculatorTool(), PrimeTool(), TextInverterTool(), EnvTool()]
+    # # Define the tools available to the agent
+    # tools = [CalculatorTool(), PrimeTool(), TextInverterTool(), EnvTool()]
+    #
+    # # Create an agent with a model and tools
+    # agent = SuperAgent(
+    #     model=GPT4omini(source="agent"),
+    #     tools=tools,
+    #     environment={"some_env_var": "some_value"},
+    # )
+    #
+    # for q in [
+    #     # "How much is 9 + 10?",
+    #     # "Is 1172233 a prime number?",
+    #     # "What is the square root of 16?",
+    #     # Math question we don't have a tool for
+    #     # "Find the first 2 prime numbers beyond 10000",
+    #     # "Find the sum of the first 2 prime numbers beyond 1005, take the number as a string and reverse it",
+    #     "Tell me what the value of the environment variable 'some_env_var' is",
+    # ]:
+    #     logger.critical(f"Running agent with prompt: {q}")
+    #     response = agent.run(q)
+    #     logger.critical(f"Response: {response}")
 
-    # Create an agent with a model and tools
-    agent = SuperAgent(
+    class AccountNameRetrieverTool(BaseTool):
+        """
+        Tool to retrieve the account holder name from a database.
+        """
+
+        def execute_tool(self, environment):
+            account_id = self.environment.get("current_account_id", "unknown")
+            logger.info(f"Retrieving account holder name for account_id: {account_id}")
+            if account_id == "foo":
+                return "Bert"
+            if account_id == "bar":
+                return "Ernie"
+            return "Unknown"
+
+    # Create the agents
+    child_agent = SuperAgent(
+        identifier="child_accountant",
         model=GPT4omini(source="agent"),
-        tools=tools,
-        environment={"some_env_var": "some_value"},
+        tools=[AccountNameRetrieverTool()],
     )
-
-    for q in [
-        # "How much is 9 + 10?",
-        # "Is 1172233 a prime number?",
-        # "What is the square root of 16?",
-        # Math question we don't have a tool for
-        # "Find the first 2 prime numbers beyond 10000",
-        # "Find the sum of the first 2 prime numbers beyond 1005, take the number as a string and reverse it",
-        "Tell me what the value of the environment variable 'some_env_var' is",
-    ]:
-        logger.critical(f"Running agent with prompt: {q}")
-        response = agent.run(q)
-        logger.critical(f"Response: {response}")
+    parent_agent = SuperAgent(
+        identifier="parent_accountant",
+        model=GPT4omini(source="agent"),
+        delegates=[child_agent],
+        environment={"current_account_id": "bar"},
+    )
+    parent_agent.run("what is the current account holders name?")
