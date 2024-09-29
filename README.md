@@ -9,13 +9,9 @@
 
 # 🤺 Fence
 
-No, not that kind of fence. The once with the interlinked pieces of metal. Like a chain fence?
-
 `Fence` is a simple, lightweight library for LLM communication. A lot of the functionality was inspired by/derived of LangChain (the OG LLM package) basics, since that's how the package was born - as a stripped down version of LangChain functionality, with cooler names.
 
 ## 🤔 Raison d'être
-
-### Why does this exist?
 
 The simple answer: by accident. The slightly longer answer: LangChain used to be (is?) a pretty big package with a ton of dependencies. The upside is that it's powerful for PoC purposes, because it has it all.
 

@@ -38,7 +38,7 @@ Now, let's get started. Here is the initial input:
 
 
 # ReACT prompt for Tool usage
-REACT_MULTI_AGENT_TOOL_PROMPT = """You will be given input, which starts with a question, and then potentially a series of [OBSERVATION]s, [DELEGATE]s and [ACTION]s. You will need to process this input. Always begin with a [THOUGHT] to help reason what the next best step is.
+REACT_MULTI_AGENT_TOOL_PROMPT = """{role} You will be given input, which starts with a question, and then potentially a series of [OBSERVATION]s, [DELEGATE]s and [ACTION]s. You will need to process this input. Always begin with a [THOUGHT] to help reason what the next best step is.
  Then, continue with one of these options: [ACTION], [DELEGATE] or [ANSWER].
 
 Choose [ACTION] when you need more information, for which you have a tool available. You can call this tool by replying as follows:
