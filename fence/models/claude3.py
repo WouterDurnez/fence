@@ -29,7 +29,7 @@ class Claude3Base(LLM, MessagesMixin):
 
     def __init__(
         self,
-        source: str,
+        source: str | None = None,
         full_response: bool = False,
         metric_prefix: str | None = None,
         extra_tags: dict | None = None,
@@ -45,9 +45,7 @@ class Claude3Base(LLM, MessagesMixin):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(
-            source=source, metric_prefix=metric_prefix, extra_tags=extra_tags
-        )
+        super().__init__(metric_prefix=metric_prefix, extra_tags=extra_tags)
 
         self.full_response = full_response
 
@@ -181,14 +179,14 @@ class Claude3Base(LLM, MessagesMixin):
 class ClaudeHaiku(Claude3Base):
     """Claude Haiku model class"""
 
-    def __init__(self, source: str, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize a Claude Haiku model
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(source=source, **kwargs)
+        super().__init__(**kwargs)
 
         self.model_id = MODEL_ID_HAIKU
         self.model_name = "ClaudeHaiku"
@@ -197,14 +195,14 @@ class ClaudeHaiku(Claude3Base):
 class ClaudeSonnet(Claude3Base):
     """Claude Sonnet model class"""
 
-    def __init__(self, source: str, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize a Claude Sonnet model
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(source=source, **kwargs)
+        super().__init__(**kwargs)
 
         self.model_id = MODEL_ID_SONNET
         self.model_name = "ClaudeSonnet"
@@ -213,14 +211,14 @@ class ClaudeSonnet(Claude3Base):
 class Claude35Sonnet(Claude3Base):
     """Claude Sonnet 3.5 model class"""
 
-    def __init__(self, source: str, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize a Claude Sonnet 3.5 model
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(source=source, **kwargs)
+        super().__init__(**kwargs)
 
         self.model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
         self.model_name = "ClaudeSonnet3.5"

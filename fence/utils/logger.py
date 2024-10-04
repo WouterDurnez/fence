@@ -56,7 +56,6 @@ class BaseFixedWidthFormatter(logging.Formatter):
         """
         Format the log record.
         """
-
         # Save the original format
         format_orig = self._style._fmt
 
@@ -76,7 +75,7 @@ class BaseFixedWidthFormatter(logging.Formatter):
         visual_width = self.get_visual_width(non_message_part)
         padding_needed = max(0, self.width - visual_width)
 
-        # Format the final message
+        # Format the final message with proper indentation
         final_message = self.format_final_message(
             non_message_part, formatted_message, padding_needed
         )
@@ -87,7 +86,6 @@ class BaseFixedWidthFormatter(logging.Formatter):
         """
         Get the non-message part of the log record, such as the timestamp, log level, and function trace.
         """
-
         parts = []
         if self.timestamp:
             parts.append(self.formatTime(record, "%Y-%m-%d %H:%M:%S"))
@@ -106,17 +104,25 @@ class BaseFixedWidthFormatter(logging.Formatter):
         self, non_message_part: str, formatted_message: str, padding_needed: int
     ) -> str:
         """
-        Format the final message. This method should be overridden by subclasses.
+        Format the final message with proper indentation for multiline messages.
         """
         lines = formatted_message.splitlines()
-        final_message = f"{non_message_part} {' ' * padding_needed}{lines[0]}"
+
+        # First line combines the non-message part with the first part of the message
+        first_line = f"{non_message_part} {' ' * padding_needed}{lines[0]}"
+
+        # Calculate indentation for subsequent lines (aligning them with the start of the message)
+        # The indentation should match the width of the non-message part plus the padding
+        message_start_column = self.get_visual_width(non_message_part) + padding_needed
+        message_indent = " " * message_start_column
+
+        # Handle subsequent lines (if the message spans multiple lines)
         if len(lines) > 1:
-            final_message += "".join(
-                "\n"
-                + " " * (self.get_visual_width(non_message_part) + padding_needed)
-                + line
-                for line in lines[1:]
-            )
+            overflow_lines = "\n".join(f"{message_indent}{line}" for line in lines[1:])
+            final_message = f"{first_line}\n{overflow_lines}"
+        else:
+            final_message = first_line
+
         return final_message
 
     def apply_styling(self, message: str, record: logging.LogRecord) -> str:
@@ -155,7 +161,7 @@ class ColorFormatter(BaseFixedWidthFormatter):
 
     def get_non_message_part(self, record: logging.LogRecord) -> str:
         """
-        Get the non-message part of the log record, such as the timestamp, log level, and function trace. Here, we add emojis because REASONS.
+        Get the non-message part of the log record, such as the timestamp, log level, and function trace. Here, we add emojis because RE
         """
         parts = []
         if self.timestamp:
@@ -179,7 +185,7 @@ def setup_logging(
     log_level: str = None,
     width: int = 60,
     timestamp: bool = True,
-    function_name: bool = True,
+    function_trace: bool = True,
     serious_mode: bool = True,
 ):
     # Base configuration
@@ -193,7 +199,7 @@ def setup_logging(
                 "datefmt": "%Y-%m-%d %H:%M:%S",
                 "width": width,
                 "timestamp": timestamp,
-                "function_name": function_name,
+                "function_trace": function_trace,
             },
             "color": {
                 "()": ColorFormatter,
@@ -201,7 +207,7 @@ def setup_logging(
                 "datefmt": "%Y-%m-%d %H:%M:%S",
                 "width": width,
                 "timestamp": timestamp,
-                "function_name": function_name,
+                "function_trace": function_trace,
             },
         },
         "handlers": {
@@ -243,11 +249,21 @@ if __name__ == "__main__":
     logger.error("This is an error message")
     logger.critical("This is a critical message")
 
+    logger.info(
+        "This is a very long info message. It spans many lines. It is designed to overflow."
+        * 10
+    )
+
     logger = setup_logging(
-        log_level="debug", serious_mode=False, timestamp=True, function_name=True
+        log_level="debug", serious_mode=False, timestamp=True, function_trace=True
     )
     logger.debug("This is a debug message")
     logger.info("This is an info message")
     logger.warning("This is a warning message")
     logger.error("This is an error message")
     logger.critical("This is a critical message")
+
+    logger.info(
+        "This is a very long info message.\n It spans many lines.\n It is designed to overflow."
+        * 10
+    )

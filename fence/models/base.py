@@ -60,7 +60,7 @@ class LLM(ABC):
 
     def __init__(
         self,
-        source: str,
+        source: str | None = None,
         metric_prefix: str | None = None,
         extra_tags: dict | None = None,
         **kwargs,

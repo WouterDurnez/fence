@@ -16,7 +16,6 @@ from fence.utils.base import time_it
 
 logger = logging.getLogger(__name__)
 
-
 ################
 # Base classes #
 ################
@@ -28,7 +27,7 @@ class BaseChain(ABC):
     """
 
     def __init__(
-        self, links: Collection[BaseLink] | Iterable[BaseLink], llm: LLM = None
+        self, links: Collection[BaseLink] | Iterable[BaseLink], model: LLM = None
     ):
         """
         Initialize the BaseChain object.
@@ -36,7 +35,13 @@ class BaseChain(ABC):
         :param links: A set of Link objects.
         """
         self.links = links
-        self.llm = llm
+        self.model = model
+
+        # If there's only one link, there's no point in calling a chain
+        if len(self.links) == 1:
+            logger.warning(
+                "Only one link in the chain. Consider running the link directly."
+            )
 
     def __call__(self, *args, **kwargs):
         """
@@ -59,7 +64,7 @@ class BaseChain(ABC):
         )
         output_keys_set = set(link.output_key for link in self.links)
         required_keys = input_keys_set - output_keys_set
-        logger.debug(f"Input keys: {input_keys_set}" f"Output keys: {output_keys_set}")
+        logger.debug(f"Input keys: {input_keys_set} \n Output keys: {output_keys_set}")
 
         # For more than one link, we do not require a state key, as one is always provided by the previous link
         if len(self.links) > 1:
@@ -101,13 +106,13 @@ class Chain(BaseChain):
     Chain class that takes a list or set of Link objects, determines the order in which to run them, and does so.
     """
 
-    def __init__(self, links: Collection[Link], llm: LLM = None):
+    def __init__(self, links: Collection[Link], model: LLM = None):
         """
         Initialize the Chain object.
 
         :param links: A set of Link objects.
         """
-        super().__init__(links=links, llm=llm)
+        super().__init__(links=links, model=model)
         self.graph = defaultdict(list)
 
         # Build the graph
@@ -135,24 +140,25 @@ class Chain(BaseChain):
         """
 
         # Check if an LLM model was provided
-        if self.llm is None and any(link.model is None for link in self.links):
+        if self.model is None and any(link.model is None for link in self.links):
             raise ValueError("An LLM model must be provided.")
 
         # Validate the input keys
         self._find_and_validate_keys(input_dict)
 
         # Initialize the output dictionary with the input dictionary, which will be passed to the first chain
-        output_dict = input_dict
+        state_dict = input_dict.copy()
 
         # Iterate through Links in topological order
         for link in self._topological_sort():
+
             # Run the Link with Chain's LLM model if the Link doesn't have one
             if link.model is None:
-                output_dict.update(link.run(input_dict=output_dict, llm=self.llm))
+                state_dict.update(link.run(input_dict=state_dict, model=self.model))
             else:
-                output_dict.update(link.run(input_dict=output_dict))
+                state_dict.update(link.run(input_dict=state_dict))
 
-        return output_dict
+        return state_dict
 
     def _topological_sort(self):
         """
@@ -213,93 +219,94 @@ class LinearChain(BaseChain):
     LinearChain class that takes a list or set of Link objects, and runs them in the order they are provided.
     """
 
-    def __init__(self, links: Iterable[BaseLink], llm=None):
+    def __init__(self, links: Iterable[BaseLink], model=None):
         """
         Initialize the LinearChain object.
 
         :param links: A set of Link objects.
         """
-        super().__init__(links=links, llm=llm)
+        super().__init__(links=links, model=model)
 
     def run(self, input_dict):
-        # Check if an LLM model was provided
-        if self.llm is None and any(link.model is None for link in self.links):
-            raise ValueError("An LLM model must be provided.")
+        # Check if a model was provided
+        if self.model is None and any(link.model is None for link in self.links):
+            raise ValueError("A model must be provided.")
 
         # Validate the input keys
         self._find_and_validate_keys(input_dict)
 
-        # Initialize the output dictionary with the input dictionary, which will be passed to the first chain
-        state_dict = input_dict
-
         # Iterate through Links in order
         for link in self.links:
-            # Keep track of state keys
-            incoming_state_keys = set(state_dict.keys())
 
-            # Check if state_dict contains all the input keys for the Link
-            if not all(input_key in state_dict for input_key in link.input_keys):
+            # Keep track of state keys
+            incoming_state_keys = set(input_dict.keys())
+
+            # Check if input dict contains all the input keys for the Link
+            if not all(input_key in input_dict for input_key in link.input_keys):
                 raise ValueError(
                     f"Input keys {link.input_keys} not found in state_dict."
                 )
 
-            # Run the Link with Chain's LLM model if the Link doesn't have one
+            # Run the Link with Chain's model if the Link doesn't have one
             if link.model is None:
-                response_dict = link.run(input_dict=state_dict, llm=self.llm)
+                response_dict = link.run(input_dict=input_dict, model=self.model)
             else:
-                response_dict = link.run(input_dict=state_dict)
+                response_dict = link.run(input_dict=input_dict)
 
             # Update the state_dict with the output of the Link
-            state_dict.update(response_dict)
+            input_dict.update(response_dict)
 
             # New state keys
-            outgoing_state_keys = set(state_dict.keys())
+            outgoing_state_keys = set(input_dict.keys())
             # State keys that were added by the Link
             new_state_keys = outgoing_state_keys - incoming_state_keys
             # State keys removed by the Link
             removed_state_keys = incoming_state_keys - outgoing_state_keys
 
             logger.info(
-                f"🔑 State keys: {list(state_dict.keys())} (added: {list(new_state_keys)}, removed: {list(removed_state_keys)})"
+                f"🔑 State keys: {list(input_dict.keys())} (added: {list(new_state_keys)}, removed: {list(removed_state_keys)})"
             )
 
-        return state_dict
+        return input_dict
 
 
 if __name__ == "__main__":
+
     # Instantiate an LLM model
     claude = ClaudeInstant(source="test")
 
     # Example chains
     link_a = Link(
         template=StringTemplate(
-            "What's the opposite of {{A}}? Reply with one word.", ["A"]
+            "What's the opposite of {A}? Reply with one word.",
         ),
         name="opposite",
         output_key="X",
     )
     link_b = Link(
         template=StringTemplate(
-            "What's a superlative version of {{B}}. Reply with one word.",
-            ["B"],
+            "What's a superlative version of {B}. Reply with one word.",
         ),
         name="superlative",
         output_key="Y",
     )
     link_c = Link(
         template=StringTemplate(
-            "Write a sarcastic poem using this as inspiration: '{{X}}' and '{{Y}}'",
-            ["X", "Y"],
+            "Write a sarcastic poem using this as inspiration: '{X}' and '{Y}'",
         ),
         name="sarcastic_poem",
         output_key="output",
     )
 
     # Combine the chains into a set
-    chain = Chain(llm=claude, links=[link_a, link_b, link_c])
+    chain = Chain(model=claude, links=[link_a, link_b, link_c])
 
     # Run the chain set
     result = chain(input_dict={"A": "calm", "B": "a storm"})
+
+    # Link result
+    result_link = link_a(input_dict={"A": "calm"}, model=claude)
+    print(result_link)
 
     # print(result["output"])
     #

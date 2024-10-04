@@ -103,6 +103,7 @@ class BaseTemplate(ABC):
         # Make input_dict
         if input_dict is None:
             input_dict = {}
+
         input_dict.update(kwargs)
 
         # Find both missing and superfluous variables

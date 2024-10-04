@@ -16,6 +16,8 @@ from fence.utils.base import time_it
 
 logger = logging.getLogger(__name__)
 
+PROTECTED_LINK_KWARGS = ["model"]
+
 ################
 # Base classes #
 ################
@@ -167,12 +169,6 @@ class Link(BaseLink):
         self.model = model
         self.template = template
 
-        # If no LLM model is provided, raise an error
-        if model is None:
-            logger.warning(
-                "A `Link` takes a mandatory `llm` argument! Please provide one."
-            )
-
         # If the template is a MessagesTemplate, we only accept Claude3 type models
         if isinstance(template, MessagesTemplate):
             if not isinstance(model, (Claude3Base, GPTBase)):
@@ -181,7 +177,7 @@ class Link(BaseLink):
                 )
 
                 # Reformat the template to a StringTemplate
-                template = template.to_string_template()
+                self.template = self.template.to_string_template()
 
         # Get the input keys from the template
         self.input_keys = template.input_variables
@@ -209,11 +205,14 @@ class Link(BaseLink):
         # Update the input dictionary with the keyword arguments
         if input_dict is None:
             input_dict = {}
+
         input_dict.update(kwargs)
 
         # Check if an LLM model was provided
-        if self.model is None and kwargs.get("llm") is None:
-            raise ValueError("An LLM model must be provided.")
+        if self.model is None and kwargs.get("model") is None:
+            raise ValueError(
+                "An model must be provided, either as an argument or in the Link object."
+            )
 
         # Validate the input dictionary
         self._validate_input(input_dict)
@@ -224,10 +223,10 @@ class Link(BaseLink):
 
         # Determine if the LLM model is provided as a keyword argument,
         # otherwise use the LLM model of the Link
-        llm = kwargs.pop("llm", self.model)
+        model = input_dict.pop("model", self.model)
 
         # Call the LLM model
-        response = llm.invoke(prompt=prompt)
+        response = model.invoke(prompt=prompt)
         logger.debug(f"Raw response: {response}")
 
         # Parse the response
@@ -242,7 +241,7 @@ class Link(BaseLink):
         # under that key. This allows us to track the output of a specific Link in a Chain, while still having a
         # consistent key for the output of the Link that allows subsequent Links to find the latest output.
 
-        # If the response is a dictionary, we assume it contains the primary output under the key 'output'
+        # If the response is a dictionary, we assume it contains the primary output under the key 'state'
         if isinstance(response, dict):
             if "state" not in response.keys():
                 logger.debug(
@@ -263,6 +262,6 @@ class Link(BaseLink):
         if not self.output_key == "state":
             response_dict[self.output_key] = response
 
-        logger.debug(f"🧐 Current state: {response_dict['state']}")
+        logger.debug(f"Current state: {response_dict['state']}")
 
         return response_dict

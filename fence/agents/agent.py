@@ -36,7 +36,7 @@ class SuperAgent(BaseAgent):
         :param identifier: An identifier for the agent. If none is provided, the class name will be used.
         :param model: An LLM model object.
         :param description: A description of the agent. Used to represent the agent to other agents.
-        :param role: The role of the agent. A description for the agent itself, detailing its purpose.
+        :param role: The role of the agent. Used to represent the agent to itself, detailing its purpose.
         :param delegates: A list of delegate agents.
         :param tools: A list of Tool objects.
         :param memory: A memory class. Defaults to FleetingMemory.

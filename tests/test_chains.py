@@ -27,7 +27,7 @@ def test_base_chain_run_method_raises_error(llm):
     The BaseChain class is an abstract base class and its run method needs to be implemented in any derived class.
     """
     with pytest.raises(TypeError):
-        base_chain = BaseChain(links=[Mock(BaseLink)], llm=llm)
+        base_chain = BaseChain(links=[Mock(BaseLink)], model=llm)
         base_chain.run(input_dict={"A": "test"})
 
 

@@ -25,7 +25,7 @@ class GPTBase(LLM, MessagesMixin):
 
     def __init__(
         self,
-        source: str,
+        source: str | None = None,
         metric_prefix: str | None = None,
         extra_tags: dict | None = None,
         api_key: str | None = None,
@@ -180,7 +180,7 @@ class GPT(GPTBase):
     GPT model
     """
 
-    def __init__(self, model_id: str, source: str, **kwargs):
+    def __init__(self, model_id: str, **kwargs):
         """
         Initialize a GPT model
         :param model_id: The model ID
@@ -188,7 +188,7 @@ class GPT(GPTBase):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(source=source, **kwargs)
+        super().__init__(**kwargs)
         self.model_id = self.model_name = model_id
 
 
@@ -197,13 +197,13 @@ class GPT4o(GPT):
     GPT-4o model
     """
 
-    def __init__(self, source: str, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize a GPT-4o model
         :param source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
-        super().__init__(model_id="gpt-4o", source=source, **kwargs)
+        super().__init__(model_id="gpt-4o", **kwargs)
 
 
 class GPT4(GPT):
@@ -211,13 +211,13 @@ class GPT4(GPT):
     GPT-4 model
     """
 
-    def __init__(self, source: str, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize a GPT-4 model
         :param source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
-        super().__init__(model_id="gpt-4", source=source, **kwargs)
+        super().__init__(model_id="gpt-4", **kwargs)
 
 
 class GPT4omini(GPT):
@@ -225,13 +225,13 @@ class GPT4omini(GPT):
     GPT-4mini model
     """
 
-    def __init__(self, source: str, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize a GPT-4mini model
         :param source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
-        super().__init__(model_id="gpt-4o-mini", source=source, **kwargs)
+        super().__init__(model_id="gpt-4o-mini", **kwargs)
 
 
 if __name__ == "__main__":

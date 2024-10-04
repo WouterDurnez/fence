@@ -24,7 +24,7 @@ class ClaudeBase(LLM):
 
     def __init__(
         self,
-        source: str,
+        source: str | None = None,
         metric_prefix: str | None = None,
         extra_tags: dict | None = None,
         **kwargs,
@@ -139,14 +139,14 @@ class ClaudeBase(LLM):
 class ClaudeInstant(ClaudeBase):
     """Claude Instant model class"""
 
-    def __init__(self, source: str, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize a Claude Instant model
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(source=source, **kwargs)
+        super().__init__(**kwargs)
 
         self.model_id = "anthropic.claude-instant-v1"
         self.model_name = "ClaudeInstant"
@@ -155,14 +155,14 @@ class ClaudeInstant(ClaudeBase):
 class ClaudeV2(ClaudeBase):
     """Claude v2 model class"""
 
-    def __init__(self, source: str, **kwargs):
+    def __init__(self, **kwargs):
         """
         Initialize a Claude Instant model
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(source=source, **kwargs)
+        super().__init__(**kwargs)
 
         self.model_id = "anthropic.anthropic.claude-v2"
         self.model_name = "ClaudeV2"
