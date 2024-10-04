@@ -30,6 +30,38 @@ Then, some other things were added left and right, and this eventually turned in
 
 Naturally, it's nowhere as powerful as, for instance, LangChain. If you want to build a quick PoC with relatively complex logic, maybe go for the OG instead. If you want to be set on your way with a simple, lightweight package that's easy to understand and extend, Fence might be the way to go.
 
+## 👋 Look ma, no dependencies!
+
+Here's a hello world example:
+
+```python
+from fence import Link
+from fence.templates.string import StringTemplate
+from fence.models.openai import GPT4omini
+
+# Create a link
+link = Link(
+    model=GPT4omini(),
+    template=StringTemplate("Write a poem about the value of a {topic}!"),
+    name='hello_world_link'
+)
+
+# Run the link
+output = link.run(topic='fence')['state']
+print(output)
+```
+
+This will output something like:
+
+```bash
+[2024-10-04 17:45:15] [ℹ️ INFO] [links.run:203]              Executing <hello_world_link> Link
+Sturdy wood and nails,
+Boundaries draw peace and calm,
+Guarding hearts within.
+```
+
+There's more in the [notebook](notebooks) section, with a _lot_ more to cover!
+
 ## 💪 Features
 
 ### What can I do with Fence?
