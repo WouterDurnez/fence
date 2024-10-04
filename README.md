@@ -60,7 +60,7 @@ Boundaries draw peace and calm,
 Guarding hearts within.
 ```
 
-There's more in the [notebook](notebooks) section, with a _lot_ more to cover!
+Much wow, very next level. There's more in the [notebook](notebooks) section, with a _lot_ more to cover!
 
 ## 💪 Features
 
@@ -69,6 +69,7 @@ There's more in the [notebook](notebooks) section, with a _lot_ more to cover!
 - **Uniform interface for `LLMs`**. Since our main use case was Bedrock, we built Fence to work with Bedrock models. However, it also has openAI support, and it's easy to extend to other models (contributors welcome!)
 - **Links and Chains** help you build complex pipelines with multiple models. This is a feature that's been around since LangChain, and it's still here. You can parametrize templates, and pass the output of one model to another.
 - **Template classes** that handle the basics, and that work across models (e.g., a MessageTemplate can be sent to a Bedrock Claude3 model, _or_ to an openAI model - system/user/assistant formatting is handled under the hood).
+- **Agents** to move on to the sweet, sweet next level of LLM orchestration. Built using the ReAct pattern.
 - **Basic utils on board** for typical tasks like retries, parallelization, logging, output parsers, etc.
 
 ### What can't I do with Fence?
