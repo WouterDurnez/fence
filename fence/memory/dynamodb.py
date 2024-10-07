@@ -187,20 +187,21 @@ if __name__ == "__main__":
     memory = DynamoDBMemory(
         table_name="fence_test",
         primary_key_name="session",
+        primary_key_value="08f1201a-d9cd-4ef7-9b63-c26d2c824576",
         # primary_key_value="test_a",
     )
 
-    # Add a system message
-    memory.set_system_message("This is a system message")
-
-    # Add a user message
-    memory.add_user_message("This is a user message")
-
-    # Add an assistant message
-    memory.add_assistant_message("This is an assistant message")
+    # # Add a system message
+    # memory.set_system_message("This is a system message")
+    #
+    # # Add a user message
+    # memory.add_user_message("This is a user message")
+    #
+    # # Add an assistant message
+    # memory.add_assistant_message("This is an assistant message")
 
     # Print the messages
-    logger.info(
-        f"System message <{type(memory.get_system_message())}>: {memory.get_system_message()}"
-    )
-    logger.info(f"Messages <{type(memory._get_messages())}>: {memory._get_messages()}")
+    messages = memory.get_messages()
+    system = memory.get_system_message()
+    logger.info(f"System message <{type(system)}>: {system}")
+    logger.info(f"Messages <{type(messages)}>: {messages}")
