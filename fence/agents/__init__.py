@@ -1,4 +1,5 @@
+from .agent import SuperAgent
 from .base import BaseAgent
-from .tool import ToolAgent
+from .chat import ChatAgent
 
-__all__ = ["BaseAgent", "ToolAgent"]
+__all__ = ["BaseAgent", "SuperAgent", "ChatAgent"]
