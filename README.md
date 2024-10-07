@@ -30,7 +30,19 @@ Then, some other things were added left and right, and this eventually turned in
 
 Naturally, it's nowhere as powerful as, for instance, LangChain. If you want to build a quick PoC with relatively complex logic, maybe go for the OG instead. If you want to be set on your way with a simple, lightweight package that's easy to understand and extend, Fence might be the way to go.
 
-## 👋 Look ma, no dependencies!
+## 🛠️ How do I use it?
+
+Fence just has a few basic components. See the [notebooks](notebooks) for examples on how to use them. Documentation is coming soon, but for now, you can check out the [source code](fence) for more details.
+
+## 📦 Installation
+
+You can install Fence from PyPI:
+
+```bash
+pip install fence-llm
+```
+
+## 👋 Look ma, no dependencies (kinda)!
 
 Here's a hello world example:
 
@@ -84,30 +96,12 @@ The OG, no explanation needed.
 
 A more recent package, with a lot of cool features! Great for building PoCs, too. Built by ex-AWS folks, and promises to be a lot more industry-oriented.
 
-## 🛠️ How do I use it?
-
-Fence just has a few basic components. See the [notebooks](notebooks) for examples on how to use them. Documentation is coming soon, but for now, you can check out the [source code](fence) for more details.
-
-## 📦 Installation
-
-You can install Fence from PyPI:
-
-```bash
-pip install fence-llm
-```
-
 ## 🗺️ Roadmap
 
-- [ ] Add more models
-- [ ] Add more tests
-- [ ] Add some basic design patterns (e.g., CoT, MapReduce)
-- [ ] Add more tutorials
-- [ ] Add more user-friendly auth methods (e.g., SigV4, OpenAI keys as params/config, etc.)
+- [ ] Add more models (e.g., native Anthropic models)
+- [ ] Add more tests 😬
+- [ ] Add more notebook tutorials to showcase features
 
 ## 🤝 Contributing
 
 We welcome contributions! Check out the [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
-
-## 🙋🏻‍♂️ Open issues or obstacles
-
-- [ ] Bedrock access depends on user logging in themselves ➡️ Can we make this more user-friendly?
