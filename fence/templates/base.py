@@ -28,7 +28,9 @@ class BaseTemplate(ABC):
 
         # We have no time for anything other than strings or Messages
         if not isinstance(source, (str, Messages)):
-            raise TypeError("Template must be a string or a Messages object.")
+            raise TypeError(
+                f"Template must be a string or a Messages object - received {type(source)}"
+            )
 
     def __call__(self, input_dict: dict = None, **kwargs):
         """

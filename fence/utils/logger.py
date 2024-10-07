@@ -103,6 +103,12 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
     # Configure the logging module with the config file
     logging.config.dictConfig(config_dict)
 
+    # Suppress logging from boto3 and botocore
+    logging.getLogger("boto3").setLevel(logging.CRITICAL)
+    logging.getLogger("botocore").setLevel(logging.CRITICAL)
+    logging.getLogger("urllib3").setLevel(logging.CRITICAL)
+
+    # Get the logger
     logger = logging.getLogger(name)
 
     return logger

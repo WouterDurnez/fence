@@ -2,10 +2,11 @@
 Agent class to orchestrate a flow that potentially calls tools or other, specialized agents.
 """
 
-from fence import LLM, Link, MessagesTemplate, TOMLParser, setup_logging
+from fence import LLM, Link, TOMLParser, setup_logging
 from fence.agents.base import BaseAgent
 from fence.links import logger as link_logger
-from fence.memory import BaseMemory, FleetingMemory
+from fence.memory.base import BaseMemory, FleetingMemory
+from fence.memory.dynamodb import DynamoDBMemory
 from fence.models.openai import GPT4omini
 from fence.prompts.agents import REACT_MULTI_AGENT_TOOL_PROMPT
 from fence.tools.base import BaseTool
@@ -80,14 +81,13 @@ class SuperAgent(BaseAgent):
 
         # Memory setup
         self.memory = memory or FleetingMemory()
-        self.context = None
 
         # Prepare formatted delegates and tools
         self.formatted_delegates = self._format_entities(list(self.delegates.values()))
         self.formatted_tools = self._format_entities(list(self.tools.values()))
 
-        # Initialize the context
-        self.wipe_context()
+        # Initialize the memory buffer
+        self.wipe_memory()
 
     def run(self, prompt: str) -> str:
         """
@@ -97,8 +97,8 @@ class SuperAgent(BaseAgent):
         :return: The final answer from the agent.
         """
 
-        # Add initial prompt to the context
-        self.context.add_message(role="user", content=prompt)
+        # Add initial prompt to the memory buffer
+        self.memory.add_message(role="user", content=prompt)
 
         max_iterations, iteration_count = 30, 0
         response, answer = None, None
@@ -108,12 +108,12 @@ class SuperAgent(BaseAgent):
             link = Link(
                 name=f"{self.identifier or 'agent'}_step_{iteration_count}",
                 model=self.model,
-                template=MessagesTemplate(source=self.context),
+                template=self.memory.to_messages_template(),
             )
             response = link.run()["state"]
             logger.info(f"Model response: {response}")
 
-            self.context.add_message(role="assistant", content=response)
+            self.memory.add_message(role="assistant", content=response)
 
             if "[ANSWER]" in response:
                 answer = self._extract_answer(response)
@@ -122,26 +122,25 @@ class SuperAgent(BaseAgent):
             if "[DELEGATE]" in response:
                 delegate_response = self._handle_delegate_action(response)
                 if delegate_response:
-                    self.context.add_message(
+                    self.memory.add_message(
                         role="user", content=f"[OBSERVATION] {delegate_response}"
                     )
 
             if "[ACTION]" in response:
                 tool_response = self._handle_tool_action(response)
                 if tool_response:
-                    self.context.add_message(
+                    self.memory.add_message(
                         role="user", content=f"[OBSERVATION] {tool_response}"
                     )
 
             iteration_count += 1
 
-        self.wipe_context()
+        self.wipe_memory()
         return answer or "No answer found"
 
-    def wipe_context(self):
+    def wipe_memory(self):
         """Clear or reset the agent's memory context."""
-        self.context = self.memory or FleetingMemory()
-        self.context.add_message(
+        self.memory.add_message(
             role="system",
             content=REACT_MULTI_AGENT_TOOL_PROMPT.format(
                 role=self.role,
@@ -285,9 +284,17 @@ if __name__ == "__main__":
                 return "Ernie"
             return "Unknown"
 
+    # Create the memory object
+    memory = DynamoDBMemory(
+        table_name="fence_test",
+        primary_key_name="session",
+        # primary_key_value="test_a",
+    )
+
     # Create the agents
     child_agent = SuperAgent(
         identifier="child_accountant",
+        description="An agent that can retrieve the account holder name",
         model=GPT4omini(source="agent"),
         tools=[AccountNameRetrieverTool()],
     )
@@ -296,5 +303,6 @@ if __name__ == "__main__":
         model=GPT4omini(source="agent"),
         delegates=[child_agent],
         environment={"current_account_id": "bar"},
+        memory=memory,
     )
-    parent_agent.run("what is the current account holders name?")
+    result = parent_agent.run("what is the current account holders name?")
