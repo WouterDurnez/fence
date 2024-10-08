@@ -2,11 +2,10 @@
 Tools for agents
 """
 
+import logging
 from abc import ABC, abstractmethod
 
-from fence.utils.logger import setup_logging
-
-logger = setup_logging(__name__, log_level="info", serious_mode=False)
+logger = logging.getLogger(__name__)
 
 
 class BaseTool(ABC):

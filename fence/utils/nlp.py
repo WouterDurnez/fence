@@ -5,6 +5,7 @@ Helper tools to perform basic LLM-related tasks
 - TODO: Consistency/contradiction check: Check the contradiction of two texts
 """
 
+import logging
 from math import ceil
 
 from fence import (
@@ -17,10 +18,10 @@ from fence import (
     MessagesTemplate,
 )
 from fence.parsers import TripleBacktickParser
-from fence.utils.logger import setup_logging
 from fence.utils.optim import retry
 
-logger = setup_logging(__name__)
+logger = logging.getLogger(__name__)
+
 DEFAULT_REFERENCE_FLAGS = ["according", "text", "passage"]
 
 ##########

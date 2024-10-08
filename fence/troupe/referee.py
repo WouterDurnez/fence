@@ -2,17 +2,15 @@
 Agent class to orchestrate a flow that potentially calls tools or other, specialized agents.
 """
 
-from fence import LLM, Link, MessagesTemplate, TOMLParser, setup_logging
-from fence.agents.base import BaseAgent
-from fence.agents.tool import ToolAgent
-from fence.links import logger as link_logger
-from fence.memory import BaseMemory, FleetingMemory
-from fence.models.openai import GPT4omini
-from fence.prompts.agents import REACT_MULTI_AGENT_PROMPT
-from fence.tools.math import CalculatorTool, PrimeTool
-from fence.tools.text import TextInverterTool
+import logging
 
-logger = setup_logging(__name__, log_level="info", serious_mode=False)
+from fence import LLM, Link, MessagesTemplate, TOMLParser
+from fence.agents.base import BaseAgent
+from fence.links import logger as link_logger
+from fence.memory.base import BaseMemory, FleetingMemory
+from fence.prompts.agents import REACT_MULTI_AGENT_PROMPT
+
+logger = logging.getLogger(__name__)
 
 # Suppress the link logger
 link_logger.setLevel("INFO")
@@ -176,26 +174,3 @@ class RefereeAgent(BaseAgent):
             memory if isinstance(memory, BaseMemory) else (memory or FleetingMemory)()
         )
         self.context.add_message(role="system", content=REACT_MULTI_AGENT_PROMPT)
-
-
-if __name__ == "__main__":
-
-    # Create the delegate agent
-    delegate = ToolAgent(
-        model=GPT4omini(source="test"),
-        description="An swiss army knife agent, with math and basic string manipulation tools",
-        tools=[CalculatorTool(), PrimeTool(), TextInverterTool()],
-    )
-
-    # Create an intermediary referee agent
-    intermediary = RefereeAgent(
-        model=GPT4omini(source="test"),
-        delegates=[delegate],
-        description="An intermediary agent that can delegate to a tool agent",
-    )
-
-    # Create the referee agent
-    master = RefereeAgent(model=GPT4omini(source="test"), delegates=[intermediary])
-
-    # Trigger the agent
-    master.run(prompt="What is 2+2?")

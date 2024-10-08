@@ -9,11 +9,12 @@ import requests
 
 __all__ = ["GPT", "GPT4o", "GPT4", "GPT4omini"]
 
+import logging
+
 from fence.models.base import LLM, MessagesMixin, get_log_callback
 from fence.templates.messages import Message, Messages
-from fence.utils.logger import setup_logging
 
-logger = setup_logging(__name__, log_level="info", serious_mode=False)
+logger = logging.getLogger(__name__)
 
 
 class GPTBase(LLM, MessagesMixin):

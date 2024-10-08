@@ -4,14 +4,13 @@ Optimization utils
 
 import functools
 import inspect
+import logging
 import queue
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Callable, Iterable
 
-from fence.utils.logger import setup_logging
-
-logger = setup_logging(__name__)
+logger = logging.getLogger(__name__)
 
 
 def retry(f=None, max_retries=3, delay=0.2):

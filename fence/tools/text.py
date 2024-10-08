@@ -1,8 +1,8 @@
-from fence import setup_logging
+import logging
 
 from .base import BaseTool
 
-logger = setup_logging(__name__, log_level="info", serious_mode=False)
+logger = logging.getLogger(__name__)
 
 
 class TextInverterTool(BaseTool):

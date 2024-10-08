@@ -2,10 +2,12 @@
 Memory classes.
 """
 
+import logging
 from abc import ABC, abstractmethod
 
 from fence import Message, Messages, MessagesTemplate
-from fence.chains import logger
+
+logger = logging.getLogger(__name__)
 
 
 class BaseMemory(ABC):

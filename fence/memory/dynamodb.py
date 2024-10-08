@@ -2,6 +2,7 @@
 Memory classes.
 """
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -9,9 +10,8 @@ import boto3
 
 from fence import Message, Messages
 from fence.memory.base import BaseMemory
-from fence.utils.logger import setup_logging
 
-logger = setup_logging(__name__)
+logger = logging.getLogger(__name__)
 
 
 class DynamoDBMemory(BaseMemory):

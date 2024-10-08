@@ -5,8 +5,6 @@ Math based tools
 import logging
 import os
 
-from fence import setup_logging
-
 from .base import BaseTool
 
 # Set up numexpr logging early, to suppress annoying logs
@@ -17,7 +15,8 @@ from numexpr.utils import set_num_threads  # noqa
 
 set_num_threads(4)
 
-logger = setup_logging(__name__, log_level="info", serious_mode=False)
+
+logger = logging.getLogger(__name__)
 
 
 class PrimeTool(BaseTool):

@@ -1,9 +1,10 @@
+import logging
+
 from fence import Claude35Sonnet
 from fence.agents.chat import ChatAgent
 from fence.models.openai import GPT4omini
-from fence.utils.logger import setup_logging
 
-logger = setup_logging(__name__, log_level="info", serious_mode=False)
+logger = logging.getLogger(__name__)
 
 
 class ChatAgency:
