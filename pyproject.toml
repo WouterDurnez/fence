@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fence-llm"
-version = "0.0.13"
+version = "0.0.14"
 description = "Keep the bloat out! - A lightweight LLM interaction library"
 authors = ["wouter.durnez <wouter.durnez@gmail.com>"]
 readme = "README.md"
