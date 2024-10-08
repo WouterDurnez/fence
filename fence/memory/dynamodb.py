@@ -59,9 +59,10 @@ class DynamoDBMemory(BaseMemory):
 
         # Primary key counts as session ID
         self.primary_key_value = (
-            primary_key_value
-            if primary_key_value
-            else f"{primary_key_value_prefix}{uuid.uuid4()}"
+            primary_key_value if primary_key_value else str(uuid.uuid4())
+        )
+        self.primary_key_formatted = (
+            f"{primary_key_value_prefix}{self.primary_key_value}"
         )
 
         # Check if the table exists
@@ -113,7 +114,7 @@ class DynamoDBMemory(BaseMemory):
         response = self.table.query(
             KeyConditionExpression=boto3.dynamodb.conditions.Key(
                 f"{self.primary_key_name}"
-            ).eq(self.primary_key_value)
+            ).eq(self.primary_key_formatted)
         )
         items = response.get("Items", [])
         messages = Messages(
@@ -176,7 +177,7 @@ class DynamoDBMemory(BaseMemory):
         :return: The formatted message.
         """
         return {
-            f"{self.primary_key_name}": self.primary_key_value,
+            f"{self.primary_key_name}": self.primary_key_formatted,
             f"{self.sort_key_name}": datetime.now(timezone.utc).isoformat(),
             "Message": content,
             "Role": role,
