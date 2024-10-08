@@ -78,9 +78,10 @@ class FleetingMemory(BaseMemory):
     A simple memory context for the agent, only kept in memory (lol).
     """
 
-    # Core message attributes
-    system: str
-    messages: list[Message] = []
+    def __init__(self):
+        """Initialize the memory object."""
+        self.system = None
+        self.messages = []
 
     def add_message(self, role: str, content: str):
 
