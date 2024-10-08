@@ -22,8 +22,9 @@ class DynamoDBMemory(BaseMemory):
     def __init__(
         self,
         table_name: str,
-        primary_key_value: str | None = None,
         primary_key_name: str = "PK",
+        primary_key_value: str | None = None,
+        primary_key_value_prefix: str = "",
         sort_key_name: str = "SK",
         region_name: str = "eu-central-1",
         source: str = None,
@@ -33,6 +34,7 @@ class DynamoDBMemory(BaseMemory):
         :param str table_name: The name of the DynamoDB table.
         :param str primary_key_name: The name of the partition key.
         :param str primary_key_value: The partition key.
+        :param str primary_key_value_prefix: The prefix for the partition key. Useful for tenant isolation.
         :param str sort_key_name: The name of the sort key.
         :param str region_name: The AWS region name.
         :param str source: A custom identifier for what created the memory object.
@@ -57,7 +59,9 @@ class DynamoDBMemory(BaseMemory):
 
         # Primary key counts as session ID
         self.primary_key_value = (
-            primary_key_value if primary_key_value else str(uuid.uuid4())
+            primary_key_value
+            if primary_key_value
+            else f"{primary_key_value_prefix}{uuid.uuid4()}"
         )
 
         # Check if the table exists
