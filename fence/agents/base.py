@@ -2,12 +2,13 @@
 Base Agent class
 """
 
+import logging
 from abc import abstractmethod
 
-from fence import LLM, setup_logging
+from fence import LLM
 from fence.links import logger as link_logger
 
-logger = setup_logging(__name__, log_level="info", serious_mode=False)
+logger = logging.getLogger(__name__)
 
 # Suppress the link logger
 link_logger.setLevel("INFO")

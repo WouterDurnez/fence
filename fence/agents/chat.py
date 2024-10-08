@@ -2,14 +2,17 @@
 Tool using agent
 """
 
-from fence import LLM, Link, MessagesTemplate, setup_logging
+import logging
+
+from fence import LLM, Link, MessagesTemplate
 from fence.agents.base import BaseAgent
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory, FleetingMemory
 from fence.models.openai import GPT4omini
 from fence.prompts.agents import CHAT_PROMPT
 
-logger = setup_logging(__name__, log_level="info", serious_mode=False)
+logger = logging.getLogger(__name__)
+
 
 # Suppress the link logger
 link_logger.setLevel("CRITICAL")

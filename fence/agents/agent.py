@@ -2,7 +2,9 @@
 Agent class to orchestrate a flow that potentially calls tools or other, specialized agents.
 """
 
-from fence import LLM, Link, TOMLParser, setup_logging
+import logging
+
+from fence import LLM, Link, TOMLParser
 from fence.agents.base import BaseAgent
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory, FleetingMemory
@@ -11,7 +13,7 @@ from fence.models.openai import GPT4omini
 from fence.prompts.agents import REACT_MULTI_AGENT_TOOL_PROMPT
 from fence.tools.base import BaseTool
 
-logger = setup_logging(__name__, log_level="debug", serious_mode=False)
+logger = logging.getLogger(__name__)
 
 # Suppress the link logger
 link_logger.setLevel("DEBUG")
