@@ -20,7 +20,6 @@ boto3 = "^1.34.100"
 pydantic = "^2.7.1"
 requests = "^2.32.3"
 numexpr = "^2.10.1"
-wcwidth = "^0.2.13"
 
 [tool.poetry.group.dev.dependencies]
 bandit = "^1.7.8"
