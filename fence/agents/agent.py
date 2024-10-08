@@ -140,14 +140,22 @@ class SuperAgent(BaseAgent):
 
     def wipe_memory(self):
         """Clear or reset the agent's memory context."""
-        self.memory.add_message(
-            role="system",
-            content=REACT_MULTI_AGENT_TOOL_PROMPT.format(
-                role=self.role,
-                delegates=self.formatted_delegates,
-                tools=self.formatted_tools,
-            ),
-        )
+
+        # Check if there are any messages in the memory
+        self.memory.messages = self.memory.get_messages()
+
+        # Check if there is a system message in the memory
+        self.memory.system = self.memory.get_system_message()
+
+        # If no system message is present, add a new one
+        if not self.memory.system:
+            self.memory.set_system_message(
+                REACT_MULTI_AGENT_TOOL_PROMPT.format(
+                    role=self.role,
+                    delegates=self.formatted_delegates,
+                    tools=self.formatted_tools,
+                )
+            )
 
     def _format_entities(self, entities: list) -> str:
         """Format delegates or tools into TOML representation."""
@@ -288,7 +296,7 @@ if __name__ == "__main__":
     memory = DynamoDBMemory(
         table_name="fence_test",
         primary_key_name="session",
-        # primary_key_value="test_a",
+        primary_key_value="02d2b1b0-cf84-401e-b9d9-16f24c359cc8",
     )
 
     # Create the agents
