@@ -1,11 +1,13 @@
 <img src="https://github.com/WouterDurnez/fence/blob/main/docs/logo.png?raw=true" alt="tests" height="200"/>
 
-[![python](https://img.shields.io/pypi/pyversions/fence-llm)](https://pypi.org/project/fence-llm/)
-[![Test Status](https://github.com/WouterDurnez/fence/actions/workflows/ci-pipeline.yaml/badge.svg)](https://github.com/wouterdurnez/fence/actions)
-
+[![Python](https://img.shields.io/pypi/pyversions/fence-llm)](https://pypi.org/project/fence-llm/)
+[![Test Status](https://github.com/WouterDurnez/fence/actions/workflows/ci-pipeline.yaml/badge.svg)](https://github.com/WouterDurnez/fence/actions)
+[![codecov](https://codecov.io/gh/WouterDurnez/fence/branch/main/graph/badge.svg?token=QZQZQZQZQZ)](https://codecov.io/gh/WouterDurnez/fence)
+[![PyPI version](https://badge.fury.io/py/fence-llm.svg)](https://badge.fury.io/py/fence-llm)
+[![Documentation Status](https://readthedocs.org/projects/fence-llm/badge/?version=latest)](https://fence-llm.readthedocs.io/en/latest/?badge=latest)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-[![black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![license: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](code_of_conduct.md)
 
 # 🤺 Fence

@@ -30,6 +30,7 @@ black = "^24.4.2"
 pre-commit = "^3.7.1"
 pytest-mock = "^3.14.0"
 jupyterlab = "^4.2.4"
+codecov = "^2.1.13"
 
 [build-system]
 requires = ["poetry-core"]
