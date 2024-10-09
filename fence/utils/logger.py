@@ -55,12 +55,14 @@ class LogLevels(Enum):
     CRITICAL = "CRITICAL"
 
 
-def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool = None):
+def setup_logging(
+    name: str = "root", log_level: str = None, are_you_serious: bool = None
+):
     """
     Setup logging for use in applications.
     :param name: name of the logger
     :param log_level: log level as a string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    :param serious_mode: whether to use the serious mode
+    :param are_you_serious: whether to use the serious mode
     :return: logger instance
     """
 
@@ -95,9 +97,9 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
         config_dict["handlers"]["console"]["level"] = log_level.upper()
 
     # Set the serious mode if it is not provided
-    if serious_mode is not None:
+    if are_you_serious is not None:
         config_dict["handlers"]["console"]["formatter"] = (
-            "simple" if serious_mode else "color"
+            "simple" if are_you_serious else "color"
         )
 
     # Configure the logging module with the config file
@@ -116,7 +118,7 @@ def setup_logging(name: str = "root", log_level: str = None, serious_mode: bool 
 
 if __name__ == "__main__":
 
-    logger = setup_logging(log_level="debug", serious_mode=False)
+    logger = setup_logging(log_level="debug", are_you_serious=False)
     logger.debug("This is a debug message")
     logger.info("This is an info message")
     logger.warning("This is a warning message")

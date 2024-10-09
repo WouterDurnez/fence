@@ -178,7 +178,9 @@ class OllamaBase(LLM):
 class Ollama(OllamaBase):
     """Generic Ollama interface"""
 
-    def __init__(self, model_id: str, source: str, auto_pull: bool = True, **kwargs):
+    def __init__(
+        self, model_id: str, source: str | None = None, auto_pull: bool = True, **kwargs
+    ):
         """
         Initialize the Ollama model
         :param str model_id: The model ID as defined in the Ollama service

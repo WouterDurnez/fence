@@ -200,13 +200,17 @@ class Link(BaseLink):
         :return:
         """
 
-        logger.info(f"Executing {f'<{self.name}>' if self.name else 'unnamed'} Link")
-
         # Update the input dictionary with the keyword arguments
         if input_dict is None:
             input_dict = {}
 
         input_dict.update(kwargs)
+
+        # Don't forget to call Mum
+        logger.info(
+            f"Executing {f'<{self.name}>' if self.name else 'unnamed'} Link "
+            + (f"with input: [{input_dict}]" if input_dict else "without input")
+        )
 
         # Check if an LLM model was provided
         if self.model is None and kwargs.get("model") is None:

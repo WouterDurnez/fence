@@ -4,11 +4,10 @@ Agent class to orchestrate a flow that potentially calls tools or other, special
 
 import logging
 
-from fence import LLM, Link, TOMLParser
+from fence import LLM, Link, TOMLParser, setup_logging
 from fence.agents.base import BaseAgent
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory, FleetingMemory
-from fence.memory.dynamodb import DynamoDBMemory
 from fence.models.openai import GPT4omini
 from fence.prompts.agents import REACT_MULTI_AGENT_TOOL_PROMPT
 from fence.tools.base import BaseTool
@@ -49,6 +48,7 @@ class SuperAgent(BaseAgent):
             identifier=identifier,
             model=model,
             description=description,
+            memory=memory,
             environment=environment or {},
         )
 
@@ -81,15 +81,19 @@ class SuperAgent(BaseAgent):
             f"Initialized agent with model <{model.model_name}>, delegates: {list(self.delegates.keys())}, tools: {list(self.tools.keys())}"
         )
 
-        # Memory setup
-        self.memory = memory or FleetingMemory()
-
         # Prepare formatted delegates and tools
         self.formatted_delegates = self._format_entities(list(self.delegates.values()))
         self.formatted_tools = self._format_entities(list(self.tools.values()))
 
+        # Set system message
+        self._system_message = REACT_MULTI_AGENT_TOOL_PROMPT.format(
+            role=self.role,
+            delegates=self.formatted_delegates,
+            tools=self.formatted_tools,
+        )
+
         # Initialize the memory buffer
-        self.wipe_memory()
+        self._flush_memory()
 
     def run(self, prompt: str) -> str:
         """
@@ -137,10 +141,10 @@ class SuperAgent(BaseAgent):
 
             iteration_count += 1
 
-        self.wipe_memory()
+        self._flush_memory()
         return answer or "No answer found"
 
-    def wipe_memory(self):
+    def _flush_memory(self):
         """Clear or reset the agent's memory context."""
 
         # Check if there are any messages in the memory
@@ -151,15 +155,10 @@ class SuperAgent(BaseAgent):
 
         # If no system message is present, add a new one
         if not self.memory.system:
-            self.memory.set_system_message(
-                REACT_MULTI_AGENT_TOOL_PROMPT.format(
-                    role=self.role,
-                    delegates=self.formatted_delegates,
-                    tools=self.formatted_tools,
-                )
-            )
+            self.memory.set_system_message(content=self._system_message)
 
-    def _format_entities(self, entities: list) -> str:
+    @staticmethod
+    def _format_entities(entities: list) -> str:
         """Format delegates or tools into TOML representation."""
         return (
             "".join(entity.format_toml() for entity in entities)
@@ -167,7 +166,8 @@ class SuperAgent(BaseAgent):
             else "None available"
         )
 
-    def _extract_answer(self, response: str) -> str:
+    @staticmethod
+    def _extract_answer(response: str) -> str:
         """Extract the final answer from the response."""
         return response.split("[ANSWER]")[-1].strip()
 
@@ -221,6 +221,8 @@ class SuperAgent(BaseAgent):
 
 
 if __name__ == "__main__":
+
+    setup_logging(log_level="info", are_you_serious=False)
 
     # # Create the delegate agent
     # delegate = ToolAgent(
@@ -295,11 +297,11 @@ if __name__ == "__main__":
             return "Unknown"
 
     # Create the memory object
-    memory = DynamoDBMemory(
-        table_name="fence_test",
-        primary_key_name="session",
-        primary_key_value="02d2b1b0-cf84-401e-b9d9-16f24c359cc8",
-    )
+    # memory = DynamoDBMemory(
+    #     table_name="fence_test",
+    #     primary_key_name="session",
+    #     primary_key_value="02d2b1b0-cf84-401e-b9d9-16f24c359cc8",
+    # )
 
     # Create the agents
     child_agent = SuperAgent(
@@ -313,6 +315,6 @@ if __name__ == "__main__":
         model=GPT4omini(source="agent"),
         delegates=[child_agent],
         environment={"current_account_id": "bar"},
-        memory=memory,
+        memory=FleetingMemory(),
     )
     result = parent_agent.run("what is the current account holders name?")
