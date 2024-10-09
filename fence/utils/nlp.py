@@ -141,8 +141,8 @@ class LLMHelper:
                 messages=[
                     Message(
                         role="user",
-                        content="""You are given the following text: {{text}}
-                    The topic is: {{topic}}
+                        content="""You are given the following text: {text}
+                    The topic is: {topic}
                     Is the text relevant to the topic? Only reply with True or False, and nothing else.
                     """,
                     ),
@@ -237,3 +237,11 @@ class LLMHelper:
         logger.debug(f"Cleaned text response: {cleaned_text}")
 
         return cleaned_text
+
+
+if __name__ == "__main__":
+
+    llm_helper = LLMHelper()
+    text = "According to the text, the sky is blue because of Rayleigh scattering, which is the scattering of light by air molecules."
+    topic = "The sky is blue"
+    print(llm_helper.check_relevancy(text, topic))
