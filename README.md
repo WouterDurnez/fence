@@ -1,9 +1,10 @@
 <img src="https://github.com/WouterDurnez/fence/blob/main/docs/logo.png?raw=true" alt="tests" height="200"/>
 
-[![python](https://img.shields.io/badge/Python-3.12-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org)
+[![python](https://img.shields.io/pypi/pyversions/fence-llm)](https://pypi.org/project/fence-llm/)
+[![Test Status](https://github.com/WouterDurnez/fence/actions/workflows/ci-pipeline.yaml/badge.svg)](https://github.com/wouterdurnez/fence/actions)
+
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-[![black](https://img.shields.io/badge/code%20style-black-000000.svg)
-](https://github.com/psf/black)
+[![black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![license: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](code_of_conduct.md)
 
