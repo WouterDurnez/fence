@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import boto3
 
-from fence import Message, Messages
+from fence import Message, Messages, setup_logging
 from fence.memory.base import BaseMemory
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ class DynamoDBMemory(BaseMemory):
         Get ALL messages from the dynamoDB.
         """
 
-        logger.info(f"Getting history for session {self.primary_key_name}")
+        logger.debug(f"Getting history for session {self.primary_key_name}")
         response = self.table.query(
             KeyConditionExpression=boto3.dynamodb.conditions.Key(
                 f"{self.primary_key_name}"
@@ -133,7 +133,7 @@ class DynamoDBMemory(BaseMemory):
         )
 
         # Log the messages
-        logger.info(
+        logger.debug(
             "Messages:\n"
             + "\n".join(
                 [
@@ -187,6 +187,8 @@ class DynamoDBMemory(BaseMemory):
 
 
 if __name__ == "__main__":
+
+    setup_logging(log_level="info")
 
     # Create a DynamoDBMemory object
     memory = DynamoDBMemory(

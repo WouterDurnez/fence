@@ -10,15 +10,13 @@ logger = logging.getLogger(__name__)
 
 class BaseTool(ABC):
 
-    def __init__(self, description: str = None, environment: dict = None):
+    def __init__(self, description: str = None):
         """
         Initialize the BaseTool object.
 
         :param description: A description of the tool (if not provided, the docstring will be used)
-        :param environment: A dictionary of environment variables to pass to the tool
         """
         self.description = description
-        # self.environment = environment or {}
         self.environment = {}
 
     def run(self, environment: dict = None, **kwargs):

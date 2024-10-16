@@ -42,6 +42,9 @@ class BaseAgent:
         # Memory setup
         self.memory = memory or FleetingMemory()
 
+        # Set system message
+        self._system_message = None
+
     @abstractmethod
     def run(self, prompt: str) -> str:
         """
