@@ -127,6 +127,6 @@ Now, let's get started. Here is the initial input:
 # Chat prompt
 CHAT_PROMPT = """You are an agent designed to chat with another user or agent. Your job is to introduce yourself when appropriate, and keep the banter going. Ask questions, provide answers, and keep the conversation flowing.
 
-This is your profile: {profile}
+This is your role: {role}
 
 Keep your answers concise."""

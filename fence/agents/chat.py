@@ -28,7 +28,7 @@ class ChatAgent(BaseAgent):
         description: str | None = None,
         memory: BaseMemory | None = None,
         name: str | None = None,
-        profile: str | None = None,
+        role: str | None = None,
     ):
         """
         Initialize the Agent object.
@@ -38,7 +38,7 @@ class ChatAgent(BaseAgent):
         :param description: A description of the agent.
         :param memory: A memory object.
         :param name: The name of the agent. Will be used in multi-agent conversations.
-        :param profile: A behavioral profile of the agent.
+        :param role: A behavioral profile of the agent.
         """
 
         super().__init__(identifier=identifier, model=model, description=description)
@@ -52,7 +52,7 @@ class ChatAgent(BaseAgent):
         self.memory = memory or FleetingMemory()
 
         # Set system message
-        self._system_message = CHAT_PROMPT.format(profile=profile or description)
+        self._system_message = CHAT_PROMPT.format(role=role or description)
 
         # Flush memory
         self._flush_memory()
@@ -103,7 +103,7 @@ After Wardenclyffe, Tesla experimented with a series of inventions in the 1910s 
         model=GPT4omini(
             source="chat",
         ),
-        profile=f"""You are a helpful assistant, capable of answering questions about a document. You do not deviate from this task. You should therefore not talk about anything other than this content. You will be given the content, i.e. the transcript of what is in it.
+        role=f"""You are a helpful assistant, capable of answering questions about a document. You do not deviate from this task. You should therefore not talk about anything other than this content. You will be given the content, i.e. the transcript of what is in it.
 
                 The content you have access to is this:
 

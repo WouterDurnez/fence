@@ -141,19 +141,19 @@ if __name__ == "__main__":
     # Create some agents
     agent1 = ChatAgent(
         name="Detective 🕵️",
-        profile="You are a detective trying to solve a mystery. You ask probing questions and analyze details carefully.",
+        role="You are a detective trying to solve a mystery. You ask probing questions and analyze details carefully.",
         model=GPT4omini(),
     )
 
     agent2 = ChatAgent(
         name="Witness 👀",
-        profile="You are a witness to a crime. You're nervous and sometimes contradictory, but you want to help.",
+        role="You are a witness to a crime. You're nervous and sometimes contradictory, but you want to help.",
         model=ClaudeHaiku(),
     )
 
     agent3 = ChatAgent(
         name="Psychologist 🧑‍⚕️",
-        profile="You are a forensic psychologist. You analyze the behavioral aspects of the conversation and provide insights.",
+        role="You are a forensic psychologist. You analyze the behavioral aspects of the conversation and provide insights.",
         model=ClaudeHaiku(),
     )
 
