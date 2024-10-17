@@ -9,12 +9,64 @@ logger = logging.getLogger(__name__)
 
 
 class SafeFormatter(string.Formatter):
-    def get_value(self, key, args, kwargs):
-        # Return an empty string for missing variables instead of raising KeyError
-        if isinstance(key, str):
-            return kwargs.get(key, f"{{{key}}}")
-        else:
-            return super().get_value(key, args, kwargs)
+    """
+    A custom string formatter that safely handles missing keys and nested attributes.
+
+    This formatter extends the built-in string.Formatter to provide the following features:
+    1. Gracefully handles missing keys by returning the original placeholder.
+    2. Supports nested attribute and dictionary key access (e.g., {user.name} or {dict.key}).
+    3. Returns original placeholders for any unresolved fields.
+
+    Usage:
+        formatter = SafeFormatter()
+        result = formatter.format("Hello, {name}! Your score is {user.score}{test.ignore}.", name="Alice", user={"score": 95})
+
+    """
+
+    def get_field(self, field_name, args, kwargs):
+        """
+        Retrieve the value for a given field name.
+
+        This method handles nested attribute access and gracefully falls back to the original
+        placeholder if the field is not found.
+
+        :param field_name: The name of the field to retrieve.
+        :return: A pair (obj, used_key), where obj is the retrieved object or the original
+        """
+        try:
+            # Start with the kwargs dictionary
+            obj = kwargs
+
+            # Split the field_name into parts for nested access
+            for name in field_name.split("."):
+                if isinstance(obj, dict):
+                    # If obj is a dictionary, use get() to safely retrieve the next item
+                    obj = obj.get(name, f"{{{field_name}}}")
+                else:
+                    # If obj is not a dictionary, try to get the attribute
+                    # If the attribute doesn't exist, return the original placeholder
+                    obj = getattr(obj, name, f"{{{field_name}}}")
+
+            return obj, field_name
+        except Exception:
+            # If any exception occurs during the process, return the original placeholder
+            return f"{{{field_name}}}", field_name
+
+    def format_field(self, value, format_spec):
+        """
+        Format a field based on the given format_spec.
+
+        This method overrides the default behavior to return original placeholders as-is.
+
+        :param value: The value to format.
+        :param format_spec: The format specification.
+        :return: The formatted value or the original placeholder if it was not resolved.
+        """
+        if isinstance(value, str) and value.startswith("{") and value.endswith("}"):
+            # If the value looks like an unresolved placeholder, return it as-is
+            return value
+        # Otherwise, use the default formatting behavior
+        return super().format_field(value, format_spec)
 
 
 class BaseTemplate(ABC):
@@ -74,6 +126,7 @@ class BaseTemplate(ABC):
         pass
 
     def _validate_input(self, input_dict: dict):
+
         # Find both missing and superfluous variables
         missing_variables = [
             variable for variable in self.input_variables if variable not in input_dict
@@ -82,7 +135,7 @@ class BaseTemplate(ABC):
             variable for variable in input_dict if variable not in self.input_variables
         ]
         if missing_variables:
-            logger.warning(f"Missing variables: {missing_variables}")
+            logger.warning(f"Possible missing variables: {missing_variables}")
         if superfluous_variables:
             logger.debug(f"Superfluous variables: {superfluous_variables}")
 
@@ -99,7 +152,7 @@ class BaseTemplate(ABC):
         :rtype: list[str]
         """
 
-        return re.findall(r"\{\s*([a-zA-Z0-9_]+)\s*}", text)
+        return re.findall(r"\{\s*([a-zA-Z0-9_.]+)\s*}", text)
 
     def _render_string(self, text: str, input_dict: dict = None, **kwargs):
         """

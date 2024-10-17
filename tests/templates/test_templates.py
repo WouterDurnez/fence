@@ -59,7 +59,7 @@ def test_prompt_template_render_with_all_variables_provided():
     assert rendered == "test 123"
 
 
-def test_prompt_template_render_raises_error_for_missing_variables(caplog):
+def test_prompt_template_render_gives_warning_for_missing_variables(caplog):
     """
     Test that rendering a template with missing variables raises ValueError.
     """
@@ -70,6 +70,30 @@ def test_prompt_template_render_raises_error_for_missing_variables(caplog):
 
     # Check if the warning about missing variables was logged
     assert any("Missing variables" in message for message in caplog.text.splitlines())
+
+
+def test_prompt_template_render_with_superfluous_variables(caplog):
+    """
+    Test that rendering a template with superfluous variables logs a debug message.
+    """
+    template = StringTemplate("{A}")
+
+    with caplog.at_level(logging.DEBUG):
+        _ = template.render(A="test", B="123")
+
+    # Check if the debug message about superfluous variables was logged
+    assert any(
+        "Superfluous variables" in message for message in caplog.text.splitlines()
+    )
+
+
+def test_prompt_template_render_nested_placeholder_attribute():
+    """
+    Test rendering a template with nested placeholder attributes.
+    """
+    template = StringTemplate("{A.B} {C}")
+    rendered = template.render(C="test")
+    assert rendered == "{A.B} test"
 
 
 def test_prompt_template_equality():

@@ -57,7 +57,87 @@ def test_messages_template_render_missing_variable(messages_template, caplog):
         _ = messages_template.render(input_dict=input_dict)
 
     # Check if the warning about missing variables was logged
-    assert any("Missing variables" in message for message in caplog.text.splitlines())
+    assert any(
+        "Possible missing variables" in message for message in caplog.text.splitlines()
+    )
+
+
+def test_messages_template_render_superfluous_variable(messages_template, caplog):
+    """
+    Test case for the render method of the MessagesTemplate class when a superfluous variable is provided.
+    This test checks if the render method logs a debug message when a superfluous variable is provided.
+    """
+    # Assuming messages_template.input_variables contains 'system_var' and 'user_var'
+    input_dict = {
+        "system_var": "test1",
+        "user_var": "test2",
+        "assistant_var": "test3",
+        "superfluous_var": "test4",
+    }
+
+    with caplog.at_level(logging.DEBUG):
+        _ = messages_template.render(input_dict=input_dict)
+
+    # Check if the debug message about superfluous variables was logged
+    assert any(
+        "Superfluous variables" in message for message in caplog.text.splitlines()
+    )
+
+
+def test_messages_template_nested_placeholder():
+    """
+    Test case for the MessagesTemplate class with nested
+    placeholders in the source.
+    """
+    nested = Messages(
+        system="System message {system_var}",
+        messages=[
+            Message(
+                role="user",
+                content=[TextContent(text="User message {user_var.nested_var}")],
+            ),
+            Message(
+                role="assistant",
+                content="Assistant message {assistant_var.nested_var}",
+            ),
+        ],
+    )
+    messages_template = MessagesTemplate(source=nested)
+    assert set(messages_template.input_variables) == {
+        "system_var",
+        "user_var.nested_var",
+        "assistant_var.nested_var",
+    }
+
+
+def test_messages_template_nested_placeholder_render():
+    """
+    Test case for the render method of the MessagesTemplate class with nested
+    placeholders in the source.
+    """
+    nested = Messages(
+        system="System message {system_var}",
+        messages=[
+            Message(
+                role="user",
+                content=[TextContent(text="User message {user_var.nested_var}")],
+            ),
+            Message(
+                role="assistant",
+                content="Assistant message {assistant_var.nested_var}",
+            ),
+        ],
+    )
+    messages_template = MessagesTemplate(source=nested)
+    input_dict = {
+        "system_var": "test1",
+        "user_var": {"nested_var": "test2"},
+        "assistant_var": {"nested_var": "test3"},
+    }
+    rendered_messages = messages_template.render(input_dict=input_dict)
+    assert rendered_messages.system == "System message test1"
+    assert rendered_messages.messages[0].content[0].text == "User message test2"
+    assert rendered_messages.messages[1].content == "Assistant message test3"
 
 
 def test_messages_template_add(messages_template):
