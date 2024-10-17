@@ -76,9 +76,9 @@ class BaseLink(ABC):
             variable for variable in input_dict if variable not in self.input_keys
         ]
         if missing_variables:
-            raise ValueError(f"Missing variables: {missing_variables}")
+            logger.warning(f"Missing variables: {missing_variables}")
         if superfluous_variables:
-            logger.debug(f"Superfluous variables: {superfluous_variables}")
+            logger.info(f"Superfluous variables: {superfluous_variables}")
 
     def __str__(self):
         return f"Link: {f'{self.name} ' if self.name else ''}<{self.input_keys}> -> <{self.output_key}>"
