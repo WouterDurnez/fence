@@ -69,7 +69,9 @@ def test_prompt_template_render_gives_warning_for_missing_variables(caplog):
         _ = template.render(A="test")
 
     # Check if the warning about missing variables was logged
-    assert any("Missing variables" in message for message in caplog.text.splitlines())
+    assert any(
+        "Possible missing variables" in message for message in caplog.text.splitlines()
+    )
 
 
 def test_prompt_template_render_with_superfluous_variables(caplog):
@@ -94,6 +96,7 @@ def test_prompt_template_render_nested_placeholder_attribute():
     template = StringTemplate("{A.B} {C}")
     rendered = template.render(C="test")
     assert rendered == "{A.B} test"
+    assert template.input_variables == ["A.B", "C"]
 
 
 def test_prompt_template_equality():

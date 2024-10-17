@@ -21,6 +21,26 @@ def messages_template():
     return MessagesTemplate(source=messages)
 
 
+@pytest.fixture
+def nested_messages_template():
+    """
+    This fixture creates a MessagesTemplate object for testing purposes.
+    """
+    messages = Messages(
+        system="System message {system_var}",
+        messages=[
+            Message(
+                role="user",
+                content=[TextContent(text="User message {user_var.nested_var}")],
+            ),
+            Message(
+                role="assistant", content="Assistant message {assistant_var.nested_var}"
+            ),
+        ],
+    )
+    return MessagesTemplate(source=messages)
+
+
 def test_messages_template_initialization(messages_template):
     """
     Test case for the initialization of the MessagesTemplate class.
@@ -84,57 +104,23 @@ def test_messages_template_render_superfluous_variable(messages_template, caplog
     )
 
 
-def test_messages_template_nested_placeholder():
+def test_messages_template_nested_placeholder(nested_messages_template):
     """
     Test case for the MessagesTemplate class with nested
     placeholders in the source.
     """
-    nested = Messages(
-        system="System message {system_var}",
-        messages=[
-            Message(
-                role="user",
-                content=[TextContent(text="User message {user_var.nested_var}")],
-            ),
-            Message(
-                role="assistant",
-                content="Assistant message {assistant_var.nested_var}",
-            ),
-        ],
-    )
-    messages_template = MessagesTemplate(source=nested)
-    assert set(messages_template.input_variables) == {
+
+    assert set(nested_messages_template.input_variables) == {
         "system_var",
         "user_var.nested_var",
         "assistant_var.nested_var",
     }
-
-
-def test_messages_template_nested_placeholder_render():
-    """
-    Test case for the render method of the MessagesTemplate class with nested
-    placeholders in the source.
-    """
-    nested = Messages(
-        system="System message {system_var}",
-        messages=[
-            Message(
-                role="user",
-                content=[TextContent(text="User message {user_var.nested_var}")],
-            ),
-            Message(
-                role="assistant",
-                content="Assistant message {assistant_var.nested_var}",
-            ),
-        ],
-    )
-    messages_template = MessagesTemplate(source=nested)
     input_dict = {
         "system_var": "test1",
         "user_var": {"nested_var": "test2"},
         "assistant_var": {"nested_var": "test3"},
     }
-    rendered_messages = messages_template.render(input_dict=input_dict)
+    rendered_messages = nested_messages_template.render(input_dict=input_dict)
     assert rendered_messages.system == "System message test1"
     assert rendered_messages.messages[0].content[0].text == "User message test2"
     assert rendered_messages.messages[1].content == "Assistant message test3"
