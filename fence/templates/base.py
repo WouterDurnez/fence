@@ -1,10 +1,20 @@
 import logging
 import re
+import string
 from abc import ABC, abstractmethod
 
 from fence.templates.models import Messages
 
 logger = logging.getLogger(__name__)
+
+
+class SafeFormatter(string.Formatter):
+    def get_value(self, key, args, kwargs):
+        # Return an empty string for missing variables instead of raising KeyError
+        if isinstance(key, str):
+            return kwargs.get(key, f"{{{key}}}")
+        else:
+            return super().get_value(key, args, kwargs)
 
 
 class BaseTemplate(ABC):
@@ -72,7 +82,7 @@ class BaseTemplate(ABC):
             variable for variable in input_dict if variable not in self.input_variables
         ]
         if missing_variables:
-            raise ValueError(f"Missing variables: {missing_variables}")
+            logger.warning(f"Missing variables: {missing_variables}")
         if superfluous_variables:
             logger.debug(f"Superfluous variables: {superfluous_variables}")
 
@@ -111,7 +121,10 @@ class BaseTemplate(ABC):
         # Find both missing and superfluous variables
         self._validate_input(input_dict=input_dict)
 
-        return text.format(**input_dict)
+        # Format the string
+        formatter = SafeFormatter()
+
+        return formatter.format(text, **input_dict)
 
     def __str__(self):
         return f"{self.__class__}: {self.source}"

@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from fence.templates.messages import MessagesTemplate
@@ -43,14 +45,19 @@ def test_messages_template_render(messages_template):
     assert rendered_messages.messages[1].content == "Assistant message test3"
 
 
-def test_messages_template_render_missing_variable(messages_template):
+def test_messages_template_render_missing_variable(messages_template, caplog):
     """
     Test case for the render method of the MessagesTemplate class when a required variable is missing.
-    This test checks if the render method raises a ValueError when a required variable is missing.
+    This test checks if the render method logs a warning when a required variable is missing.
     """
-    input_dict = {"system_var": "test1", "user_var": "test2"}
-    with pytest.raises(ValueError):
-        messages_template.render(input_dict=input_dict)
+    # Assuming messages_template.input_variables contains 'system_var' and 'user_var'
+    input_dict = {"system_var": "test1"}  # Missing 'user_var'
+
+    with caplog.at_level(logging.WARNING):
+        _ = messages_template.render(input_dict=input_dict)
+
+    # Check if the warning about missing variables was logged
+    assert any("Missing variables" in message for message in caplog.text.splitlines())
 
 
 def test_messages_template_add(messages_template):

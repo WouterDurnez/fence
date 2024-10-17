@@ -2,14 +2,11 @@
 Integration tests for tool calling.
 """
 
-import pytest
-
 from fence.agents.agent import SuperAgent
 from fence.models.openai import GPT4omini
 from fence.tools.scratch import EnvTool
 
 
-@pytest.mark.integration
 class TestToolCalling:
     """
     Integration tests for tool calling.

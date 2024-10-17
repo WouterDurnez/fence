@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 
@@ -58,13 +59,17 @@ def test_prompt_template_render_with_all_variables_provided():
     assert rendered == "test 123"
 
 
-def test_prompt_template_render_raises_error_for_missing_variables():
+def test_prompt_template_render_raises_error_for_missing_variables(caplog):
     """
     Test that rendering a template with missing variables raises ValueError.
     """
     template = StringTemplate("{A} {B}")
-    with pytest.raises(ValueError):
+
+    with caplog.at_level(logging.WARNING):
         _ = template.render(A="test")
+
+    # Check if the warning about missing variables was logged
+    assert any("Missing variables" in message for message in caplog.text.splitlines())
 
 
 def test_prompt_template_equality():
