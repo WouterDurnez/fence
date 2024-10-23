@@ -1,0 +1,136 @@
+import logging
+import time
+
+import pandas as pd
+import plotly.express as px
+
+from benchmark.prompts import HIGHLIGHT, LANGUAGE_NAME, SYSTEM_PROMPT, USER_MESSAGE
+from fence import setup_logging
+from fence.links import Link
+from fence.links import logger as link_logger
+from fence.models.base import LLM
+from fence.models.claude import ClaudeInstant
+from fence.models.claude3 import Claude35Sonnet, ClaudeHaiku, ClaudeSonnet
+from fence.models.openai import GPT4o, GPT4omini
+from fence.templates.messages import MessagesTemplate
+from fence.templates.models import Message, Messages
+from fence.utils.base import logger, time_it
+from fence.utils.optim import parallelize
+
+#########
+# SETUP #
+#########
+
+# Set the plotly template to white minimal
+px.defaults.template = "plotly_white"
+
+# Setup logging
+link_logger.setLevel(logging.CRITICAL)
+setup_logging(log_level="info", are_you_serious=False)
+
+# Number of calls to make to each model
+N_CALLS = 20
+
+# Models to benchmark
+models = [
+    ClaudeHaiku(),
+    ClaudeInstant(),
+    ClaudeSonnet(),
+    Claude35Sonnet(),
+    GPT4o(),
+    GPT4omini(),
+]
+
+#############
+# BENCHMARK #
+#############
+
+# We'll call the model N_CALLS times, requesting a
+# test question based on a highlight and language name
+template = MessagesTemplate(
+    source=Messages(
+        system=SYSTEM_PROMPT,
+        messages=[
+            Message(role="user", content=USER_MESSAGE),
+        ],
+    )
+)
+
+
+# Single model run
+@parallelize(max_workers=10)
+def test_model(index: int, model: LLM):
+
+    start_time = time.time()
+    link = Link(template=template, model=model)
+
+    result = link.run(  # noqa
+        input_dict={"highlight": HIGHLIGHT, "language_name": LANGUAGE_NAME}
+    )
+    total_time = time.time() - start_time
+    return total_time
+
+
+# Full model benchmark
+timings = {}
+
+
+@parallelize(max_workers=10)
+@time_it(only_warn=False, threshold=10)
+def run_model_benchmark(model: LLM):
+
+    logger.info(f"Testing model: {model.__class__.__name__}")
+
+    # Gather timings across N_CALLS runs
+    timings[model.__class__.__name__] = test_model(range(N_CALLS), model=model)
+
+
+# Run the benchmark for each model
+run_model_benchmark(models)
+
+#######
+# VIZ #
+#######
+
+# Plot the timings as a strip plot using plotly
+# Colors should be blue for Claude models and red for OpenAI models
+
+# Prepare the data
+df = pd.DataFrame(
+    [(model, time) for model, times in timings.items() for time in times],
+    columns=["Model", "Time"],
+)
+
+# Determine if each model is a Claude model
+df["Is Claude"] = df["Model"].apply(lambda x: x.startswith("Claude"))
+
+# Create the strip plot
+fig = px.strip(
+    df,
+    y="Time",
+    x="Model",
+    color="Is Claude",
+    labels={"Time": "Time (s)", "Model": "Model"},
+    title="Model Benchmark Timings",
+    color_discrete_map={True: "blue", False: "red"},
+)
+
+# Update layout for better readability
+fig.update_layout(
+    xaxis_title="Model",
+    yaxis_title="Time (s)",
+    legend_title="Model Type",
+    font=dict(size=12),
+    showlegend=False,
+    # Set y-axis range to 0-35 seconds
+    yaxis=dict(range=[0, 35]),
+)
+
+# Adjust the size of the plot points
+fig.update_traces(marker=dict(size=8))
+
+# Show the plot
+fig.show()
+
+# Save the plot as an HTML file
+fig.write_html("model_benchmark_timings.html")
