@@ -26,3 +26,13 @@ class TestTimeDecorators:
 
         with pytest.raises(Exception, match="Function call <_test_time_out> timed out"):
             _test_time_out()
+
+    def test_timeout_default_value(self):
+        """Test the time_out decorator with default value."""
+
+        @time_out(seconds=1, raise_exception=False, default_return="Timeout")
+        def _test_time_out_default():
+            print("Testing time_out with default value")
+            time.sleep(2)
+
+        assert _test_time_out_default() == "Timeout"

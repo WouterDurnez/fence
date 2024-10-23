@@ -52,10 +52,10 @@ class LLM(ABC):
     Base class for LLMs
     """
 
-    model_id: str | None = None
-    model_name: str = None
-    inference_type = None
-    source: str = None
+    model_id: str
+    model_name: str
+    inference_type: str | None = None
+    source: str | None = None
     logging_tags: dict = {}
 
     def __init__(

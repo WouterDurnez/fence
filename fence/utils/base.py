@@ -54,16 +54,25 @@ def time_it(f=None, threshold: int = 300, only_warn: bool = True):
     return timed
 
 
-def time_out(f=None, seconds: int = 60):
+def time_out(
+    f=None, seconds: int = 60, raise_exception: bool = True, default_return=None
+):
     """Decorator that adds a timeout to a function.
 
     :param f: Function to be executed.
     :param seconds: Timeout in seconds.
+    :param raise_exception: If True, raises an exception if the timeout is exceeded.
+    :param default_return: Default return value if the timeout is exceeded.
     :return: Wrapped function with a timeout.
     """
 
     if f is None:
-        return lambda func: time_out(func, seconds=seconds)
+        return lambda func: time_out(
+            func,
+            seconds=seconds,
+            raise_exception=raise_exception,
+            default_return=default_return,
+        )
 
     @functools.wraps(f)
     def wrapper_timeout(*args, **kwargs):
@@ -83,7 +92,13 @@ def time_out(f=None, seconds: int = 60):
             try:
                 return future.result(timeout=seconds)
             except TimeoutError:
-                raise TimeoutError(f"Function call <{f.__name__}> timed out")
+
+                # Log a warning or raise an exception if the timeout is exceeded
+                if raise_exception:
+                    raise TimeoutError(f"Function call <{f.__name__}> timed out")
+                else:
+                    logger.warning(f"Function call <{f.__name__}> timed out")
+                    return default_return
 
     return wrapper_timeout
 

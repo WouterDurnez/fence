@@ -120,7 +120,7 @@ class BaseTemplate(ABC):
     @abstractmethod
     def _find_placeholders(self) -> list[str]:
         """
-        Find placeholders in a list of messages. Placeholders are defined as text enclosed in double curly braces.
+        Find placeholders in a list of messages. Placeholders are defined as text enclosed in single curly braces.
         They are used to denote variables that need to be replaced in the messages.
         """
         pass
