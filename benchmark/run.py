@@ -28,18 +28,6 @@ px.defaults.template = "plotly_white"
 link_logger.setLevel(logging.CRITICAL)
 setup_logging(log_level="info", are_you_serious=False)
 
-# Number of calls to make to each model
-N_CALLS = 20
-
-# Models to benchmark
-models = [
-    ClaudeHaiku(),
-    ClaudeInstant(),
-    ClaudeSonnet(),
-    Claude35Sonnet(),
-    GPT4o(),
-    GPT4omini(),
-]
 
 #############
 # BENCHMARK #
@@ -71,66 +59,96 @@ def test_model(index: int, model: LLM):
     return total_time
 
 
-# Full model benchmark
-timings = {}
+def benchmark(models: list, n_calls: int = 20):
+    """
+    Benchmark the models
+    """
+    timings = {}
 
+    @parallelize(max_workers=10)
+    @time_it(only_warn=False, threshold=10)
+    def run_model_benchmark(model: LLM, n_calls: int = 20):
+        logger.info(f"Testing model: {model.__class__.__name__}")
 
-@parallelize(max_workers=10)
-@time_it(only_warn=False, threshold=10)
-def run_model_benchmark(model: LLM):
+        # Gather timings across N_CALLS runs
+        timings[model.__class__.__name__] = test_model(range(n_calls), model=model)
 
-    logger.info(f"Testing model: {model.__class__.__name__}")
+    run_model_benchmark(models, n_calls=n_calls)
 
-    # Gather timings across N_CALLS runs
-    timings[model.__class__.__name__] = test_model(range(N_CALLS), model=model)
+    return timings
 
-
-# Run the benchmark for each model
-run_model_benchmark(models)
 
 #######
 # VIZ #
 #######
 
-# Plot the timings as a strip plot using plotly
-# Colors should be blue for Claude models and red for OpenAI models
 
-# Prepare the data
-df = pd.DataFrame(
-    [(model, time) for model, times in timings.items() for time in times],
-    columns=["Model", "Time"],
-)
+def viz(timings: dict):
+    """
+    Plot the timings as a strip plot using plotly
+    """
+    # Prepare the data
+    df = pd.DataFrame(
+        [(model, time) for model, times in timings.items() for time in times],
+        columns=["Model", "Time"],
+    )
 
-# Determine if each model is a Claude model
-df["Is Claude"] = df["Model"].apply(lambda x: x.startswith("Claude"))
+    # Determine if each model is a Claude model
+    df["Is Claude"] = df["Model"].apply(lambda x: x.startswith("Claude"))
 
-# Create the strip plot
-fig = px.strip(
-    df,
-    y="Time",
-    x="Model",
-    color="Is Claude",
-    labels={"Time": "Time (s)", "Model": "Model"},
-    title="Model Benchmark Timings",
-    color_discrete_map={True: "blue", False: "red"},
-)
+    # Create the strip plot
+    fig = px.strip(
+        df,
+        y="Time",
+        x="Model",
+        color="Is Claude",
+        labels={"Time": "Time (s)", "Model": "Model"},
+        title="Model Benchmark Timings",
+        color_discrete_map={True: "blue", False: "red"},
+    )
 
-# Update layout for better readability
-fig.update_layout(
-    xaxis_title="Model",
-    yaxis_title="Time (s)",
-    legend_title="Model Type",
-    font=dict(size=12),
-    showlegend=False,
-    # Set y-axis range to 0-35 seconds
-    yaxis=dict(range=[0, 35]),
-)
+    # Update layout for better readability
+    fig.update_layout(
+        xaxis_title="Model",
+        yaxis_title="Time (s)",
+        legend_title="Model Type",
+        font=dict(size=12),
+        showlegend=False,
+        # Set y-axis range to 0-35 seconds
+        yaxis=dict(range=[0, 35]),
+    )
 
-# Adjust the size of the plot points
-fig.update_traces(marker=dict(size=8))
+    # Adjust the size of the plot points
+    fig.update_traces(marker=dict(size=8))
 
-# Show the plot
-fig.show()
+    # Show the plot
+    fig.show()
 
-# Save the plot as an HTML file
-fig.write_html("model_benchmark_timings.html")
+    # Save the plot as an HTML file
+    fig.write_html("model_benchmark_timings.html")
+
+
+########
+# MAIN #
+########
+
+if __name__ == "__main__":
+
+    # Number of calls to make to each model
+    N_CALLS = 20
+
+    # Models to benchmark
+    models = [
+        ClaudeHaiku(),
+        ClaudeInstant(),
+        ClaudeSonnet(),
+        Claude35Sonnet(),
+        GPT4o(),
+        GPT4omini(),
+    ]
+
+    # Run the benchmark for each model
+    timings = benchmark(models, n_calls=N_CALLS)
+
+    # Visualize the results
+    viz(timings)
