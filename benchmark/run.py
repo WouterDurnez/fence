@@ -147,6 +147,10 @@ if __name__ == "__main__":
         GPT4omini(),
     ]
 
+    # Add source to all models
+    for model in models:
+        model.source = "benchmark"
+
     # Run the benchmark for each model
     timings = benchmark(models, n_calls=N_CALLS)
 
