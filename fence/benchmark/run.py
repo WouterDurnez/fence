@@ -1,5 +1,7 @@
 import logging
 import time
+from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
@@ -88,9 +90,12 @@ def benchmark(models: list, n_calls: int = 20):
 #######
 
 
-def viz(timings: dict):
+def viz(timings: dict, target_folder: str | Path):
     """
     Plot the timings as a strip plot using plotly
+
+    :param timings: dictionary containing model:[timings] mapping
+    :param target_folder: path to folder to store figure in
     """
     # Prepare the data
     df = pd.DataFrame(
@@ -129,8 +134,13 @@ def viz(timings: dict):
     # Show the plot
     fig.show()
 
-    # Save the plot as an HTML file
-    fig.write_html("model_benchmark_timings.html")
+    # Save the plot as an HTML file with timestamp
+    if target_folder:
+        target_folder = Path(target_folder)
+        target_folder.mkdir(exist_ok=True, parents=True)
+    save_name = f"model_benchmark_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+    save_path = Path(target_folder) / save_name if target_folder else save_name
+    fig.write_html(str(save_path))
 
 
 ########
@@ -157,4 +167,4 @@ if __name__ == "__main__":
     timings = benchmark(models, n_calls=20)
 
     # Visualize the results
-    viz(timings)
+    viz(timings, target_folder="figures")
