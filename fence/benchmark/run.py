@@ -4,8 +4,13 @@ import time
 import pandas as pd
 import plotly.express as px
 
-from benchmark.prompts import HIGHLIGHT, LANGUAGE_NAME, SYSTEM_PROMPT, USER_MESSAGE
 from fence import setup_logging
+from fence.benchmark.prompts import (
+    HIGHLIGHT,
+    LANGUAGE_NAME,
+    SYSTEM_PROMPT,
+    USER_MESSAGE,
+)
 from fence.links import Link
 from fence.links import logger as link_logger
 from fence.models.base import LLM
@@ -134,9 +139,6 @@ def viz(timings: dict):
 
 if __name__ == "__main__":
 
-    # Number of calls to make to each model
-    N_CALLS = 20
-
     # Models to benchmark
     models = [
         ClaudeHaiku(),
@@ -152,7 +154,7 @@ if __name__ == "__main__":
         model.source = "benchmark"
 
     # Run the benchmark for each model
-    timings = benchmark(models, n_calls=N_CALLS)
+    timings = benchmark(models, n_calls=20)
 
     # Visualize the results
     viz(timings)
