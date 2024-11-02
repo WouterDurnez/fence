@@ -134,7 +134,7 @@ class TripleBacktickParser(Parser):
 
     """
 
-    def __init__(self, prefill: str = None):
+    def __init__(self, prefill: str | None = None):
         """
         Initialize the TripleBacktickParser with the given parameters.
         :param prefill: string to prefill the string with (as this was also passed as an assistant prefill in the prompt)
@@ -155,6 +155,11 @@ class TripleBacktickParser(Parser):
         # Extract the string from within the triple backticks
         pattern = re.compile(r"```([\s\S]*?)```")
         match = pattern.search(input_string)
+        if not match:
+            logger.warning(
+                f"TripleBacktickParser expected triple backticks. Received: {input_string}."
+            )
+            raise ValueError("TripleBacktickParser found no triple backticks.")
         string = match.group(1).strip()
 
         return string

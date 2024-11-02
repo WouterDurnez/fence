@@ -173,7 +173,7 @@ class Link(BaseLink):
         if isinstance(template, MessagesTemplate):
             if not isinstance(model, (Claude3Base, GPTBase)):
                 logger.warning(
-                    f"MessagesTemplate can only be used with Claude3 or GPT models. Got {model.model_id if model else None}."
+                    f"MessagesTemplate can only be used with Claude3 or GPT models. Got {model.model_id if model else None}. Converting to StringTemplate."
                 )
 
                 # Reformat the template to a StringTemplate

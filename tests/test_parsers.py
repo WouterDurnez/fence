@@ -55,7 +55,7 @@ def test_triple_backtick_parser_with_invalid_input():
     Test TripleBacktickParser with an invalid (non-triple backtick) input.
     """
     parser = TripleBacktickParser()
-    with pytest.raises(AttributeError):
+    with pytest.raises(ValueError):
         parser.parse("Hello, World!")
 
 

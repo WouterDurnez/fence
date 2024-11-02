@@ -4,11 +4,10 @@ Agent class to orchestrate a flow that potentially calls tools or other, special
 
 import logging
 
-from fence import LLM, Link, TOMLParser, setup_logging
+from fence import LLM, ClaudeInstant, Link, TOMLParser, setup_logging
 from fence.agents.base import BaseAgent
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory
-from fence.models.openai import GPT4omini
 from fence.prompts.agents import REACT_MULTI_AGENT_TOOL_PROMPT
 from fence.tools.base import BaseTool
 from fence.tools.math import CalculatorTool, PrimeTool
@@ -18,7 +17,7 @@ from fence.tools.text import TextInverterTool
 logger = logging.getLogger(__name__)
 
 # Suppress the link logger
-link_logger.setLevel("DEBUG")
+link_logger.setLevel("WARNING")
 
 
 class SuperAgent(BaseAgent):
@@ -147,19 +146,6 @@ class SuperAgent(BaseAgent):
         self._flush_memory()
         return answer or "No answer found"
 
-    def _flush_memory(self):
-        """Clear or reset the agent's memory context."""
-
-        # Check if there are any messages in the memory
-        self.memory.messages = self.memory.get_messages()
-
-        # Check if there is a system message in the memory
-        self.memory.system = self.memory.get_system_message()
-
-        # If no system message is present, add a new one
-        if not self.memory.system:
-            self.memory.set_system_message(content=self._system_message)
-
     @staticmethod
     def _format_entities(entities: list) -> str:
         """Format delegates or tools into TOML representation."""
@@ -225,7 +211,7 @@ class SuperAgent(BaseAgent):
 
 if __name__ == "__main__":
 
-    setup_logging(log_level="info", are_you_serious=True)
+    setup_logging(log_level="info", are_you_serious=False)
 
     # # Create the delegate agent
     # delegate = ToolAgent(
@@ -292,7 +278,7 @@ if __name__ == "__main__":
 
     # Create an agent with a model and tools
     agent = SuperAgent(
-        model=GPT4omini(source="agent"),
+        model=ClaudeInstant(),
         tools=[SearchTool()],
         environment={"some_env_var": "some_value"},
     )
@@ -347,49 +333,3 @@ if __name__ == "__main__":
     #     memory=FleetingMemory(),
     # )
     # result = parent_agent.run("what is the current account holders name?")
-
-    # # Content
-    # content = """Nikola Tesla (/ˈtɛslə/;[2] Serbian Cyrillic: Никола Тесла, [nǐkola têsla]; 10 July 1856[a] – 7 January 1943) was a Serbian-American[3][4] engineer, futurist, and inventor. He is known for his contributions to the design of the modern alternating current (AC) electricity supply system.[5]
-    #
-    # Born and raised in the Austrian Empire, Tesla first studied engineering and physics in the 1870s without receiving a degree. He then gained practical experience in the early 1880s working in telephony and at Continental Edison in the new electric power industry. In 1884 he immigrated to the United States, where he became a naturalized citizen. He worked for a short time at the Edison Machine Works in New York City before he struck out on his own. With the help of partners to finance and market his ideas, Tesla set up laboratories and companies in New York to develop a range of electrical and mechanical devices. His AC induction motor and related polyphase AC patents, licensed by Westinghouse Electric in 1888, earned him a considerable amount of money and became the cornerstone of the polyphase system which that company eventually marketed.
-    #
-    # Attempting to develop inventions he could patent and market, Tesla conducted a range of experiments with mechanical oscillators/generators, electrical discharge tubes, and early X-ray imaging. He also built a wirelessly controlled boat, one of the first ever exhibited. Tesla became well known as an inventor and demonstrated his achievements to celebrities and wealthy patrons at his lab, and was noted for his showmanship at public lectures. Throughout the 1890s, Tesla pursued his ideas for wireless lighting and worldwide wireless electric power distribution in his high-voltage, high-frequency power experiments in New York and Colorado Springs. In 1893, he made pronouncements on the possibility of wireless communication with his devices. Tesla tried to put these ideas to practical use in his unfinished Wardenclyffe Tower project, an intercontinental wireless communication and power transmitter, but ran out of funding before he could complete it.
-    #
-    # After Wardenclyffe, Tesla experimented with a series of inventions in the 1910s and 1920s with varying degrees of success. Having spent most of his money, Tesla lived in a series of New York hotels, leaving behind unpaid bills. He died in New York City in January 1943.[6] Tesla's work fell into relative obscurity following his death, until 1960, when the General Conference on Weights and Measures named the International System of Units (SI) measurement of magnetic flux density the tesla in his honor. There has been a resurgence in popular interest in Tesla since the 1990s.[7]"""
-    #
-    # # Create role using content
-    # role = f"""You are a helpful assistant, capable of answering content-specific questions. You do not deviate from this task. You should therefore not talk about anything other than this content.
-    #
-    # The content you have access to is this:
-    #
-    # <content>
-    # {content}
-    # </content>
-    #
-    # Again, you can only answer questions about the content you have access to.
-    # """
-    #
-    # org_id = "test"
-    # query = "what was my last question?"
-    #
-    # memory = DynamoDBMemory(
-    #     table_name="fence_test",
-    #     primary_key_name="session",
-    #     primary_key_value='26308628-ab0b-4d7e-8eed-82f28bd0db61',  # UUID for the ssions
-    #     primary_key_value_prefix=f"{org_id}#",  # Prefix for the PK, useful for tenant isolation
-    #     source="asset_chat",
-    # )
-    #
-    # # Initialize agent
-    # logger.info("Initializing agent")
-    # agent = SuperAgent(
-    #     identifier="asset_chat_agent",
-    #     model=ClaudeHaiku(source="asset_chat"),
-    #     description="Agent to allow users to chat with their assets",
-    #     role=role,
-    #     memory=memory,
-    # )
-    #
-    # # Run agent
-    # response = agent.run(prompt=query)
-    # logger.info(f"Agent response: {response}")
