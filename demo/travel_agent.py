@@ -142,10 +142,11 @@ class WeatherTool(BaseTool):
 if __name__ == "__main__":
 
     # Setup logging
-    setup_logging(log_level="critical", are_you_serious=False)
+    setup_logging(log_level="info", are_you_serious=False)
 
     # Create a weather agent
     weather_agent = SuperAgent(
+        identifier="weather_agent",
         model=GPT4omini(),
         description="You are a very helpful and friendly weather man. You have a weather forecast tool that helps you get more information about specific locations.",
         tools=[WeatherTool()],
