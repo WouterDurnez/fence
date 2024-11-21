@@ -2,7 +2,7 @@
 Integration tests for tool calling.
 """
 
-from fence.agents.agent import SuperAgent
+from fence.agents.agent import Agent
 from fence.models.openai import GPT4omini
 from fence.tools.scratch import EnvTool
 
@@ -18,7 +18,7 @@ class TestToolCalling:
         """
 
         # Create an agent with a model and tools
-        agent = SuperAgent(
+        agent = Agent(
             model=GPT4omini(source="agent"),
             tools=[EnvTool()],
             environment={"some_env_var": "some_value"},
