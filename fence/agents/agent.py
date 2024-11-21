@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 link_logger.setLevel("WARNING")
 
 
-class SuperAgent(BaseAgent):
+class Agent(BaseAgent):
     """An LLM-based agent capable of delegating tasks to other agents or tools."""
 
     def __init__(
@@ -221,7 +221,7 @@ if __name__ == "__main__":
     # )
     #
     # # Create an intermediary referee agent
-    # intermediary = SuperAgent(
+    # intermediary = Agent(
     #     model=GPT4omini(source="test"),
     #     delegates=[delegate],
     #     tools=[SecretStringTool()],
@@ -237,7 +237,7 @@ if __name__ == "__main__":
     # )
     #
     # # Create the referee agent
-    # master = SuperAgent(
+    # master = Agent(
     #     model=GPT4omini(source="test"),
     #     delegates=[intermediary, chat_agent],
     #     tools=[TextInverterTool()],
@@ -277,7 +277,7 @@ if __name__ == "__main__":
     tools = [CalculatorTool(), PrimeTool(), TextInverterTool(), EnvTool()]
 
     # Create an agent with a model and tools
-    agent = SuperAgent(
+    agent = Agent(
         model=ClaudeInstant(),
         tools=[SearchTool()],
         environment={"some_env_var": "some_value"},
@@ -319,13 +319,13 @@ if __name__ == "__main__":
     # )
     #
     # # Create the agents
-    # child_agent = SuperAgent(
+    # child_agent = Agent(
     #     identifier="child_accountant",
     #     description="An agent that can retrieve the account holder name",
     #     model=GPT4omini(source="agent"),
     #     tools=[AccountNameRetrieverTool()],
     # )
-    # parent_agent = SuperAgent(
+    # parent_agent = Agent(
     #     identifier="parent_accountant",
     #     model=GPT4omini(source="agent"),
     #     delegates=[child_agent],
