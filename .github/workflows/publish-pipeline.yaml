@@ -23,23 +23,22 @@ jobs:
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: .python-version
 
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python - -y
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
 
       - name: Update PATH
         run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Update Poetry configuration
-        run: poetry config virtualenvs.create false
+      - name: Install dependencies using uv
+        run: uv sync
 
-      - name: Install dependencies
-        run: poetry install --sync --no-interaction
+      - name: Run tests
+        run: uv run pytest tests
 
-      - name: Package project
-        run: poetry build
+      - name: Build package
+        run: uv build
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
