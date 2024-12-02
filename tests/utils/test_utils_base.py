@@ -1,3 +1,7 @@
+"""
+Base utilities tests
+"""
+
 import time
 
 import pytest

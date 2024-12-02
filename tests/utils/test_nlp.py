@@ -1,6 +1,10 @@
+"""
+NLP utility tests
+"""
+
 import pytest
 
-from fence.models.openai import GPT4omini
+from fence.models.openai.gpt import GPT4omini
 from fence.utils.nlp import LLMHelper, TextChunker, get_first_n_words, get_word_count
 
 ##############

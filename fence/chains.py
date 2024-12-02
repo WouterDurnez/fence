@@ -10,8 +10,6 @@ from typing import Collection, Iterable
 
 from fence.links import BaseLink, Link
 from fence.models.base import LLM
-from fence.models.claude import ClaudeInstant
-from fence.templates import StringTemplate
 from fence.utils.base import time_it
 
 logger = logging.getLogger(__name__)
@@ -268,71 +266,3 @@ class LinearChain(BaseChain):
             )
 
         return input_dict
-
-
-if __name__ == "__main__":
-
-    # Instantiate an LLM model
-    claude = ClaudeInstant(source="test")
-
-    # Example chains
-    link_a = Link(
-        template=StringTemplate(
-            "What's the opposite of {A}? Reply with one word.",
-        ),
-        name="opposite",
-        output_key="X",
-    )
-    link_b = Link(
-        template=StringTemplate(
-            "What's a superlative version of {B}. Reply with one word.",
-        ),
-        name="superlative",
-        output_key="Y",
-    )
-    link_c = Link(
-        template=StringTemplate(
-            "Write a sarcastic poem using this as inspiration: '{X}' and '{Y}'",
-        ),
-        name="sarcastic_poem",
-        output_key="output",
-    )
-
-    # Combine the chains into a set
-    chain = Chain(model=claude, links=[link_a, link_b, link_c])
-
-    # Run the chain set
-    result = chain(input_dict={"A": "calm", "B": "a storm"})
-
-    # Link result
-    result_link = link_a(input_dict={"A": "calm"}, model=claude)
-    print(result_link)
-
-    # print(result["output"])
-    #
-    # # Example ConcatLink
-    # def concatenate(x, y):
-    #     return f"{x} {y}"
-    #
-    # concat_link = TransformationLink(
-    #     input_keys=["A", "B"], function=concatenate, output_key="C"
-    # )
-    # concat_link2 = TransformationLink(input_keys=["C", "D"], function=concatenate)
-    # concat_link3 = TransformationLink(input_keys=["X", "Y"], function=concatenate)
-    #
-    # # Example LinearChain
-    # linear_chain = LinearChain(llm=claude, links=[concat_link, concat_link2])
-    # result = linear_chain(input_dict={"A": "I am", "B": "a calm", "D": "hurricane"})
-    #
-    # # Let's try another one
-    # linear_chain = LinearChain(llm=claude, links=[link_a, link_b, concat_link3])
-    # result_linear = linear_chain(
-    #     input_dict={"A": "I am", "B": "a calm", "D": "hurricane"}
-    # )
-    #
-    # # Let's see what error a BaseLink run method raises
-    # try:
-    #     base_link = BaseLink(input_keys=["A"], output_key="B")
-    #     base_link.run(input_dict={"A": "test"})
-    # except Exception as e:
-    #     print('Gave this error:', e)
