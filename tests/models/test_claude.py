@@ -1,10 +1,14 @@
+"""
+Bedrock Claude model tests (pre gen 3)
+"""
+
 import json
 from unittest.mock import MagicMock
 
 import pytest
 
 from fence.models.base import register_log_callback
-from fence.models.claude import ClaudeBase, ClaudeInstant, ClaudeV2
+from fence.models.bedrock.claude import ClaudeBase, ClaudeInstant, ClaudeV2
 
 
 @pytest.fixture

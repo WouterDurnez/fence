@@ -1,3 +1,7 @@
+"""
+String template tests.
+"""
+
 import logging
 import os
 import tempfile

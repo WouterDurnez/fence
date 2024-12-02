@@ -3,7 +3,7 @@ Integration tests for tool calling.
 """
 
 from fence.agents.agent import Agent
-from fence.models.openai import GPT4omini
+from fence.models.openai.gpt import GPT4omini
 from fence.tools.scratch import EnvTool
 
 

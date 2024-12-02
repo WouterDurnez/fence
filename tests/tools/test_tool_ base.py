@@ -1,3 +1,7 @@
+"""
+BaseTool tests
+"""
+
 import logging
 
 import pytest

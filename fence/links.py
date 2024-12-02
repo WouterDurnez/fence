@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, Iterable
 
 from fence.models.base import LLM
-from fence.models.claude3 import Claude3Base
+from fence.models.bedrock.claude3 import Claude3Base
 from fence.models.openai import GPTBase
 from fence.parsers import Parser
 from fence.templates import MessagesTemplate, StringTemplate

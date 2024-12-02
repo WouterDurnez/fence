@@ -1,3 +1,7 @@
+"""
+Message template tests
+"""
+
 import logging
 
 import pytest
