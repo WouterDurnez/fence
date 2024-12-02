@@ -8,7 +8,7 @@ from fence.models.bedrock.claude3 import (
     ClaudeHaiku,
     ClaudeSonnet,
 )
-from fence.models.openai import GPT4o, GPTBase
+from fence.models.openai.gpt import GPT4o, GPTBase
 from fence.parsers import BoolParser, IntParser, TOMLParser, TripleBacktickParser
 from fence.templates import Message, Messages, MessagesTemplate
 from fence.templates.string import StringTemplate
