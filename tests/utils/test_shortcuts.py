@@ -7,10 +7,6 @@ from fence.utils.shortcuts import create_string_link, create_toml_link
 
 
 class MockLLM(LLM):
-    """
-    A mock implementation of the LLM class for testing purposes.
-    """
-
     def __init__(self, return_string: str = None):
         self.model_id = "mock-llm"
         self.model_name = "Mock LLM"
@@ -19,41 +15,17 @@ class MockLLM(LLM):
         self.return_string = return_string
 
     def invoke(self, *args, **kwargs):
-        """
-        Mock the invocation of the LLM, returning a static TOML-formatted string.
-        """
         return self.return_string
 
 
-@pytest.fixture
-def mock_model_toml():
-    """
-    Provide a fixture for the mock LLM model.
-    """
-    return MockLLM(
-        return_string="""```toml\n[[ingredients]]\nname = \"Flour\"\nquantity = \"2 cups\"```"""
-    )
-
-
-@pytest.fixture
-def mock_model_string():
-    """
-    Provide a fixture for the mock LLM model.
-    """
-    return MockLLM(return_string="blue")
-
-
-def test_create_toml_link(mock_model_toml):
-    """
-    Test the create_toml_link utility function.
-
-    This test verifies that the link object is correctly created and configured, and that
-    the run method produces the expected output.
-    """
-    # Define the input messages
-    user_message = "Create an ingredient list for {recipe_name}"
-    assistant_message = "```toml"
-    system_message = """You create ingredient lists in a TOML format. Here's an example:
+@pytest.fixture(
+    params=[
+        {
+            "model_type": "toml",
+            "return_string": """```toml\n[[ingredients]]\nname = \"Flour\"\nquantity = \"2 cups\"```""",
+            "user_message": "Create an ingredient list for {recipe_name}",
+            "assistant_message": "```toml",
+            "system_message": """You create ingredient lists in a TOML format. Here's an example:
 [[ingredients]]
 name = "Flour"
 quantity = "2 cups"
@@ -68,51 +40,61 @@ quantity = "2"
 
 [[ingredients]]
 name = "Milk"
-quantity = "1.5 cups"""
+quantity = "1.5 cups""",
+            "expected_state": {
+                "ingredients": [{"name": "Flour", "quantity": "2 cups"}]
+            },
+            "expected_name": "toml_link",
+            "parser_class": TOMLParser,
+        },
+        {
+            "model_type": "string",
+            "return_string": "blue",
+            "user_message": "The sky is",
+            "system_message": "Respond with a color",
+            "expected_state": "blue",
+            "expected_name": "string_link",
+            "parser_class": None,
+        },
+    ]
+)
+def mock_model(request):
+    return {
+        "model": MockLLM(return_string=request.param["return_string"]),
+        **request.param,
+    }
 
-    # Create the link object
-    link = create_toml_link(
-        model=mock_model_toml,
-        user_message=user_message,
-        assistant_message=assistant_message,
-        system_message=system_message,
+
+def test_link_creation(mock_model):
+    """
+    Parametrized test for link creation and running.
+    Covers both TOML and string link scenarios.
+    """
+    if mock_model["model_type"] == "toml":
+        link = create_toml_link(
+            model=mock_model["model"],
+            user_message=mock_model["user_message"],
+            assistant_message=mock_model.get("assistant_message"),
+            system_message=mock_model["system_message"],
+        )
+        result = link.run(recipe_name="chocolate cake")
+    else:
+        link = create_string_link(
+            model=mock_model["model"],
+            user_message=mock_model["user_message"],
+            system_message=mock_model["system_message"],
+        )
+        result = link.run()
+
+    # Common assertions
+    assert isinstance(link, Link)
+    assert link.name == mock_model["expected_name"]
+    assert (
+        isinstance(link.parser, mock_model["parser_class"])
+        if mock_model["parser_class"]
+        else link.parser is None
     )
 
-    # Assert the link object is correctly configured
-    assert isinstance(link, Link)
-    assert link.name == "toml_link"
-    assert isinstance(link.parser, TOMLParser)
-
-    # Run the link and verify the output
-    result = link.run(recipe_name="chocolate cake")
+    # State-specific assertion
     assert "state" in result
-    assert result["state"] == {"ingredients": [{"name": "Flour", "quantity": "2 cups"}]}
-
-
-def test_create_string_link(mock_model_string):
-    """
-    Test the create_string_link utility function.
-
-    This test verifies that the link object is correctly created and configured, and that
-    the run method produces the expected output.
-    """
-    # Define the input messages
-    user_message = "The sky is"
-    system_message = """Respond with a color"""
-
-    # Create the link object
-    link = create_string_link(
-        model=mock_model_string,
-        user_message=user_message,
-        system_message=system_message,
-    )
-
-    # Assert the link object is correctly configured
-    assert isinstance(link, Link)
-    assert link.name == "string_link"
-    assert link.parser is None
-
-    # Run the link and verify the output
-    result = link.run()
-    assert "state" in result
-    assert result["state"] == "blue"
+    assert result["state"] == mock_model["expected_state"]
