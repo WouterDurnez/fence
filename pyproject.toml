@@ -43,8 +43,5 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
-[tool.uv]
-packages = [{include = "fence", from = "."}]
-
 [tool.setuptools]
 packages = ["fence"]
