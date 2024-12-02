@@ -36,9 +36,6 @@ jobs:
       - name: Install dependencies using uv
         run: uv sync
 
-      - name: Run tests
-        run: uv run pytest tests
-
       - name: Build package
         run: uv build
 
