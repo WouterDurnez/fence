@@ -203,8 +203,12 @@ class TOMLParser(Parser):
         :return: dictionary containing the TOML data
         """
 
-        # First, reapply the prefill string to the input string
-        input_string = self.prefill + input_string if self.prefill else input_string
+        # First, reapply the prefill string to the input string, unless the input string already starts with the prefill
+        input_string = (
+            self.prefill + input_string
+            if self.prefill and not input_string.startswith(self.prefill)
+            else input_string
+        )
 
         # If requested, extract the TOML string from within the triple backticks
         toml_string = (
