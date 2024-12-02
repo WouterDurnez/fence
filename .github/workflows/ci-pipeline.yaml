@@ -10,7 +10,6 @@ on:
 # Define global environment variables
 env:
   PIP_CACHE_DIR: ${{ github.workspace }}/.cache/pip
-  POETRY_CACHE_DIR: ${{ github.workspace }}/.cache/poetry
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # Secrets are stored in GitHub Secrets
 
 # Define jobs to run in the workflow
@@ -33,14 +32,11 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Update PATH
-        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
-
       - name: Install dependencies using uv
         run: uv sync
 
       - name: Run tests
-        run: uv run pytest tests --junitxml=report.xml
+        run: uv run pytest tests --junitxml=fence/tests/report.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@v3
