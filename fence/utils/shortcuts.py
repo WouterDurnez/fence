@@ -12,9 +12,9 @@ from fence.templates.models import Message, Messages
 def create_toml_link(
     model: LLM,
     user_message: str,
-    assistant_message: str | None = None,
     system_message: str | None = None,
-    **link_kwargs
+    assistant_message: str | None = "```toml",
+    **link_kwargs,
 ) -> Link:
     """
     Create a link object expected to return a TOML-formatted message.
@@ -62,7 +62,7 @@ def create_string_link(
     user_message: str,
     assistant_message: str | None = None,
     system_message: str | None = None,
-    **link_kwargs
+    **link_kwargs,
 ) -> Link:
     """
     Create a link object expected to return a string message.
