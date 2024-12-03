@@ -33,6 +33,8 @@ class Agent(BaseAgent):
         tools: list[BaseTool] | None = None,
         memory: BaseMemory | None = None,
         environment: dict | None = None,
+        are_you_serious: bool = False,
+        max_iterations: int = 5,
     ):
         """
         Initialize the Agent object.
@@ -45,6 +47,8 @@ class Agent(BaseAgent):
         :param tools: A list of Tool objects.
         :param memory: A memory class. Defaults to FleetingMemory.
         :param environment: A dictionary of environment variables to pass to delegates and tools.
+        :param are_you_serious: A flag to determine if the log message should be printed in a frivolous manner.
+        :param max_iterations: The maximum number of iterations to run before stopping the agent.
         """
         super().__init__(
             identifier=identifier,
@@ -52,7 +56,9 @@ class Agent(BaseAgent):
             description=description,
             memory=memory,
             environment=environment or {},
+            are_you_serious=are_you_serious,
         )
+        self.max_iterations = max_iterations
 
         # Set role
         self.role = (
@@ -108,11 +114,13 @@ class Agent(BaseAgent):
         # Add initial prompt to the memory buffer
         self.memory.add_message(role="user", content=prompt)
 
-        max_iterations, iteration_count = 30, 0
-        response, answer = None, None
+        # Intialize variables pre-loop
+        iteration_count, response, answer = 0, None, None
 
-        while iteration_count < max_iterations:
+        # Let's go!
+        while iteration_count < self.max_iterations:
 
+            # Run the model with the current memory state
             link = Link(
                 name=f"{self.identifier or 'agent'}_step_{iteration_count}",
                 model=self.model,
@@ -121,49 +129,66 @@ class Agent(BaseAgent):
             response = link.run()["state"]
             logger.info(f"Model response: {response}")
 
+            # Add the response to the memory buffer
             self.memory.add_message(role="assistant", content=response)
 
-            if "[ANSWER]" in response:
-                answer = self._extract_answer(response)
-                break
+            # Extract the thought from the response for logging
+            self._extract_thought(response)
 
-            if "[DELEGATE]" in response:
-                delegate_response = self._handle_delegate_action(response)
-                if delegate_response:
-                    self.memory.add_message(
-                        role="user", content=f"[OBSERVATION] {delegate_response}"
-                    )
+            # Handle the response
+            match response:
 
-            if "[ACTION]" in response:
-                tool_response = self._handle_tool_action(response)
-                if tool_response:
-                    self.memory.add_message(
-                        role="user", content=f"[OBSERVATION] {tool_response}"
-                    )
+                # Best case: we have an answer
+                case response if "[ANSWER]" in response:
+                    answer = self._extract_answer(response)
+                    break
+
+                # Handle delegate actions
+                case response if "[DELEGATE]" in response:
+                    delegate_response = self._handle_delegate_action(response)
+                    self.log(message=delegate_response, type="observation")
+                    if delegate_response:
+                        self.memory.add_message(
+                            role="user", content=f"[OBSERVATION] {delegate_response}"
+                        )
+
+                # Handle tool actions
+                case response if "[ACTION]" in response:
+                    tool_response = self._handle_tool_action(response)
+                    self.log(message=tool_response, type="observation")
+                    if tool_response:
+                        self.memory.add_message(
+                            role="user", content=f"[OBSERVATION] {tool_response}"
+                        )
 
             iteration_count += 1
 
         self._flush_memory()
         return answer or "No answer found"
 
-    @staticmethod
-    def _format_entities(entities: list) -> str:
-        """Format delegates or tools into TOML representation."""
-        return (
-            "".join(entity.format_toml() for entity in entities)
-            if entities
-            else "None available"
+    def _extract_thought(self, response: str) -> str:
+        """Extract the thought from the response. Starts with [THOUGHT], and ends before [ACTION], [DELEGATE], or [ANSWER]."""
+        thought = (
+            response.split("[THOUGHT]")[1]
+            .split("[ACTION]")[0]
+            .split("[DELEGATE]")[0]
+            .split("[ANSWER]")[0]
+            .strip()
         )
+        self.log(message=thought, type="thought")
+        return thought
 
-    @staticmethod
-    def _extract_answer(response: str) -> str:
+    def _extract_answer(self, response: str) -> str:
         """Extract the final answer from the response."""
-        return response.split("[ANSWER]")[-1].strip()
+        answer = response.split("[ANSWER]")[-1].strip()
+        self.log(message=answer, type="answer")
+        return answer
 
     def _handle_delegate_action(self, response: str) -> str:
         """Handle actions involving delegate agents."""
 
         delegate_block = response.split("[DELEGATE]")[-1].strip()
+        self.log(message=delegate_block, type="delegate")
         logger.debug(f"Processing delegate: {delegate_block}")
 
         try:
@@ -188,6 +213,7 @@ class Agent(BaseAgent):
         """Handle actions involving tools."""
 
         action_block = response.split("[ACTION]")[-1].strip()
+        self.log(message=action_block, type="action")
         logger.debug(f"Processing tool action: {action_block}")
 
         try:
@@ -208,10 +234,22 @@ class Agent(BaseAgent):
             logger.error(f"Error processing tool action: {e}")
             return "Tool execution failed"
 
+    ######
+    #
+
+    @staticmethod
+    def _format_entities(entities: list) -> str:
+        """Format delegates or tools into TOML representation."""
+        return (
+            "".join(entity.format_toml() for entity in entities)
+            if entities
+            else "None available"
+        )
+
 
 if __name__ == "__main__":
 
-    setup_logging(log_level="info", are_you_serious=False)
+    setup_logging(log_level="critical", are_you_serious=False)
 
     # # Create the delegate agent
     # delegate = ToolAgent(
