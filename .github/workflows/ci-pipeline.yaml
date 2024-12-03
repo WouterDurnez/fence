@@ -1,4 +1,4 @@
-name: Tests and Build
+name: Fence Tests and Build Pipeline
 
 # Define when the workflow should run
 on:
