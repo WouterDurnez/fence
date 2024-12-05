@@ -2,9 +2,9 @@
 Some convenient shortcuts for common operations.
 """
 
-from fence import TOMLParser
 from fence.links import Link
 from fence.models.base import LLM
+from fence.parsers import TOMLParser
 from fence.templates.messages import MessagesTemplate
 from fence.templates.models import Message, Messages
 

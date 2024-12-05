@@ -6,9 +6,9 @@ import logging
 from abc import abstractmethod
 from enum import Enum
 
-from fence import LLM
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory, FleetingMemory
+from fence.models.base import LLM
 
 logger = logging.getLogger(__name__)
 

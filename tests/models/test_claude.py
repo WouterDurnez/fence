@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from fence.models.base import register_log_callback
-from fence.models.bedrock.claude import ClaudeBase, ClaudeInstant, ClaudeV2
+from fence.models.bedrock.claude import ClaudeInstant
 
 
 @pytest.fixture
@@ -18,19 +18,6 @@ def mock_boto_client(mocker):
     """
     mock_client = mocker.patch("boto3.client")
     return mock_client
-
-
-def test_claude_base_initialization(mock_boto_client):
-    """
-    Test the initialization of ClaudeBase class.
-    """
-    model = ClaudeBase(source="test_source")
-    assert model.source == "test_source"
-    assert model.metric_prefix == ""
-    assert model.logging_tags == {}
-    assert model.model_kwargs == {"temperature": 0.01, "max_tokens_to_sample": 2048}
-    assert model.region == "eu-central-1"
-    assert model.client == mock_boto_client.return_value
 
 
 def test_claude_instant_initialization(mock_boto_client):
@@ -46,21 +33,6 @@ def test_claude_instant_initialization(mock_boto_client):
     assert model.client == mock_boto_client.return_value
     assert model.model_id == "anthropic.claude-instant-v1"
     assert model.model_name == "ClaudeInstant"
-
-
-def test_claude_v2_initialization(mock_boto_client):
-    """
-    Test the initialization of ClaudeV2 class.
-    """
-    model = ClaudeV2(source="test_source")
-    assert model.source == "test_source"
-    assert model.metric_prefix == ""
-    assert model.logging_tags == {}
-    assert model.model_kwargs == {"temperature": 0.01, "max_tokens_to_sample": 2048}
-    assert model.region == "eu-central-1"
-    assert model.client == mock_boto_client.return_value
-    assert model.model_id == "anthropic.anthropic.claude-v2"
-    assert model.model_name == "ClaudeV2"
 
 
 def test_invoke_method(mock_boto_client, mocker):

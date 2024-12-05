@@ -4,10 +4,11 @@ Tool using agent
 
 import logging
 
-from fence import LLM, Link
+from fence import Link
 from fence.agents.base import BaseAgent
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory, FleetingMemory
+from fence.models.base import LLM
 from fence.models.openai import GPT4omini
 from fence.prompts.agents import CHAT_PROMPT
 

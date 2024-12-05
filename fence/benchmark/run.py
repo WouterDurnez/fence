@@ -16,9 +16,7 @@ from fence.benchmark.prompts import (
 from fence.links import Link
 from fence.links import logger as link_logger
 from fence.models.base import LLM
-from fence.models.claude import ClaudeInstant
-from fence.models.claude3 import Claude35Sonnet, ClaudeHaiku, ClaudeSonnet
-from fence.models.openai import GPT4o, GPT4omini
+from fence.models.bedrock.claude import ClaudeHaiku
 from fence.templates.messages import MessagesTemplate
 from fence.templates.models import Message, Messages
 from fence.utils.base import logger, time_it
@@ -73,7 +71,7 @@ def benchmark(models: list, n_calls: int = 20):
     timings = {}
 
     @parallelize(max_workers=10)
-    @time_it(only_warn=False, threshold=10)
+    @time_it(only_warn=True, threshold=10)
     def run_model_benchmark(model: LLM, n_calls: int = 20):
         logger.info(f"Testing model: {model.__class__.__name__}")
 
@@ -152,11 +150,14 @@ if __name__ == "__main__":
     # Models to benchmark
     models = [
         ClaudeHaiku(),
-        ClaudeInstant(),
-        ClaudeSonnet(),
-        Claude35Sonnet(),
-        GPT4o(),
-        GPT4omini(),
+        # ClaudeInstant(),
+        # ClaudeSonnet(),
+        # Claude35Sonnet(),
+        # GPT4o(),
+        # GPT4omini(),
+        # NovaPro(),
+        # NovaLite(),
+        # NovaMicro(),
     ]
 
     # Add source to all models

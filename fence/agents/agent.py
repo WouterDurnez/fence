@@ -6,10 +6,13 @@ import logging
 import time
 from contextlib import contextmanager
 
-from fence import LLM, ClaudeInstant, Link, TOMLParser, setup_logging
+from fence import Link, setup_logging
 from fence.agents.base import BaseAgent
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory
+from fence.models.base import LLM
+from fence.models.bedrock.claude import ClaudeInstant
+from fence.parsers import TOMLParser
 from fence.prompts.agents import REACT_MULTI_AGENT_TOOL_PROMPT
 from fence.tools.base import BaseTool
 from fence.tools.math import CalculatorTool, PrimeTool
