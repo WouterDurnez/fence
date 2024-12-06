@@ -16,7 +16,14 @@ from fence.benchmark.prompts import (
 from fence.links import Link
 from fence.links import logger as link_logger
 from fence.models.base import LLM
-from fence.models.bedrock.claude import ClaudeHaiku
+from fence.models.bedrock.claude import (
+    Claude35Sonnet,
+    ClaudeHaiku,
+    ClaudeInstant,
+    ClaudeSonnet,
+)
+from fence.models.bedrock.nova import NovaLite, NovaMicro, NovaPro
+from fence.models.openai.gpt import GPT4o, GPT4omini
 from fence.templates.messages import MessagesTemplate
 from fence.templates.models import Message, Messages
 from fence.utils.base import logger, time_it
@@ -32,7 +39,6 @@ px.defaults.template = "plotly_white"
 # Setup logging
 link_logger.setLevel(logging.CRITICAL)
 setup_logging(log_level="info", are_you_serious=False)
-
 
 #############
 # BENCHMARK #
@@ -53,7 +59,6 @@ template = MessagesTemplate(
 # Single model run
 @parallelize(max_workers=10)
 def test_model(index: int, model: LLM):
-
     start_time = time.time()
     link = Link(template=template, model=model)
 
@@ -101,15 +106,26 @@ def viz(timings: dict, target_folder: str | Path):
         columns=["Model", "Time"],
     )
 
-    # Determine if each model is a Claude model
-    df["Is Claude"] = df["Model"].apply(lambda x: x.startswith("Claude"))
+    # Add model family column
+    def get_model_family(model_name):
+        match model_name:
+            case name if "Claude" in name:
+                return "Claude"
+            case name if "GPT" in name:
+                return "GPT"
+            case name if "Nova" in name:
+                return "Nova"
+            case _:
+                return "Other"
+
+    df["Family"] = df["Model"].apply(get_model_family)
 
     # Create the strip plot
     fig = px.strip(
         df,
         y="Time",
         x="Model",
-        color="Is Claude",
+        color="Family",
         labels={"Time": "Time (s)", "Model": "Model"},
         title="Model Benchmark Timings",
         color_discrete_map={True: "blue", False: "red"},
@@ -149,23 +165,28 @@ if __name__ == "__main__":
 
     # Models to benchmark
     models = [
-        ClaudeHaiku(),
-        # ClaudeInstant(),
-        # ClaudeSonnet(),
-        # Claude35Sonnet(),
-        # GPT4o(),
-        # GPT4omini(),
-        # NovaPro(),
-        # NovaLite(),
-        # NovaMicro(),
+        model(source="benchmark", region="us-east-1")
+        for model in (
+            ClaudeHaiku,
+            ClaudeInstant,
+            ClaudeSonnet,
+            Claude35Sonnet,
+            # Claude35SonnetV2,
+            NovaPro,
+            NovaLite,
+            NovaMicro,
+        )
     ]
+
+    # Add GPT models
+    models += [model(source="benchmark") for model in (GPT4o, GPT4omini)]
 
     # Add source to all models
     for model in models:
         model.source = "benchmark"
 
     # Run the benchmark for each model
-    timings = benchmark(models, n_calls=20)
+    timings = benchmark(models, n_calls=30)
 
     # Visualize the results
     viz(timings, target_folder="figures")

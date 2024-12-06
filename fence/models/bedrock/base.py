@@ -128,7 +128,7 @@ class BedrockBase(LLM, MessagesMixin):
         # Format prompt: Claude3 models expect a list of messages, with content, roles, etc.
         # However, if we receive a string, we will format it as a single user message for ease of use.
         if isinstance(prompt, Messages):
-            messages = prompt.model_dump(exclude_none=True)
+            messages = prompt.model_dump_bedrock_converse()
 
             # Strip `type` key from each message
             messages["messages"] = [
@@ -160,15 +160,16 @@ class BedrockBase(LLM, MessagesMixin):
 
         logger.debug(f"Request body: {request_body}")
 
-        # Send request
+        # Prepare the request parameters
         invoke_params = {
             "modelId": self.model_id,
             "messages": messages["messages"],
             "inferenceConfig": self.model_kwargs,
         }
         if "system" in messages:
-            invoke_params["system"] = {"text": messages["system"]}
+            invoke_params["system"] = messages["system"]
 
+        # Shooting our shot
         try:
             response = self.client.converse(**invoke_params)
 

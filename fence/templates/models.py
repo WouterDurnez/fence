@@ -77,3 +77,78 @@ class Messages(BaseModel):
 
     messages: list[Message]
     system: Optional[str] = None
+
+    def model_dump_bedrock_converse(self) -> dict:
+        """
+        Dump the model into a dictionary for use in the Bedrock Converse API.
+
+        See `https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html#bedrock-runtime_Converse-request-system` for more information.
+
+        :param bool exclude_none: Whether to exclude None values.
+        :return: A dictionary representation of the model.
+        :rtype: dict
+        """
+
+        # Go through each message and format it
+        messages = []
+        for message in self.messages:
+
+            # Each message has a role (str) and content (list of content objects)
+            role, content = message.role, []
+
+            # If content is a string, append it as text
+            if isinstance(message.content, str):
+                content.append({"text": message.content})
+
+            # If content is a list of content objects, go through each object
+            elif isinstance(message.content, list):
+
+                # Go through each content object
+                for content_object in message.content:
+
+                    # Content is either text or image, append accordingly
+                    match content_object.type:
+                        case "text":
+                            content.append({"text": content_object.text})
+                        case "image":
+                            content.append({"image": content_object.source.dict()})
+                        case _:
+                            raise ValueError(
+                                f"Content type '{content_object.type}' not recognized or supported (yet)."
+                            )
+
+            else:
+                raise TypeError(
+                    "Content must be a string or a list of content objects."
+                )
+
+            # Append the message
+            messages.append({"role": role, "content": content})
+
+        system = [{"text": self.system}] if self.system else None
+
+        return {"messages": messages, "system": system}
+
+
+if __name__ == "__main__":
+
+    # Example messages
+    messages = Messages(
+        messages=[
+            Message(
+                role="user",
+                content="\nThis is the text:\n\n```\nMixed martial arts (MMA)[a] is a full-contact fighting sport based o...s match was the first popular fight which showcased the power of such low kicks to a predominantly Western audience.[46]```\n",
+            )
+        ],
+        system="This is the system message.",
+    )
+
+    # Model dump regular
+    from pprint import pprint
+
+    pprint(messages.model_dump())
+
+    # Model dump converse API
+    from pprint import pprint
+
+    pprint(messages.model_dump_bedrock_converse())
