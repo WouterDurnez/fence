@@ -4,6 +4,10 @@ name: Fence Publish Pipeline
 on:
   workflow_dispatch:
 
+# Define global environment variables
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # Secrets are stored in GitHub Secrets
+
 permissions:
   contents: read
 
