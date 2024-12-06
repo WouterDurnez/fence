@@ -1,4 +1,4 @@
-name: Fence publish Pipeline
+name: Fence Publish Pipeline
 
 # Manually trigger required
 on:
@@ -8,6 +8,36 @@ permissions:
   contents: read
 
 jobs:
+  # Job for running tests
+  test:
+    runs-on: ubuntu-latest
+    environment: tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies using uv
+        run: uv sync
+
+      - name: Run tests
+        run: uv run pytest tests --junitxml=fence/tests/report.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: fence/tests/report.xml
+
   pypi-publish:
     name: Upload release to PyPI
     runs-on: ubuntu-latest

@@ -11,7 +11,7 @@ from math import ceil
 from fence import Link, Message, Messages, MessagesTemplate
 from fence.models.base import LLM
 from fence.models.bedrock.claude import ClaudeHaiku
-from fence.parsers import BoolBaseParser, TripleBacktickParser
+from fence.parsers import BoolParser, TripleBacktickParser
 from fence.utils.optim import retry
 
 logger = logging.getLogger(__name__)
@@ -155,7 +155,7 @@ class LLMHelper:
             model=self.model,
             name="relevancy_checker",
             output_key="is_relevant",
-            parser=BoolBaseParser(),
+            parser=BoolParser(),
         )
         response = relevancy_link.run({"text": text, "topic": topic})
 
