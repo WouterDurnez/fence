@@ -23,6 +23,7 @@ dependencies = [
     "numexpr>=2.10.1",
 ]
 keywords = ["openai", "llm", "gpt", "ai", "nlp", "language", "model", "api", "anthropic", "claude", "wrapper", "fence"]
+requires = "python>=3.11"
 
 [project.urls]
 Repository = "https://github.com/WouterDurnez/fence"
