@@ -4,8 +4,13 @@ Tools for agents
 
 import logging
 from abc import ABC, abstractmethod
+from typing import Callable
 
 logger = logging.getLogger(__name__)
+
+##############
+# Base class #
+##############
 
 
 class BaseTool(ABC):
@@ -92,3 +97,41 @@ tool_description = "{tool_description}"
 {argument_string}"""
 
         return toml_string
+
+
+##############
+# Decorators #
+##############
+
+
+def tool(description: str = None):
+    """
+    A decorator to turn a function into a tool that can be executed with the BaseTool interface.
+
+    :param description: A description of the tool.
+    """
+
+    def decorator(func: Callable):
+        # Dynamically create the class with the capitalized function name
+        class_name = "".join(
+            [element.capitalize() for element in func.__name__.split("_")]
+        )
+        class_name = (
+            f"{class_name}Tool" if not class_name.endswith("Tool") else class_name
+        )
+
+        # Define the class dynamically
+        ToolClass = type(
+            class_name,
+            (BaseTool,),
+            {
+                "__init__": lambda self: BaseTool.__init__(
+                    self, description=description or func.__doc__
+                ),
+                "execute_tool": lambda self, **kwargs: func(**kwargs),
+            },
+        )
+
+        return ToolClass()
+
+    return decorator

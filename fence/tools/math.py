@@ -5,7 +5,7 @@ Math based tools
 import logging
 import os
 
-from .base import BaseTool
+from fence.tools.base import BaseTool
 
 # Set up numexpr logging early, to suppress annoying logs
 numexpr_logger = logging.getLogger("numexpr")
