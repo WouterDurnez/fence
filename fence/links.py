@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, Iterable
 
 from fence.models.base import LLM
-from fence.parsers import Parser
+from fence.parsers import BaseParser
 from fence.templates import MessagesTemplate, StringTemplate
 from fence.utils.base import time_it
 
@@ -153,7 +153,7 @@ class Link(BaseLink):
         output_key: str = "state",
         model: LLM = None,
         name: str = None,
-        parser: Parser = None,
+        parser: BaseParser = None,
     ):
         """
         Initialize the Link object.

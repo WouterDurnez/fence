@@ -38,7 +38,7 @@ Now, let's get started. Here is the initial input:
 
 
 # ReACT prompt for Tool usage
-REACT_MULTI_AGENT_TOOL_PROMPT = """{role} You will be given input, which starts with a question, and then potentially a series of [OBSERVATION]s, [DELEGATE]s and [ACTION]s. You will need to process this input. Always begin with a [THOUGHT] to help reason what the next best step is.
+REACT_MULTI_AGENT_TOOL_PROMPT = '''{role} You will be given input, which starts with a question, and then potentially a series of [OBSERVATION]s, [DELEGATE]s and [ACTION]s. You will need to process this input. Always begin with a [THOUGHT] to help reason what the next best step is.
  Then, continue with one of these options: [ACTION], [DELEGATE] or [ANSWER].
 
 Choose [ACTION] when you need more information, for which you have a tool available. You can call this tool by replying as follows:
@@ -46,7 +46,7 @@ Choose [ACTION] when you need more information, for which you have a tool availa
 [THOUGHT] I need more information to answer the question. I have a tool that can provide me with a piece of the puzzle.
 [ACTION]
 ```toml
-tool_name = "tool_name"
+tool_name = """tool_name"""
 [tool_params]
 parameter = value
 ```
@@ -58,11 +58,13 @@ Choose [DELEGATE] when you believe this task would best be handled by another de
 [THOUGHT] I need more information to answer the question. I have a delegate that can provide me with a piece of the puzzle.
 [DELEGATE]
 ```toml
-delegate_name = "delegate_name"
-delegate_input = "a prompt for the delegate, that provides context and instructions"
+delegate_name = """delegate_name"""
+delegate_input = """a prompt for the delegate, that provides context and instructions"""
 ```
 
 This will delegate to the agent `delegate_name` with the input `some input`. You will then be called again with the output of this delegate.
+
+For both [ACTION] and [DELEGATE], make sure to wrap all string values in triple quotes ("""). This will ensure that the TOML parser can correctly interpret the input.
 
 If, on the basis of all of the previous input you have received, your next [THOUGHT] is to answer the question, you can output an [ANSWER] like this:
 
@@ -89,7 +91,7 @@ Importantly, your first instinct should ALWAYS be to use your tools or delegates
 Finally, always remember to stick to the original task when delivering the final answer.
 
 Now, let's get started. Here is the initial input:
-"""
+'''
 
 # ReACT prompt for multi-agent flows
 REACT_MULTI_AGENT_PROMPT = """You will be given input, which starts with a question, and then potentially a series of [OBSERVATION]s and [ACTION]s. You will need to process this input. Always begin with a [THOUGHT] to help reason what the next best step is.

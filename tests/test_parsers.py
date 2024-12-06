@@ -2,7 +2,7 @@ import tomllib
 
 import pytest
 
-from fence.parsers import BoolParser, IntParser, TOMLParser, TripleBacktickParser
+from fence.parsers import BoolBaseParser, IntParser, TOMLParser, TripleBacktickParser
 
 
 def test_int_parser_with_valid_input():
@@ -25,18 +25,18 @@ def test_int_parser_with_invalid_input():
 
 def test_bool_parser_with_valid_input():
     """
-    Test BoolParser with a valid boolean input.
+    Test BoolBaseParser with a valid boolean input.
     """
-    parser = BoolParser()
+    parser = BoolBaseParser()
     result = parser.parse("true")
     assert result is True
 
 
 def test_bool_parser_with_invalid_input():
     """
-    Test BoolParser with an invalid (non-boolean) input.
+    Test BoolBaseParser with an invalid (non-boolean) input.
     """
-    parser = BoolParser()
+    parser = BoolBaseParser()
     with pytest.raises(ValueError):
         parser.parse("abc")
 
