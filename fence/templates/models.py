@@ -5,9 +5,9 @@ This module contains data models used in the API formatting.
 import base64
 from mimetypes import guess_type
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 ##########
 # Models #
@@ -18,9 +18,13 @@ class Source(BaseModel):
     """A model representing a media source. Can be base64 encoded data or a URL."""
 
     type: Literal["base64"] = "base64"
-    media_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
-    data: str | None = None
-    _file_path: str | Path | None = None
+    media_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"] = Field(
+        ..., description="The MIME type of the image."
+    )
+    data: str | None = Field(None, description="The base64 encoded data.")
+    _file_path: str | Path | None = Field(
+        None, description="The local file path to the image."
+    )
 
     # Validate that only one of 'data' or 'url' is provided
     @model_validator(mode="before")
@@ -51,14 +55,14 @@ class TextContent(BaseModel):
     """A model representing text content."""
 
     type: Literal["text"] = "text"
-    text: str
+    text: str = Field(..., description="The text content.")
 
 
 class ImageContent(BaseModel):
     """A model representing image content."""
 
     type: Literal["image"] = "image"
-    source: Source
+    source: Source = Field(..., description="The source of the image.")
 
 
 # Content can be either text or image
@@ -68,15 +72,28 @@ Content = TextContent | ImageContent
 class Message(BaseModel):
     """A base model representing a message."""
 
-    role: Literal["user", "assistant"]
-    content: list[Content] | str
+    role: Literal["user", "assistant"] = Field(
+        ..., description="The role of the message.", example="user"
+    )
+    content: list[Content] | str = Field(
+        ..., description="The content of the message.", example="Hello!"
+    )
 
 
 class Messages(BaseModel):
     """A model representing a collection of messages."""
 
-    messages: list[Message]
-    system: Optional[str] = None
+    messages: list[Message] = Field(
+        ...,
+        description="List of messages.",
+        example=[{"role": "user", "content": "Hello!"}],
+        min_length=1,
+    )
+    system: str | None = Field(
+        None, description="System message.", example="Respond like a pirate."
+    )
+
+    # API formatting #
 
     def model_dump_bedrock_converse(self) -> dict:
         """
