@@ -1,8 +1,8 @@
 import pytest
 
-from fence import TOMLParser
 from fence.links import Link
 from fence.models.base import LLM
+from fence.parsers import TOMLParser
 from fence.utils.shortcuts import create_string_link, create_toml_link
 
 

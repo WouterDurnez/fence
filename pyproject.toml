@@ -54,6 +54,8 @@ dev = [
     "jupyterlab>=4.2.4,<5.0.0",
     "codecov>=2.1.13,<3.0.0",
     "httpx>=0.28.0",
+    "pandas>=2.2.3",
+    "plotly>=5.24.1",
 ]
 
 [tool.hatch.build.targets.sdist]
