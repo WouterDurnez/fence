@@ -22,9 +22,7 @@ class Source(BaseModel):
         ..., description="The MIME type of the image."
     )
     data: str | None = Field(None, description="The base64 encoded data.")
-    _file_path: str | Path | None = Field(
-        None, description="The local file path to the image."
-    )
+    _file_path: str | Path | None = None
 
     # Validate that only one of 'data' or 'url' is provided
     @model_validator(mode="before")
@@ -73,10 +71,11 @@ class Message(BaseModel):
     """A base model representing a message."""
 
     role: Literal["user", "assistant"] = Field(
-        ..., description="The role of the message.", example="user"
+        ..., description="The role of the message."
     )
     content: list[Content] | str = Field(
-        ..., description="The content of the message.", example="Hello!"
+        ...,
+        description="The content of the message.",
     )
 
 
@@ -86,11 +85,11 @@ class Messages(BaseModel):
     messages: list[Message] = Field(
         ...,
         description="List of messages.",
-        example=[{"role": "user", "content": "Hello!"}],
         min_length=1,
     )
     system: str | None = Field(
-        None, description="System message.", example="Respond like a pirate."
+        None,
+        description="System message.",
     )
 
     # API formatting #
