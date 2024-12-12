@@ -24,9 +24,13 @@ __pycache__/
 
 # Distribution files
 /dist/
+/*.egg-info/
 
 # Raw docs
 /docs/*.ai
 
 # Notebook checkpoints
 .ipynb_checkpoints/
+
+# Pytest coverage
+.coverage

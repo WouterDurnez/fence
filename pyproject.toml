@@ -57,6 +57,7 @@ dev = [
     "httpx>=0.28.0",
     "pandas>=2.2.3",
     "plotly>=5.24.1",
+    "pytest-cov>=6.0.0",
 ]
 
 [tool.hatch.build.targets.sdist]
