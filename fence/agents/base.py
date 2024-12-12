@@ -80,10 +80,10 @@ class BaseAgent:
         """
 
         # Preformat the arguments
-        toml_string = f"""[[agents]]
-agent_name = "{self.identifier}"
-agent_description = "{self.description or self.__doc__}"
-"""
+        toml_string = f'''[[agents]]
+agent_name = """{self.identifier}"""
+agent_description = """{self.description or self.__doc__}"""
+'''
 
         return toml_string
 
