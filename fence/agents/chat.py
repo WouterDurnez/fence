@@ -4,8 +4,8 @@ Tool using agent
 
 import logging
 
-from fence import Link
 from fence.agents.base import BaseAgent
+from fence.links import Link
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory, FleetingMemory
 from fence.models.base import LLM

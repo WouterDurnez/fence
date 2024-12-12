@@ -8,10 +8,12 @@ Helper tools to perform basic LLM-related tasks
 import logging
 from math import ceil
 
-from fence import Link, Message, Messages, MessagesTemplate
+from fence.links import Link
 from fence.models.base import LLM
 from fence.models.bedrock.claude import ClaudeHaiku
 from fence.parsers import BoolParser, TripleBacktickParser
+from fence.templates.messages import MessagesTemplate
+from fence.templates.models import Message, Messages
 from fence.utils.optim import retry
 
 logger = logging.getLogger(__name__)

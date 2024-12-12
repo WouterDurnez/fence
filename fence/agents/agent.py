@@ -6,8 +6,8 @@ import logging
 import time
 from contextlib import contextmanager
 
-from fence import Link, setup_logging
 from fence.agents.base import BaseAgent
+from fence.links import Link
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory
 from fence.models.base import LLM
@@ -18,6 +18,7 @@ from fence.tools.base import BaseTool
 from fence.tools.math import CalculatorTool, PrimeTool
 from fence.tools.scratch import EnvTool
 from fence.tools.text import TextInverterTool
+from fence.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
 

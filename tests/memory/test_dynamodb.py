@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from fence import Message
 from fence.memory.dynamodb import DynamoDBMemory
+from fence.templates.messages import Message
 
 ############
 # Fixtures #

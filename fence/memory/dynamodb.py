@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 
 import boto3
 
-from fence import Message, Messages, setup_logging
 from fence.memory.base import BaseMemory
+from fence.templates.models import Message, Messages
+from fence.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
 
