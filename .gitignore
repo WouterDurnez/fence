@@ -22,6 +22,9 @@ __pycache__/
 # Local data files
 /data/
 
+# Local playground files
+/playground/
+
 # Distribution files
 /dist/
 /*.egg-info/

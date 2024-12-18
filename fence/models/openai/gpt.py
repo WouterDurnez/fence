@@ -121,15 +121,9 @@ class GPTBase(LLM, MessagesMixin):
         # However, if we receive a string, we will format it as a single user message for ease of use.
         if isinstance(prompt, Messages):
 
-            # Get messages
-            messages = [
-                message.model_dump(exclude_none=True) for message in prompt.messages
-            ]
-            system_message = prompt.system
+            # Format messages
+            messages = prompt.model_dump_openai()
 
-            # Extract system message
-            if system_message:
-                messages.insert(0, {"role": "system", "content": system_message})
         elif isinstance(prompt, str):
             messages = [
                 {
