@@ -16,6 +16,19 @@ authors = [
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
+classifiers = [
+    'Intended Audience :: Science/Research',
+    'Intended Audience :: Developers',
+    'License :: OSI Approved :: MIT License',
+    'Programming Language :: Python',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3 :: Only',
+    'Programming Language :: Python :: Implementation :: CPython',
+    'Topic :: Software Development',
+    'Topic :: Scientific/Engineering',
+    ]
 dependencies = [
     "boto3>=1.34.100",
     "pydantic>=2.7.1",
@@ -58,6 +71,7 @@ dev = [
     "pandas>=2.2.3",
     "plotly>=5.24.1",
     "pytest-cov>=6.0.0",
+    "pillow>=11.0.0",
 ]
 
 [tool.hatch.build.targets.sdist]
