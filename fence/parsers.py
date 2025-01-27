@@ -185,7 +185,7 @@ class TOMLParser(BaseParser):
     }
     """
 
-    def __init__(self, triple_backticks: bool = True, prefill: str = None):
+    def __init__(self, triple_backticks: bool = True, prefill: str | None = None):
         """
         Initialize the TOML parser with the given parameters.
         :param triple_backticks: boolean indicating whether to extract the TOML string
