@@ -68,6 +68,9 @@ class GPTBase(LLM, MessagesMixin):
         :return: response
         """
 
+        # Prompt should not be empty
+        self._check_if_prompt_is_valid(prompt=prompt)
+
         # Call the model
         response = self._invoke(prompt=prompt)
 

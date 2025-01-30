@@ -55,6 +55,31 @@ class TestBedrockBase:
             "topP": 0.9,
         }
 
+    def test_bedrock_base_invoke_with_empty_prompt(self, bedrock_base):
+        """
+        Test case for the invoke method of the BedrockBase class with an empty prompt.
+        This test checks if the invoke method raises a ValueError when the prompt is empty.
+        """
+        with pytest.raises(ValueError):
+            bedrock_base.invoke(prompt="")
+
+    def test_bedrock_base_invoke_with_none_prompt(self, bedrock_base):
+        """
+        Test case for the invoke method of the BedrockBase class with a None prompt.
+        This test checks if the invoke method raises a ValueError when the prompt is None.
+        """
+        with pytest.raises(ValueError):
+            bedrock_base.invoke(prompt=None)
+
+    def test_bedrock_base_invoke_with_empty_messages_prompt(self, bedrock_base):
+        """
+        Test case for the invoke method of the BedrockBase class with an empty Messages prompt.
+        This test checks if the invoke method raises a ValueError when the Messages prompt is empty.
+        """
+        messages = Messages(system="Respond in a very rude manner", messages=[])
+        with pytest.raises(ValueError):
+            bedrock_base.invoke(prompt=messages)
+
     def test_invoke_with_different_prompt_types(self, bedrock_base):
         """Test invoking with different prompt types"""
         # Test with string prompt

@@ -10,6 +10,37 @@ from fence.models.openai.gpt import GPT4o
 from fence.templates.messages import Message, Messages
 
 
+def test_gpt_base_invoke_with_empty_prompt():
+    """
+    Test case for the invoke method of the GPTBase class with an empty prompt.
+    This test checks if the invoke method raises a ValueError when the prompt is empty.
+    """
+    gpt = GPT4o(source="test")
+    with pytest.raises(ValueError):
+        gpt.invoke(prompt="")
+
+
+def test_gpt_base_invoke_with_none_prompt():
+    """
+    Test case for the invoke method of the GPTBase class with a None prompt.
+    This test checks if the invoke method raises a ValueError when the prompt is None.
+    """
+    gpt = GPT4o(source="test")
+    with pytest.raises(ValueError):
+        gpt.invoke(prompt=None)
+
+
+def test_gpt_base_invoke_with_empty_messages_prompt():
+    """
+    Test case for the invoke method of the GPTBase class with an empty Messages prompt.
+    This test checks if the invoke method raises a ValueError when the Messages prompt is empty.
+    """
+    gpt = GPT4o(source="test")
+    messages = Messages(system="Respond in a very rude manner", messages=[])
+    with pytest.raises(ValueError):
+        gpt.invoke(prompt=messages)
+
+
 def test_gpt_base_invoke_with_string_prompt():
     """
     Test case for the invoke method of the GPTBase class with a string prompt.

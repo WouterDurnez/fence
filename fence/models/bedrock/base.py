@@ -59,6 +59,9 @@ class BedrockBase(LLM, MessagesMixin):
         :return: response
         """
 
+        # Prompt should not be empty
+        self._check_if_prompt_is_valid(prompt=prompt)
+
         # Update model kwargs with any overrides
         original_model_kwargs = self.model_kwargs.copy()
         self.model_kwargs.update(override_kwargs)

@@ -89,6 +89,18 @@ class LLM(ABC):
     def invoke(self, prompt: str | Messages, **kwargs) -> str:
         raise NotImplementedError
 
+    @staticmethod
+    def _check_if_prompt_is_valid(prompt: str | Messages):
+        """
+        Check if the prompt is a valid user message or Messages object
+        """
+
+        # Prompt should not be empty
+        if isinstance(prompt, str) and not prompt.strip():
+            raise ValueError("Prompt cannot be empty string!")
+        if isinstance(prompt, Messages) and not prompt.messages:
+            raise ValueError("Prompt needs at least one user message!")
+
 
 ##########
 # Mixins #
