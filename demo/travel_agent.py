@@ -3,10 +3,10 @@ from datetime import datetime, timedelta
 
 import requests
 
-from fence import setup_logging
-from fence.agents.agent import SuperAgent
+from fence.agents.agent import Agent
 from fence.models.openai import GPT4omini
 from fence.tools.base import BaseTool
+from fence.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     setup_logging(log_level="info", are_you_serious=False)
 
     # Create a weather agent
-    weather_agent = SuperAgent(
+    weather_agent = Agent(
         identifier="weather_agent",
         model=GPT4omini(),
         description="You are a very helpful and friendly weather man. You have a weather forecast tool that helps you get more information about specific locations.",
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     )
 
     # Create a travel agent
-    travel_agent = SuperAgent(
+    travel_agent = Agent(
         model=GPT4omini(),
         description="You are a travel agent. You are jovial and cheerful, and help people with information about possible travel destinations.",
         delegates=[weather_agent],
