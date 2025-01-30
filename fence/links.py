@@ -110,7 +110,7 @@ class TransformationLink(BaseLink):
         self.function = function
 
     @time_it
-    def run(self, input_dict: dict = None, **kwargs):
+    def run(self, input_dict: dict = None, **kwargs) -> dict:
         """
         Run the link.
         :param input_dict: Values for the input variables.
