@@ -1,4 +1,3 @@
-import logging
 from datetime import datetime, timedelta
 
 import requests
@@ -8,7 +7,7 @@ from fence.models.openai import GPT4omini
 from fence.tools.base import BaseTool
 from fence.utils.logger import setup_logging
 
-logger = logging.getLogger(__name__)
+logger = setup_logging(__name__, log_level="kill")  # Only show agentic messaging
 
 
 class WeatherTool(BaseTool):
@@ -148,7 +147,7 @@ if __name__ == "__main__":
     weather_agent = Agent(
         identifier="weather_agent",
         model=GPT4omini(),
-        description="You are a very helpful and friendly weather man. You have a weather forecast tool that helps you get more information about specific locations.",
+        description="You are a very helpful and friendly weather man. You have a weather forecast tool that helps you get more information about specific locations. Always respond to the user. Ask more information if necessary.",
         tools=[WeatherTool()],
     )
 

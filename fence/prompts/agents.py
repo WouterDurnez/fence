@@ -76,6 +76,11 @@ If you are unable to answer the question, and don't have any relevant tools, out
 [THOUGHT] I do not have enough information to answer the question, and there are no more tools to use or agents to delegate to.
 [ANSWER] I am unable to answer that question.
 
+If you need more information, you can ask for it by replying with a [THOUGHT] and then an [ANSWER] with a question, like this:
+
+[THOUGHT] The user has not asked me for anything yet. I will respond conversationally.
+[ANSWER] What can I help you with today?
+
 These are the tools you have at your disposal:
 
 {tools}
