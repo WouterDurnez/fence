@@ -124,7 +124,7 @@ class Messages(BaseModel):
     messages: list[Message] = Field(
         ...,
         description="List of messages.",
-        min_length=1,
+        min_length=0,
     )
     system: str | None = Field(
         None,
