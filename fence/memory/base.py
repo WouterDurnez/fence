@@ -5,7 +5,8 @@ Memory classes.
 import logging
 from abc import ABC, abstractmethod
 
-from fence import Message, Messages, MessagesTemplate
+from fence.templates.messages import MessagesTemplate
+from fence.templates.models import Message, Messages
 
 logger = logging.getLogger(__name__)
 

@@ -8,9 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, Iterable
 
 from fence.models.base import LLM
-from fence.models.claude3 import Claude3Base
-from fence.models.openai import GPTBase
-from fence.parsers import Parser
+from fence.parsers import BaseParser
 from fence.templates import MessagesTemplate, StringTemplate
 from fence.utils.base import time_it
 
@@ -112,7 +110,7 @@ class TransformationLink(BaseLink):
         self.function = function
 
     @time_it
-    def run(self, input_dict: dict = None, **kwargs):
+    def run(self, input_dict: dict = None, **kwargs) -> dict:
         """
         Run the link.
         :param input_dict: Values for the input variables.
@@ -155,7 +153,7 @@ class Link(BaseLink):
         output_key: str = "state",
         model: LLM = None,
         name: str = None,
-        parser: Parser = None,
+        parser: BaseParser = None,
     ):
         """
         Initialize the Link object.
@@ -168,16 +166,6 @@ class Link(BaseLink):
         super().__init__(output_key=output_key, name=name)
         self.model = model
         self.template = template
-
-        # If the template is a MessagesTemplate, we only accept Claude3 type models
-        if isinstance(template, MessagesTemplate):
-            if not isinstance(model, (Claude3Base, GPTBase)):
-                logger.warning(
-                    f"MessagesTemplate can only be used with Claude3 or GPT models. Got {model.model_id if model else None}. Converting to StringTemplate."
-                )
-
-                # Reformat the template to a StringTemplate
-                self.template = self.template.to_string_template()
 
         # Get the input keys from the template
         self.input_keys = template.input_variables

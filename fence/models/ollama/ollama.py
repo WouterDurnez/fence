@@ -208,6 +208,19 @@ class Llama3_1(Ollama):
         super().__init__(model_id="llama3.1", source=source, **kwargs)
 
 
+class DeepSeekR1(Ollama):
+    """DeepSeek R1 model"""
+
+    def __init__(self, source: str, **kwargs):
+        """
+        Initialize the DeepSeek R1 model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(model_id="deepseek-r1", source=source, **kwargs)
+
+
 if __name__ == "__main__":
 
     # Initialize the model

@@ -66,6 +66,11 @@ def setup_logging(
     :return: logger instance
     """
 
+    # If log level is `kill`, disable all logging
+    if log_level.lower().strip() == "kill":
+        logging.disable(logging.CRITICAL)
+        return
+
     # Base configuration
     config_dict = {
         "version": 1,

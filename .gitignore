@@ -22,11 +22,18 @@ __pycache__/
 # Local data files
 /data/
 
+# Local playground files
+/playground/
+
 # Distribution files
 /dist/
+/*.egg-info/
 
 # Raw docs
 /docs/*.ai
 
 # Notebook checkpoints
 .ipynb_checkpoints/
+
+# Pytest coverage
+.coverage

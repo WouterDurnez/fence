@@ -25,7 +25,7 @@ def test_int_parser_with_invalid_input():
 
 def test_bool_parser_with_valid_input():
     """
-    Test BoolParser with a valid boolean input.
+    Test BoolBaseParser with a valid boolean input.
     """
     parser = BoolParser()
     result = parser.parse("true")
@@ -34,7 +34,7 @@ def test_bool_parser_with_valid_input():
 
 def test_bool_parser_with_invalid_input():
     """
-    Test BoolParser with an invalid (non-boolean) input.
+    Test BoolBaseParser with an invalid (non-boolean) input.
     """
     parser = BoolParser()
     with pytest.raises(ValueError):

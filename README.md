@@ -50,7 +50,7 @@ pip install fence-llm
 Here's a hello world example:
 
 ```python
-from fence import Link
+from fence.links import Link
 from fence.templates.string import StringTemplate
 from fence.models.openai import GPT4omini
 

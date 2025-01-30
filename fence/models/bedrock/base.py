@@ -1,29 +1,17 @@
-"""
-Claude Gen 3 models
-"""
-
-import json
 import logging
 
 import boto3
 
-from fence.models.base import (
-    LLM,
-    MessagesMixin,
-    get_log_callback,
-    register_log_callback,
-    register_log_tags,
-)
-from fence.templates.models import Messages
-
-MODEL_ID_SONNET = "anthropic.claude-3-sonnet-20240229-v1:0"
-MODEL_ID_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
+from fence.models.base import LLM, MessagesMixin, get_log_callback
+from fence.templates.messages import Messages
 
 logger = logging.getLogger(__name__)
+MODEL_ID_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
+MODEL_ID_PRO = "amazon.nova-pro-v1:0"
 
 
-class Claude3Base(LLM, MessagesMixin):
-    """Base class for Claude (gen 3) models"""
+class BedrockBase(LLM, MessagesMixin):
+    """Base class for Bedrock foundation models"""
 
     inference_type = "bedrock"
 
@@ -36,10 +24,10 @@ class Claude3Base(LLM, MessagesMixin):
         **kwargs,
     ):
         """
-        Initialize a Claude model
+        Initialize a Bedrock model
 
-        :param str source: An indicator of where (e.g., which feature) the model is operating from.
-        :param bool full_response: whether to return the full response or just the TEXT completion
+        :param str source: An indicator of where (e.g., which feature) the model is operating from. Useful to pass to the logging callback
+        :param bool full_response: whether to return the full response object or just the TEXT completion
         :param str|None metric_prefix: Prefix for the metric names
         :param dict|None extra_tags: Additional tags to add to the logging tags
         :param **kwargs: Additional keyword arguments
@@ -47,37 +35,49 @@ class Claude3Base(LLM, MessagesMixin):
 
         super().__init__(metric_prefix=metric_prefix, extra_tags=extra_tags)
 
+        self.source = source
         self.full_response = full_response
 
         # LLM parameters
         self.model_kwargs = {
             "temperature": kwargs.get("temperature", 0.01),
-            "max_tokens": kwargs.get("max_tokens", 2048),
+            "maxTokens": kwargs.get("max_tokens", 2048),
+            "topP": kwargs.get("top_p", 0.9),
         }
 
         # AWS parameters
         self.region = kwargs.get("region", "eu-central-1")
+
+        # Initialize the client
         self.client = boto3.client("bedrock-runtime", self.region)
 
-    def invoke(self, prompt: str | Messages, **kwargs) -> str:
+    def invoke(self, prompt: str | Messages, **override_kwargs) -> str:
         """
         Call the model with the given prompt
         :param prompt: text to feed the model
+        :param override_kwargs: Additional keyword arguments to override the default model kwargs
         :return: response
         """
+
+        # Update model kwargs with any overrides
+        original_model_kwargs = self.model_kwargs.copy()
+        self.model_kwargs.update(override_kwargs)
 
         # Call the model
         response = self._invoke(prompt=prompt)
 
         # Get response completion
-        response_body = json.loads(response.get("body").read().decode())
+        response_body = response.get("output", {}).get("message", None)
 
         # Get token counts
-        input_token_count = response_body["usage"]["input_tokens"]
-        output_token_count = response_body["usage"]["output_tokens"]
+        input_token_count = response.get("usage", {}).get("inputTokens", 0)
+        output_token_count = response.get("usage", {}).get("outputTokens", 0)
 
         # Get completion
-        completion = response_body["content"][0]["text"]
+        if response_body and "content" in response_body and response_body["content"]:
+            completion = response_body["content"][0].get("text", "")
+        else:
+            completion = ""
 
         # Get input and output word count
         if isinstance(prompt, str):
@@ -112,7 +112,11 @@ class Claude3Base(LLM, MessagesMixin):
             logger.debug(f"Logging args: {log_args}")
             log_callback(*log_args)
 
-        return completion
+        # Reset model kwargs
+        self.model_kwargs = original_model_kwargs
+
+        # Depending on the full_response flag, return either the full response or just the completion
+        return response if self.full_response else completion
 
     def _invoke(self, prompt: str | Messages) -> dict:
         """
@@ -124,7 +128,13 @@ class Claude3Base(LLM, MessagesMixin):
         # Format prompt: Claude3 models expect a list of messages, with content, roles, etc.
         # However, if we receive a string, we will format it as a single user message for ease of use.
         if isinstance(prompt, Messages):
-            messages = prompt.model_dump(exclude_none=True)
+            messages = prompt.model_dump_bedrock_converse()
+
+            # Strip `type` key from each message
+            messages["messages"] = [
+                {k: v for k, v in message.items() if k != "type"}
+                for message in messages["messages"]
+            ]
         elif isinstance(prompt, str):
             messages = {
                 "messages": [
@@ -132,7 +142,6 @@ class Claude3Base(LLM, MessagesMixin):
                         "role": "user",
                         "content": [
                             {
-                                "type": "text",
                                 "text": prompt,
                             }
                         ],
@@ -151,14 +160,18 @@ class Claude3Base(LLM, MessagesMixin):
 
         logger.debug(f"Request body: {request_body}")
 
-        # Send request
+        # Prepare the request parameters
+        invoke_params = {
+            "modelId": self.model_id,
+            "messages": messages["messages"],
+            "inferenceConfig": self.model_kwargs,
+        }
+        if "system" in messages:
+            invoke_params["system"] = messages["system"]
+
+        # Shooting our shot
         try:
-            response = self.client.invoke_model(
-                modelId=self.model_id,
-                contentType="application/json",
-                accept="application/json",
-                body=json.dumps(request_body),
-            )
+            response = self.client.converse(**invoke_params)
 
             # Log invocation
             self.invocation_logging()
@@ -174,68 +187,3 @@ class Claude3Base(LLM, MessagesMixin):
         :return:
         """
         pass
-
-
-class ClaudeHaiku(Claude3Base):
-    """Claude Haiku model class"""
-
-    def __init__(self, **kwargs):
-        """
-        Initialize a Claude Haiku model
-        :param str source: An indicator of where (e.g., which feature) the model is operating from.
-        :param **kwargs: Additional keyword arguments
-        """
-
-        super().__init__(**kwargs)
-
-        self.model_id = MODEL_ID_HAIKU
-        self.model_name = "ClaudeHaiku"
-
-
-class ClaudeSonnet(Claude3Base):
-    """Claude Sonnet model class"""
-
-    def __init__(self, **kwargs):
-        """
-        Initialize a Claude Sonnet model
-        :param str source: An indicator of where (e.g., which feature) the model is operating from.
-        :param **kwargs: Additional keyword arguments
-        """
-
-        super().__init__(**kwargs)
-
-        self.model_id = MODEL_ID_SONNET
-        self.model_name = "ClaudeSonnet"
-
-
-class Claude35Sonnet(Claude3Base):
-    """Claude Sonnet 3.5 model class"""
-
-    def __init__(self, **kwargs):
-        """
-        Initialize a Claude Sonnet 3.5 model
-        :param str source: An indicator of where (e.g., which feature) the model is operating from.
-        :param **kwargs: Additional keyword arguments
-        """
-
-        super().__init__(**kwargs)
-
-        self.model_id = "anthropic.claude-3-5-sonnet-20240620-v1:0"
-        self.model_name = "ClaudeSonnet3.5"
-
-
-if __name__ == "__main__":
-
-    # Register logging callback
-    register_log_callback(lambda metrics, tags: print(metrics, tags))
-
-    # Register logging tags
-    register_log_tags({"team": "data-science-test", "project": "fence"})
-
-    # Create an instance of the ClaudeHaiku class
-    claude_sonnet = Claude35Sonnet(
-        source="test", metric_prefix="yolo", region="us-east-1"
-    )
-
-    # Call the invoke method with a prompt
-    response = claude_sonnet.invoke(prompt="The sun is shining brightly")

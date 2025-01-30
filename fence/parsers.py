@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 ################
 
 
-class Parser(ABC):
+class BaseParser(ABC):
     def __init__(self):
         pass
 
@@ -26,11 +26,11 @@ class Parser(ABC):
 
 
 #####################
-# Parser subclasses #
+# BaseParser subclasses #
 #####################
 
 
-class IntParser(Parser):
+class IntParser(BaseParser):
     """
     A class to parse a string containing an integer. Returns an integer.
 
@@ -69,7 +69,7 @@ class IntParser(Parser):
         return int(int_vals[0])
 
 
-class BoolParser(Parser):
+class BoolParser(BaseParser):
     """
     A class to parse a string containing a boolean value. Returns a boolean.
 
@@ -119,7 +119,7 @@ class BoolParser(Parser):
         )
 
 
-class TripleBacktickParser(Parser):
+class TripleBacktickParser(BaseParser):
     """
     A class to parse a string containing triple backticks.
 
@@ -165,7 +165,7 @@ class TripleBacktickParser(Parser):
         return string
 
 
-class TOMLParser(Parser):
+class TOMLParser(BaseParser):
     """
     A class to parse a string containing TOML data (possibly within triple backticks). Returns a dictionary with the key-value pairs.
 
@@ -185,7 +185,7 @@ class TOMLParser(Parser):
     }
     """
 
-    def __init__(self, triple_backticks: bool = True, prefill: str = None):
+    def __init__(self, triple_backticks: bool = True, prefill: str | None = None):
         """
         Initialize the TOML parser with the given parameters.
         :param triple_backticks: boolean indicating whether to extract the TOML string
@@ -203,8 +203,12 @@ class TOMLParser(Parser):
         :return: dictionary containing the TOML data
         """
 
-        # First, reapply the prefill string to the input string
-        input_string = self.prefill + input_string if self.prefill else input_string
+        # First, reapply the prefill string to the input string, unless the input string already starts with the prefill
+        input_string = (
+            self.prefill + input_string
+            if self.prefill and not input_string.startswith(self.prefill)
+            else input_string
+        )
 
         # If requested, extract the TOML string from within the triple backticks
         toml_string = (

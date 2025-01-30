@@ -8,16 +8,12 @@ Helper tools to perform basic LLM-related tasks
 import logging
 from math import ceil
 
-from fence import (
-    BoolParser,
-    Claude3Base,
-    ClaudeHaiku,
-    Link,
-    Message,
-    Messages,
-    MessagesTemplate,
-)
-from fence.parsers import TripleBacktickParser
+from fence.links import Link
+from fence.models.base import LLM
+from fence.models.bedrock.claude import ClaudeHaiku
+from fence.parsers import BoolParser, TripleBacktickParser
+from fence.templates.messages import MessagesTemplate
+from fence.templates.models import Message, Messages
 from fence.utils.optim import retry
 
 logger = logging.getLogger(__name__)
@@ -120,7 +116,7 @@ class LLMHelper:
     Helper class to perform basic LLM tasks
     """
 
-    def __init__(self, model: Claude3Base = None):
+    def __init__(self, model: LLM = None):
         self.model = model if model else ClaudeHaiku(source="llm_helper")
 
     @retry(max_retries=3)

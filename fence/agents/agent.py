@@ -3,16 +3,22 @@ Agent class to orchestrate a flow that potentially calls tools or other, special
 """
 
 import logging
+import time
+from contextlib import contextmanager
 
-from fence import LLM, ClaudeInstant, Link, TOMLParser, setup_logging
 from fence.agents.base import BaseAgent
+from fence.links import Link
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory
+from fence.models.base import LLM
+from fence.models.bedrock.claude import ClaudeInstant
+from fence.parsers import TOMLParser
 from fence.prompts.agents import REACT_MULTI_AGENT_TOOL_PROMPT
 from fence.tools.base import BaseTool
 from fence.tools.math import CalculatorTool, PrimeTool
 from fence.tools.scratch import EnvTool
 from fence.tools.text import TextInverterTool
+from fence.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +26,7 @@ logger = logging.getLogger(__name__)
 link_logger.setLevel("WARNING")
 
 
-class SuperAgent(BaseAgent):
+class Agent(BaseAgent):
     """An LLM-based agent capable of delegating tasks to other agents or tools."""
 
     def __init__(
@@ -33,6 +39,10 @@ class SuperAgent(BaseAgent):
         tools: list[BaseTool] | None = None,
         memory: BaseMemory | None = None,
         environment: dict | None = None,
+        are_you_serious: bool = False,
+        max_iterations: int = 5,
+        iteration_timeout: float = 30.0,
+        max_memory_size: int = 1000,
     ):
         """
         Initialize the Agent object.
@@ -45,6 +55,10 @@ class SuperAgent(BaseAgent):
         :param tools: A list of Tool objects.
         :param memory: A memory class. Defaults to FleetingMemory.
         :param environment: A dictionary of environment variables to pass to delegates and tools.
+        :param are_you_serious: A flag to determine if the log message should be printed in a frivolous manner.
+        :param max_iterations: The maximum number of iterations to run before stopping the agent.
+        :param iteration_timeout: The maximum time in seconds to run an iteration.
+        :param max_memory_size: The maximum number of messages to store in memory.
         """
         super().__init__(
             identifier=identifier,
@@ -52,7 +66,13 @@ class SuperAgent(BaseAgent):
             description=description,
             memory=memory,
             environment=environment or {},
+            are_you_serious=are_you_serious,
         )
+
+        # Safeguards
+        self.max_iterations = max_iterations
+        self.iteration_timeout = iteration_timeout
+        self.max_memory_size = max_memory_size
 
         # Set role
         self.role = (
@@ -61,22 +81,8 @@ class SuperAgent(BaseAgent):
         )
 
         # Delegates and tools initialization
-        self.delegates = (
-            {delegate.identifier: delegate for delegate in delegates}
-            if delegates
-            else {}
-        )
-        # Add environment variables to delegates
-        for delegate in self.delegates.values():
-            delegate.environment.update(self.environment)
-
-        # Initialize tools with environment variables
-        if tools:
-            for tool in tools:
-                tool.environment.update(self.environment)
-            self.tools = {tool.__class__.__name__: tool for tool in tools}
-        else:
-            self.tools = {}
+        self.delegates = self._validate_entities(delegates or [])
+        self.tools = self._validate_entities(tools or [])
 
         # Logging agent creation details
         logger.info(
@@ -87,83 +93,183 @@ class SuperAgent(BaseAgent):
         self.formatted_delegates = self._format_entities(list(self.delegates.values()))
         self.formatted_tools = self._format_entities(list(self.tools.values()))
 
-        # Set system message
-        self._system_message = REACT_MULTI_AGENT_TOOL_PROMPT.format(
-            role=self.role,
-            delegates=self.formatted_delegates,
-            tools=self.formatted_tools,
-        )
+        # Dynamic system prompt generation
+        self._update_system_message()
 
         # Initialize the memory buffer
         self._flush_memory()
 
-    def run(self, prompt: str) -> str:
+    def _validate_entities(
+        self, entities: list[BaseAgent | BaseTool]
+    ) -> dict[str, BaseAgent | BaseTool]:
+        """
+        Validate and convert entities to a dictionary with robust error checking.
+
+        :param entities: List of agents or tools
+        :return: Dictionary of validated entities
+        """
+        validated_entities = {}
+        for entity in entities:
+            try:
+                if not hasattr(entity, "run"):
+                    logger.warning(
+                        f"Entity {entity} does not have a 'run' method. Skipping."
+                    )
+                    continue
+
+                # Add environment variables to the entity
+                entity.environment.update(self.environment)
+
+                # Use identifier or class name as key
+                key = getattr(entity, "identifier", entity.__class__.__name__)
+                validated_entities[key] = entity
+
+            except Exception as e:
+                logger.error(f"Error validating entity {entity}: {e}")
+
+        return validated_entities
+
+    def add_tool(self, tool: BaseTool) -> None:
+        """
+        Dynamically add a new tool to the agent.
+
+        :param tool: Tool to add
+        """
+        if tool.__class__.__name__ not in self.tools:
+            self.tools[tool.__class__.__name__] = tool
+            self._update_system_message()
+
+    def remove_tool(self, tool_name: str) -> None:
+        """
+        Remove a tool from the agent.
+
+        :param tool_name: Name of the tool to remove
+        """
+        self.tools.pop(tool_name, None)
+        self._update_system_message()
+
+    def add_delegate(self, delegate: BaseAgent) -> None:
+        """
+        Dynamically add a new delegate to the agent.
+
+        :param delegate: Delegate to add
+        """
+        if delegate.__class__.__name__ not in self.delegates:
+            self.delegates[delegate.__class__.__name__]
+
+    def remove_delegate(self, delegate_name: str) -> None:
+        """
+        Remove a delegate from the agent.
+
+        :param delegate_name: Name of the delegate to remove
+        """
+        self.delegates.pop(delegate_name, None)
+        self._update_system_message()
+
+    def _update_system_message(self) -> None:
+        """
+        Dynamically update the system message based on current tools and delegates.
+        """
+        self._system_message = REACT_MULTI_AGENT_TOOL_PROMPT.format(
+            role=self.role,
+            delegates=self._format_entities(list(self.delegates.values())),
+            tools=self._format_entities(list(self.tools.values())),
+        )
+
+    def run(self, prompt: str, max_iterations: int | None = None) -> str:
         """
         Main execution loop to process the input prompt.
 
         :param prompt: The input prompt to process.
+        :param max_iterations: Optional override for the maximum number of iterations.
         :return: The final answer from the agent.
         """
+
+        # Truncate memory if it exceeds max size
+        while len(self.memory.messages) > self.max_memory_size:
+            self.memory.messages.pop(0)
 
         # Add initial prompt to the memory buffer
         self.memory.add_message(role="user", content=prompt)
 
-        max_iterations, iteration_count = 30, 0
-        response, answer = None, None
+        # Intialize variables pre-loop
+        iteration_count, response, answer = 0, None, None
 
-        while iteration_count < max_iterations:
+        # Let's go!
+        while iteration_count < self.max_iterations:
 
-            link = Link(
-                name=f"{self.identifier or 'agent'}_step_{iteration_count}",
-                model=self.model,
-                template=self.memory.to_messages_template(),
-            )
-            response = link.run()["state"]
-            logger.info(f"Model response: {response}")
+            with self._timeout_handler():
 
-            self.memory.add_message(role="assistant", content=response)
+                # Run the model with the current memory state
+                link = Link(
+                    name=f"{self.identifier or 'agent'}_step_{iteration_count}",
+                    model=self.model,
+                    template=self.memory.to_messages_template(),
+                )
+                response = link.run()["state"]
+                logger.info(f"Model response: {response}")
 
-            if "[ANSWER]" in response:
-                answer = self._extract_answer(response)
-                break
+                # Add the response to the memory buffer
+                self.memory.add_message(role="assistant", content=response)
 
-            if "[DELEGATE]" in response:
-                delegate_response = self._handle_delegate_action(response)
-                if delegate_response:
-                    self.memory.add_message(
-                        role="user", content=f"[OBSERVATION] {delegate_response}"
-                    )
+                # Extract the thought from the response for logging
+                self._extract_thought(response)
 
-            if "[ACTION]" in response:
-                tool_response = self._handle_tool_action(response)
-                if tool_response:
-                    self.memory.add_message(
-                        role="user", content=f"[OBSERVATION] {tool_response}"
-                    )
+                # Handle the response
+                match response:
 
-            iteration_count += 1
+                    # Best case: we have an answer
+                    case response if "[ANSWER]" in response:
+                        answer = self._extract_answer(response)
+                        break
+
+                    # Handle delegate actions
+                    case response if "[DELEGATE]" in response:
+                        delegate_response = self._handle_delegate_action(response)
+                        self.log(message=delegate_response, type="observation")
+                        if delegate_response:
+                            self.memory.add_message(
+                                role="user",
+                                content=f"[OBSERVATION] {delegate_response}",
+                            )
+
+                    # Handle tool actions
+                    case response if "[ACTION]" in response:
+                        tool_response = self._handle_tool_action(response)
+                        self.log(message=tool_response, type="observation")
+                        if tool_response:
+                            self.memory.add_message(
+                                role="user", content=f"[OBSERVATION] {tool_response}"
+                            )
+
+                iteration_count += 1
 
         self._flush_memory()
         return answer or "No answer found"
 
-    @staticmethod
-    def _format_entities(entities: list) -> str:
-        """Format delegates or tools into TOML representation."""
-        return (
-            "".join(entity.format_toml() for entity in entities)
-            if entities
-            else "None available"
+    def _extract_thought(self, response: str) -> str:
+        """Extract the thought from the response. Starts with [THOUGHT], and ends before [ACTION], [DELEGATE], or [ANSWER]."""
+        thought = (
+            response.split("[THOUGHT]")[1]
+            .split("[ACTION]")[0]
+            .split("[DELEGATE]")[0]
+            .split("[ANSWER]")[0]
+            .strip()
         )
+        self.log(message=thought, type="thought")
+        return thought
 
-    @staticmethod
-    def _extract_answer(response: str) -> str:
+    def _extract_answer(self, response: str) -> str:
         """Extract the final answer from the response."""
-        return response.split("[ANSWER]")[-1].strip()
+        answer = response.split("[ANSWER]")[-1].strip()
+        self.log(message=answer, type="answer")
+        return answer
 
     def _handle_delegate_action(self, response: str) -> str:
         """Handle actions involving delegate agents."""
 
         delegate_block = response.split("[DELEGATE]")[-1].strip()
+        self.log(message=delegate_block, type="delegate")
         logger.debug(f"Processing delegate: {delegate_block}")
 
         try:
@@ -188,6 +294,7 @@ class SuperAgent(BaseAgent):
         """Handle actions involving tools."""
 
         action_block = response.split("[ACTION]")[-1].strip()
+        self.log(message=action_block, type="action")
         logger.debug(f"Processing tool action: {action_block}")
 
         try:
@@ -208,10 +315,35 @@ class SuperAgent(BaseAgent):
             logger.error(f"Error processing tool action: {e}")
             return "Tool execution failed"
 
+    ###################
+    # Utility methods #
+    ###################
+
+    @staticmethod
+    def _format_entities(entities: list) -> str:
+        """Format delegates or tools into TOML representation."""
+        return (
+            "".join(entity.format_toml() for entity in entities)
+            if entities
+            else "None available"
+        )
+
+    @contextmanager
+    def _timeout_handler(self):
+        """
+        Context manager to implement iteration timeout.
+        """
+        start_time = time.time()
+        try:
+            yield
+        finally:
+            if time.time() - start_time > self.iteration_timeout:
+                raise TimeoutError("Iteration exceeded maximum time")
+
 
 if __name__ == "__main__":
 
-    setup_logging(log_level="info", are_you_serious=False)
+    setup_logging(log_level="kill", are_you_serious=False)
 
     # # Create the delegate agent
     # delegate = ToolAgent(
@@ -221,7 +353,7 @@ if __name__ == "__main__":
     # )
     #
     # # Create an intermediary referee agent
-    # intermediary = SuperAgent(
+    # intermediary = Agent(
     #     model=GPT4omini(source="test"),
     #     delegates=[delegate],
     #     tools=[SecretStringTool()],
@@ -237,7 +369,7 @@ if __name__ == "__main__":
     # )
     #
     # # Create the referee agent
-    # master = SuperAgent(
+    # master = Agent(
     #     model=GPT4omini(source="test"),
     #     delegates=[intermediary, chat_agent],
     #     tools=[TextInverterTool()],
@@ -277,7 +409,7 @@ if __name__ == "__main__":
     tools = [CalculatorTool(), PrimeTool(), TextInverterTool(), EnvTool()]
 
     # Create an agent with a model and tools
-    agent = SuperAgent(
+    agent = Agent(
         model=ClaudeInstant(),
         tools=[SearchTool()],
         environment={"some_env_var": "some_value"},
@@ -319,13 +451,13 @@ if __name__ == "__main__":
     # )
     #
     # # Create the agents
-    # child_agent = SuperAgent(
+    # child_agent = Agent(
     #     identifier="child_accountant",
     #     description="An agent that can retrieve the account holder name",
     #     model=GPT4omini(source="agent"),
     #     tools=[AccountNameRetrieverTool()],
     # )
-    # parent_agent = SuperAgent(
+    # parent_agent = Agent(
     #     identifier="parent_accountant",
     #     model=GPT4omini(source="agent"),
     #     delegates=[child_agent],

@@ -1,3 +1,7 @@
+"""
+Optimization utilities tests
+"""
+
 import random
 import random as rnd
 import time
