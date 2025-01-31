@@ -2,6 +2,7 @@
 Tools for agents
 """
 
+import inspect
 import logging
 from abc import ABC, abstractmethod
 from typing import Callable
@@ -66,9 +67,20 @@ class BaseTool(ABC):
         of the `run` method.
         """
         # Get the arguments of the run method
-        run_args = self.execute_tool.__annotations__
-        run_args.pop("return", None)
+        run_args = inspect.signature(self.execute_tool).parameters
+
+        # Add all arguments, and ensure that the argument
+        # is annotated with str if no type is provided
+        run_args = {
+            arg_name: (
+                arg_type.annotation
+                if arg_type.annotation != inspect.Parameter.empty
+                else str
+            )
+            for arg_name, arg_type in run_args.items()
+        }
         run_args.pop("environment", None)
+        run_args.pop("kwargs", None)
 
         # Preformat the arguments
         argument_string = ""
@@ -77,7 +89,7 @@ class BaseTool(ABC):
                 argument_string += (
                     f"[[tools.tool_params]]\n"
                     f'name = "{arg_name}"\n'
-                    f'type = "{arg_type.__name__}"\n'
+                    f'type = "{arg_type.__name__ or str}"\n'
                 )
         else:
             argument_string = "# No arguments"
@@ -135,3 +147,16 @@ def tool(description: str = None):
         return ToolClass()
 
     return decorator
+
+
+if __name__ == "__main__":
+
+    class Tool(BaseTool):
+        def execute_tool(self, arg1, arg2: str, **kwargs):
+            return "Tool executed"
+
+    a = Tool()
+
+    sig = inspect.signature(a.execute_tool)
+    print(sig)
+    print(sig.parameters)
