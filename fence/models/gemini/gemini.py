@@ -179,9 +179,28 @@ class Gemini(GeminiBase, MessagesMixin):
         self.model_id = model_id
         self.model_name = f"{model_id.capitalize()}"
 
+class GeminiFlash2_0(Gemini):
+    """Gemini 2.0 Flash model"""
+
+    def __init__(self, source: str | None = None, **kwargs):
+        super().__init__(model_id="gemini-2.0-flash", source=source, **kwargs)
+
+class GeminiFlash1_5(Gemini):
+    """Gemini 1.5 Flash model"""
+
+    def __init__(self, source: str | None = None, **kwargs):
+        super().__init__(model_id="gemini-1.5-flash", source=source, **kwargs)
+
+class Gemini1_5_Pro(Gemini):
+    """Gemini 1.5 Pro model"""
+
+    def __init__(self, source: str | None = None, **kwargs):
+        super().__init__(model_id="gemini-1.5-pro", source=source, **kwargs)
+
+
 if __name__ == "__main__":
     
-    gemini = Gemini(model_id="gemini-1.5-flash")
+    gemini = Gemini1_5_Pro(source="test")
     # Test prompt
     prompt = "Hello, how are you today?"
 
