@@ -283,6 +283,46 @@ class Messages(BaseModel):
 
         return messages
 
+    def model_dump_ollama(self) -> dict:
+        """
+        Dump the model into a dictionary for use in the Ollama API.
+
+        see: https://github.com/ollama/ollama/blob/main/docs/api.md#generate-a-chat-completion
+
+        Example:
+        {
+            "model": "llama3.2",
+            "messages": [
+                {
+                "role": "user",
+                "content": "why is the sky blue?"
+                }
+            ]
+        }
+        """
+
+        messages = []
+
+        # if there is a system message, add it to the messages
+        if self.system:
+            messages.append({"role": "system", "content": self.system})
+
+        for message in self.messages:
+            # Each message has a role (str) and content (list of content objects)
+            role, content = message.role, ""
+
+            # If content is a string, append it as text
+            if isinstance(message.content, str):
+                content = message.content
+            else:
+                raise TypeError(
+                    "Content must be a string"
+                )
+
+            # Append the message
+            messages.append({"role": role, "content": content})
+
+        return messages
 
 if __name__ == "__main__":
     # Example messages

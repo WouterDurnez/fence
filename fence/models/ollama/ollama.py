@@ -7,12 +7,13 @@ import logging
 import requests
 from requests import Response
 
-from fence.models.base import LLM, get_log_callback
+from fence.models.base import LLM, MessagesMixin, get_log_callback
+from fence.templates.models import Messages
 
 logger = logging.getLogger(__name__)
 
 
-class OllamaBase(LLM):
+class OllamaBase(LLM, MessagesMixin):
     """Base class for Ollama-powered models"""
 
     inference_type = "ollama"
@@ -41,6 +42,7 @@ class OllamaBase(LLM):
         # Set default generate endpoint
         self.endpoint = endpoint or "http://localhost:11434/api"
         self.generate_endpoint = self.endpoint + "/generate"
+        self.chat_endpoint = self.endpoint + "/chat"
         self.tag_endpoint = self.endpoint + "/tags"
         self.pull_endpoint = self.endpoint + "/pull"
 
@@ -58,7 +60,7 @@ class OllamaBase(LLM):
             "max_tokens_to_sample": kwargs.get("max_tokens_to_sample", 2048),
         }
 
-    def invoke(self, prompt: str, **kwargs) -> str:
+    def invoke(self, prompt: str | Messages, **kwargs) -> str:
         """
         Call the model with the given prompt
         :param prompt: text to feed the model
@@ -66,18 +68,28 @@ class OllamaBase(LLM):
         :return: response
         """
 
+        # Prompt should not be empty
+        self._check_if_prompt_is_valid(prompt=prompt)
+
         # Call the model
         response = self._invoke(prompt=prompt)
 
         # Get completion
-        completion = response["response"]
+        completion = response["message"]["content"]
 
         # Get input and output tokens
         input_token_count = response["prompt_eval_count"]
         output_token_count = response["eval_count"]
 
         # Get input and output word count
-        input_word_count = len(prompt.split())
+        if isinstance(prompt, str):
+            input_word_count = len(prompt.split())
+        elif isinstance(prompt, Messages):
+            input_word_count = self.count_words_in_messages(prompt)
+        else:
+            raise ValueError(
+                f"Prompt must be a string or a list of messages. Got {type(prompt)}"
+            )
         output_word_count = len(completion.split())
 
         # Log all metrics if a log callback is registered
@@ -111,9 +123,26 @@ class OllamaBase(LLM):
         :return: response completion
         """
 
+        # Format prompt, using Ollama formatting.
+        # However, if we receive a string, we will format it as a single user message for ease of use.
+        if isinstance(prompt, Messages):
+
+            # Format messages
+            messages = prompt.model_dump_ollama()
+
+        elif isinstance(prompt, str):
+            messages = [
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ]
+        else:
+            raise ValueError("Prompt must be a string or a list of messages")
+
         # Payload for post request to Ollama
         payload = {
-            "prompt": prompt,
+            "messages": messages,
             "options": self.model_kwargs,
             "model": self.model_id,
             "stream": False,
@@ -121,7 +150,7 @@ class OllamaBase(LLM):
 
         # Send request
         try:
-            response = requests.post(url=self.generate_endpoint, json=payload)
+            response = requests.post(url=self.chat_endpoint, json=payload)
 
         except Exception as e:
             raise ValueError(f"Error raised by Ollama service: {e}")
@@ -135,7 +164,7 @@ class OllamaBase(LLM):
 
             # Retry the request
             try:
-                response = requests.post(url=self.generate_endpoint, json=payload)
+                response = requests.post(url=self.chat_endpoint, json=payload)
             except Exception as e:
                 raise ValueError(f"Error raised by Ollama service: {e}")
 

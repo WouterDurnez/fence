@@ -24,6 +24,20 @@ def messages_template():
     )
     return MessagesTemplate(source=messages)
 
+@pytest.fixture
+def messages_template_no_array():
+    """
+    This fixture creates a MessagesTemplate object for testing purposes.
+    """
+    messages = Messages(
+        system="System message {system_var}",
+        messages=[
+            Message(role="user", content="User message {user_var}"),
+            Message(role="assistant", content="Assistant message {assistant_var}"),
+        ],
+    )
+    return MessagesTemplate(source=messages)
+
 
 @pytest.fixture
 def nested_messages_template():
@@ -169,3 +183,84 @@ def test_messages_template_eq(messages_template):
     """
     other_messages_template = MessagesTemplate(source=messages_template.source)
     assert messages_template == other_messages_template
+
+def test_model_dump_bedrock_converse(messages_template):
+    """
+    Test case for the dump_bedrock_converse method of the MessagesTemplate class.
+    This test checks if the dump_bedrock_converse method correctly converts the MessagesTemplate instance to a dict.
+    """
+    input_dict = {"system_var": "test1", "user_var": "test2", "assistant_var": "test3"}
+    rendered_messages = messages_template.render(input_dict=input_dict)
+    bedrock_converse = rendered_messages.model_dump_bedrock_converse()
+    assert bedrock_converse == {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "text": "User message test2"
+                    }
+                ]
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "text": "Assistant message test3"
+                    }
+                ]
+            }
+        ],
+        "system": [
+            {
+                "text": "System message test1"
+            }
+        ]
+    }
+
+def test_model_dump_openai(messages_template):
+    """
+    Test case for the dump_openai method of the MessagesTemplate class.
+    This test checks if the dump_openai method correctly converts the MessagesTemplate instance to a dict.
+    """
+    input_dict = {"system_var": "test1", "user_var": "test2", "assistant_var": "test3"}
+    rendered_messages = messages_template.render(input_dict=input_dict)
+    openai = rendered_messages.model_dump_openai()
+    assert openai == [
+        {
+            'role': 'user',
+            'content': [{'text': 'User message test2', 'type': 'text'}]
+        },
+        {
+            'role': 'assistant',
+            'content': 'Assistant message test3'
+        },
+        {
+            'content': 'System message test1', 
+            'role': 'system'
+        }
+    ]
+
+def test_model_dump_ollama_with_array(messages_template):
+    """
+    Test case for the dump_ollama method of the MessagesTemplate class.
+    This test checks if the dump_ollama raises a TypeError when the content is an array.
+    """
+    input_dict = {"system_var": "test1", "user_var": "test2", "assistant_var": "test3"}
+    rendered_messages = messages_template.render(input_dict=input_dict)
+    with pytest.raises(TypeError):
+        rendered_messages.model_dump_ollama()
+
+def test_model_dump_ollama_no_array(messages_template_no_array):
+    """
+    Test case for the dump_ollama method of the MessagesTemplate class.
+    This test checks if the dump_ollama method correctly converts the MessagesTemplate instance to a dict.
+    """
+    input_dict = {"system_var": "test1", "user_var": "test2", "assistant_var": "test3"}
+    rendered_messages = messages_template_no_array.render(input_dict=input_dict)
+    ollama = rendered_messages.model_dump_ollama()
+    print(ollama)
+    assert ollama == [
+        {'role': 'system', 'content': 'System message test1'},
+        {'role': 'user', 'content': 'User message test2'},
+        {'role': 'assistant', 'content': 'Assistant message test3'}]
