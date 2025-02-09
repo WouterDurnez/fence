@@ -101,9 +101,15 @@ class ImageContent(BaseModel):
     type: Literal["image"] = "image"
     source: Source = Field(..., description="The source of the image.")
 
+class ImageBlob(BaseModel):
+    """A model representing image content."""
+
+    type: Literal["image_blob"] = "image_blob"
+    mime_type: str = Field(..., description="The MIME type of the image.")
+    data: str = Field(..., description="The image data in base64 encoding.")
 
 # Content can be either text or image
-Content = TextContent | ImageContent
+Content = TextContent | ImageContent | ImageBlob
 
 
 class Message(BaseModel):
@@ -282,6 +288,71 @@ class Messages(BaseModel):
             messages.append(system)
 
         return messages
+
+    def model_dump_gemini(self) -> list[dict]:
+        """
+        Dump the model into a dictionary for use in the Gemini API.
+
+        :return: A dictionary representation of the model.
+        :rtype: dict
+        """
+
+        role_map = {"user": "user", "assistant": "model"}
+
+
+        # Go through each message and format it
+        contents = []
+        for message in self.messages:
+            # Each message has a role (str) and content (list of content objects)
+            role = role_map[message.role]
+            parts = []
+
+            # If content is a string, append it as text
+            if isinstance(message.content, str):
+                parts = {"text": message.content}
+
+            # If content is a list of content objects, go through each object
+            elif isinstance(message.content, list):
+                
+                # Go through each content object
+                for content_object in message.content:
+
+                    # Content is either text or image, append accordingly
+                    match content_object.type:
+                        case "text":
+                            part = {"text": content_object.text}
+                        case "image_blob":
+                            part = {
+                                    "inline_data": {
+                                        "mine_type": content_object.mime_type,
+                                        "data": content_object.data,
+                                    }
+                                }
+                        case _:
+                            raise ValueError(
+                                f"Content type '{content_object.type}' not recognized or supported for Gemini (yet)."
+                            )
+                        
+                    # Append the message
+                    parts.append(part)
+                        
+            else:
+                raise TypeError(
+                    "Content must be a string or a list of content objects."
+                )
+            
+            # Append the message
+            contents.append({"role": role, "parts": parts})
+
+        system = {"parts": {"text": self.system}} if self.system else None
+
+        return {
+            "contents": contents,
+            "system_instruction": system
+        }
+            
+
+            
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from .bedrock.claude import ClaudeInstant  # noqa: F401
 from .bedrock.claude import ClaudeSonnet  # noqa: F401
 from .ollama.ollama import Llama3_1, Ollama, OllamaBase  # noqa: F401
 from .openai.gpt import GPT4o, GPTBase  # noqa: F401
+from .gemini.gemini import GeminiBase  # noqa: F401
 
 __all__ = [
     "LLM",
@@ -19,4 +20,5 @@ __all__ = [
     "OllamaBase",
     "GPT4o",
     "GPTBase",
+    "GeminiBase",
 ]
