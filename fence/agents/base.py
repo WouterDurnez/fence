@@ -126,6 +126,7 @@ agent_description = """{self.description or self.__doc__}"""
             AgentLogType.DELEGATE: "\033[93m",  # Yellow
             AgentLogType.ANSWER: "\033[91m",  # Red
             AgentLogType.OBSERVATION: "\033[95m",  # Purple
+            "identifier": "\033[96m",  # Cyan
             "reset": "\033[0m",  # Reset
         }
         emojis = {
@@ -138,9 +139,12 @@ agent_description = """{self.description or self.__doc__}"""
 
         tag = f"[{type.value}]"
         if self.are_you_serious:
-            print(f"{tag} {message}")
+            print(f"{self.identifier}: {tag} {message}")
         else:
             color = colors.get(type, colors["reset"])
             emoji = emojis.get(type, "")
             reset = colors["reset"]
-            print(f"{emoji} {color}{tag}{reset} {message}")
+            identifier_color = colors["identifier"]
+            print(
+                f"{identifier_color}{self.identifier}{reset} {emoji} {color}{tag}{reset} {message}"
+            )
