@@ -169,3 +169,17 @@ def test_messages_template_eq(messages_template):
     """
     other_messages_template = MessagesTemplate(source=messages_template.source)
     assert messages_template == other_messages_template
+
+
+def test_model_dump_gemini(messages_template):
+    """
+    Test case for the model_dump_gemini method of the MessagesTemplate class.
+    This test checks if the model_dump_gemini method correctly converts the MessagesTemplate instance to a dict.
+    """
+    input_dict = {"system_var": "test1", "user_var": "test2", "assistant_var": "test3"}
+    rendered_messages = messages_template.render(input_dict=input_dict)
+    gemini = rendered_messages.model_dump_gemini()
+    assert gemini == {
+        'contents': [{'parts': [{'text': 'User message test2'}], 'role': 'user'}, {'parts': {'text': 'Assistant message test3'}, 'role': 'model'}],
+        'system_instruction': {'parts': {'text': 'System message test1'}}
+        }
