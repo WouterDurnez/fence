@@ -2,13 +2,20 @@
 Ollama models tests
 """
 
+import shutil
 from unittest.mock import Mock
 
 import pytest
 
-from fence.models.ollama.ollama import Ollama, Llama3_1, DeepSeekR1
+from fence.models.ollama.ollama import DeepSeekR1, Llama3_1, Ollama
 from fence.templates.messages import Message, Messages
 
+ollama_installed = shutil.which("ollama") is not None
+
+
+@pytest.mark.skipif(
+    not ollama_installed, reason="Ollama is not installed in the CI environment"
+)
 def test_ollama_base_invoke_with_empty_prompt():
     """
     Test case for the invoke method of the Ollama class with an empty prompt.
@@ -18,6 +25,10 @@ def test_ollama_base_invoke_with_empty_prompt():
     with pytest.raises(ValueError):
         ollama.invoke(prompt="")
 
+
+@pytest.mark.skipif(
+    not ollama_installed, reason="Ollama is not installed in the CI environment"
+)
 def test_ollama_base_invoke_with_none_prompt():
     """
     Test case for the invoke method of the Ollama class with a None prompt.
@@ -27,6 +38,10 @@ def test_ollama_base_invoke_with_none_prompt():
     with pytest.raises(ValueError):
         ollama.invoke(prompt=None)
 
+
+@pytest.mark.skipif(
+    not ollama_installed, reason="Ollama is not installed in the CI environment"
+)
 def test_ollama_base_invoke_with_empty_messages_prompt():
     """
     Test case for the invoke method of the Ollama class with an empty Messages prompt.
@@ -37,6 +52,10 @@ def test_ollama_base_invoke_with_empty_messages_prompt():
     with pytest.raises(ValueError):
         ollama.invoke(prompt=messages)
 
+
+@pytest.mark.skipif(
+    not ollama_installed, reason="Ollama is not installed in the CI environment"
+)
 def test_ollama_base_invoke_with_string_prompt():
     """
     Test case for the invoke method of the Ollama class with a string prompt.
@@ -47,6 +66,10 @@ def test_ollama_base_invoke_with_string_prompt():
     response = mock_ollama.invoke(prompt="Hello, how are you today?")
     assert response == "mocked response"
 
+
+@pytest.mark.skipif(
+    not ollama_installed, reason="Ollama is not installed in the CI environment"
+)
 def test_ollama_base_invoke_with_messages_prompt():
     """
     Test case for the invoke method of the Ollama class with a Messages prompt.
@@ -62,6 +85,9 @@ def test_ollama_base_invoke_with_messages_prompt():
     assert response == "mocked response"
 
 
+@pytest.mark.skipif(
+    not ollama_installed, reason="Ollama is not installed in the CI environment"
+)
 def test_ollama_base_invoke_with_invalid_prompt():
     """
     Test case for the invoke method of the Ollama class with an invalid prompt.
@@ -71,6 +97,10 @@ def test_ollama_base_invoke_with_invalid_prompt():
     with pytest.raises(ValueError):
         model.invoke(prompt=123)
 
+
+@pytest.mark.skipif(
+    not ollama_installed, reason="Ollama is not installed in the CI environment"
+)
 def test_Llama3_1_init():
     """
     Test case for the __init__ method of the Llama3_1 class.
@@ -80,6 +110,10 @@ def test_Llama3_1_init():
     assert model.source == "test"
     assert model.model_id == "llama3.1"
 
+
+@pytest.mark.skipif(
+    not ollama_installed, reason="Ollama is not installed in the CI environment"
+)
 def test_DeepSeekR1_init():
     """
     Test case for the __init__ method of the DeepSeekR1 class.
