@@ -128,6 +128,10 @@ class GeminiBase(LLM):
                 }
             ]
             }
+        else:
+            raise ValueError(
+                f"Prompt must be a string or a list of messages. Got {type(prompt)}"
+            )
 
         logger.debug(f"Request body: {request_body}")
 
