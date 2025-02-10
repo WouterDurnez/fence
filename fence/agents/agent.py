@@ -3,7 +3,7 @@ Agent class to orchestrate a flow that potentially calls tools or other, special
 """
 
 import logging
-import time
+import threading
 from contextlib import contextmanager
 
 from fence.agents.base import BaseAgent
@@ -330,15 +330,18 @@ class Agent(BaseAgent):
 
     @contextmanager
     def _timeout_handler(self):
-        """
-        Context manager to implement iteration timeout.
-        """
-        start_time = time.time()
+        def interrupt():
+            raise TimeoutError("Timeout!")
+
+        timer = threading.Timer(self.iteration_timeout, interrupt)
         try:
+            timer.start()
             yield
         finally:
-            if time.time() - start_time > self.iteration_timeout:
-                raise TimeoutError("Iteration exceeded maximum time")
+            timer.cancel()
+
+
+TimeoutError("Iteration exceeded maximum time")
 
 
 if __name__ == "__main__":
