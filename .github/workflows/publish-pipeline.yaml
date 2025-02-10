@@ -7,6 +7,8 @@ on:
 # Define global environment variables
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # Secrets are stored in GitHub Secrets
+  GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
 permissions:
   contents: read
