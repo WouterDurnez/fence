@@ -153,6 +153,7 @@ if __name__ == "__main__":
 
     # Create a travel agent
     travel_agent = Agent(
+        identifier="travel_agent",
         model=GPT4omini(),
         description="You are a travel agent. You are jovial and cheerful, and help people with information about possible travel destinations.",
         delegates=[weather_agent],
