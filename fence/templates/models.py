@@ -101,12 +101,14 @@ class ImageContent(BaseModel):
     type: Literal["image"] = "image"
     source: Source = Field(..., description="The source of the image.")
 
+
 class ImageBlob(BaseModel):
     """A model representing image content."""
 
     type: Literal["image_blob"] = "image_blob"
     mime_type: str = Field(..., description="The MIME type of the image.")
     data: str = Field(..., description="The image data in base64 encoding.")
+
 
 # Content can be either text or image
 Content = TextContent | ImageContent | ImageBlob
@@ -289,6 +291,59 @@ class Messages(BaseModel):
 
         return messages
 
+    def model_dump_anthropic(self) -> dict:
+        """
+        Dump the model into a dictionary for use in the Anthropic API.
+        NOTE: The system prompt is not included in the messages, and will be included
+        in the model class.
+        """
+
+        # Go through each message and format it
+        messages = []
+        for message in self.messages:
+
+            # Each message has a role (str) and content (list of content objects)
+            role, content = message.role, []
+
+            # If content is a string, append it as text
+            if isinstance(message.content, str):
+                content = message.content
+
+            # If content is a list of content objects, go through each object
+            elif isinstance(message.content, list):
+
+                # Go through each content object
+                for content_object in message.content:
+
+                    # Content is either text or image, append accordingly
+                    match content_object.type:
+                        case "text":
+                            message = {"text": content_object.text, "type": "text"}
+                        case "image":
+                            message = {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/{content_object.source.media_type};base64,{content_object.source.data}",
+                                },
+                            }
+                        case _:
+                            raise ValueError(
+                                f"Content type '{content_object.type}' not recognized or supported (yet)."
+                            )
+
+                    # Append the message
+                    content.append(message)
+
+            else:
+                raise TypeError(
+                    "Content must be a string or a list of content objects."
+                )
+
+            # Append the message
+            messages.append({"role": role, "content": content})
+
+        return messages
+
     def model_dump_gemini(self) -> list[dict]:
         """
         Dump the model into a dictionary for use in the Gemini API.
@@ -298,7 +353,6 @@ class Messages(BaseModel):
         """
 
         role_map = {"user": "user", "assistant": "model"}
-
 
         # Go through each message and format it
         contents = []
@@ -313,7 +367,7 @@ class Messages(BaseModel):
 
             # If content is a list of content objects, go through each object
             elif isinstance(message.content, list):
-                
+
                 # Go through each content object
                 for content_object in message.content:
 
@@ -323,36 +377,31 @@ class Messages(BaseModel):
                             part = {"text": content_object.text}
                         case "image_blob":
                             part = {
-                                    "inline_data": {
-                                        "mine_type": content_object.mime_type,
-                                        "data": content_object.data,
-                                    }
+                                "inline_data": {
+                                    "mine_type": content_object.mime_type,
+                                    "data": content_object.data,
                                 }
+                            }
                         case _:
                             raise ValueError(
                                 f"Content type '{content_object.type}' not recognized or supported for Gemini (yet)."
                             )
-                        
+
                     # Append the message
                     parts.append(part)
-                        
+
             else:
                 raise TypeError(
                     "Content must be a string or a list of content objects."
                 )
-            
+
             # Append the message
             contents.append({"role": role, "parts": parts})
 
         system = {"parts": {"text": self.system}} if self.system else None
 
-        return {
-            "contents": contents,
-            "system_instruction": system
-        }
-            
+        return {"contents": contents, "system_instruction": system}
 
-            
     def model_dump_ollama(self) -> dict:
         """
         Dump the model into a dictionary for use in the Ollama API.
@@ -385,14 +434,13 @@ class Messages(BaseModel):
             if isinstance(message.content, str):
                 content = message.content
             else:
-                raise TypeError(
-                    "Content must be a string"
-                )
+                raise TypeError("Content must be a string")
 
             # Append the message
             messages.append({"role": role, "content": content})
 
         return messages
+
 
 if __name__ == "__main__":
     # Example messages
