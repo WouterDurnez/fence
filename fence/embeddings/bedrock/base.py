@@ -37,6 +37,12 @@ class BedrockEmbeddingsBase(Embeddings):
         # AWS parameters
         self.region = kwargs.get("region", "eu-central-1")
 
+        self.model_kwargs = {
+            "dimensions": kwargs.get("dimensions", 1024),
+            "normalize" : kwargs.get("normalize", True),
+            "embeddingTypes" : kwargs.get("embeddingTypes", ["float"]),
+        }
+
         # Initialize the client
         self.client = boto3.client("bedrock-runtime", self.region)
 
@@ -60,11 +66,12 @@ class BedrockEmbeddingsBase(Embeddings):
         """
         
         # Create the request for the model.
-        native_request = {"inputText": text}
+        native_request = {"inputText": text, **self.model_kwargs}
 
         # Convert the native request to JSON.
         request_body = json.dumps(native_request)
 
+        print(request_body)
 
         try:        
             # Invoke the model with the request.
@@ -85,4 +92,3 @@ class BedrockEmbeddingsBase(Embeddings):
         """
         if isinstance(text, str) and not text.strip():
             raise ValueError("Prompt cannot be empty string!")
-        
