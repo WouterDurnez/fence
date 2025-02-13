@@ -1,3 +1,6 @@
+"""
+Base class for Bedrock embeddings
+"""
 
 import logging
 import json
@@ -58,7 +61,7 @@ class BedrockEmbeddingsBase(Embeddings):
         return response if self.full_response else embedding
     
 
-    def _embed(self, text: str) -> list[float]:
+    def _embed(self, text: str):
         """
         Embed query text.
         :param query: Text to embed.
