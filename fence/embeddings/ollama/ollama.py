@@ -20,6 +20,7 @@ class OllamaEmbeddingBase(Embeddings):
     def __init__(
             self,
             source: str,
+            full_response: bool = False,
             endpoint: str | None = None,
             **kwargs
         ):
@@ -31,10 +32,15 @@ class OllamaEmbeddingBase(Embeddings):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(source=source)
+        super().__init__()
+
+        self.source = source
+        self.full_response = full_response
 
         self.endpoint = endpoint or "http://localhost:11434/api"
         self.embedding_endpoint = self.endpoint + "/embeddings"
+        self.pull_endpoint = self.endpoint + "/pull"
+
 
         # Check if the endpoint is valid
         try:
@@ -46,7 +52,11 @@ class OllamaEmbeddingBase(Embeddings):
         
     def embed(self, text: str, **kwargs):
 
-        return self._embed(text=text)
+        response = self._embed(text=text)
+        embedding = response["embedding"]
+
+        # Depending on the full_response flag, return either the full response or just the completion
+        return response if self.full_response else embedding
 
     def _embed(self, text: str):
         
@@ -64,7 +74,7 @@ class OllamaEmbeddingBase(Embeddings):
         except Exception as e:
             raise ValueError(f"Error raised by Ollama service: {e}")
         
-        if response.status_code != 200 and response.test.__contains__("not found"):
+        if response.status_code != 200 and response.text.__contains__("not found"):
             logger.warning(f"Model {self.model_id} not found in Ollama service - trying to pull it")
 
             self._pull_model(model_id=self.model_id)
@@ -141,6 +151,6 @@ class BgeLarge(OllamaEmbeddings):
 
 
 if __name__ == "__main__":
-    bge_large = BgeLarge(source="test")
 
-    print(bge_large.embed("Hello world!"))
+    minillm = OllamaEmbeddings(model_id="all-minilm", source="test", full_response=True)
+    print(minillm("Hello world!"))

@@ -74,8 +74,6 @@ class BedrockEmbeddingsBase(Embeddings):
         # Convert the native request to JSON.
         request_body = json.dumps(native_request)
 
-        print(request_body)
-
         try:        
             # Invoke the model with the request.
             response = self.client.invoke_model(modelId=self.model_id, body=request_body)
