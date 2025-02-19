@@ -4,8 +4,8 @@ Claude Gen 3 models
 
 import logging
 
-from fence.models import BedrockBase
 from fence.models.base import register_log_callback, register_log_tags
+from fence.models.bedrock.base import BedrockBase
 from fence.utils.logger import setup_logging
 
 MODEL_ID_PRO = "amazon.nova-pro-v1:0"

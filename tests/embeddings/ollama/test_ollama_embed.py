@@ -19,7 +19,8 @@ class MockOllamaEmbeddings(OllamaEmbeddingBase):
         return {
             "embedding": [0.1, 0.2, 0.3],
         }
-    
+
+
 class TestOllamaEmbeddingBase:
     @pytest.fixture
     def ollama_embedding_base(self):
@@ -29,7 +30,7 @@ class TestOllamaEmbeddingBase:
             full_response=False,
             endpoint="http://localhost:11434/api",
         )
-    
+
     @pytest.fixture
     def ollama_embedding_base_full_response(self):
         """Create a MockOllamaEmbeddings instance for testing with full response"""
@@ -44,7 +45,10 @@ class TestOllamaEmbeddingBase:
         assert ollama_embedding_base.source == "test_source"
         assert ollama_embedding_base.full_response is False
         assert ollama_embedding_base.endpoint == "http://localhost:11434/api"
-        assert ollama_embedding_base.embedding_endpoint == "http://localhost:11434/api/embeddings"
+        assert (
+            ollama_embedding_base.embedding_endpoint
+            == "http://localhost:11434/api/embeddings"
+        )
         assert ollama_embedding_base.pull_endpoint == "http://localhost:11434/api/pull"
         assert ollama_embedding_base.model_id == "embedder"
 

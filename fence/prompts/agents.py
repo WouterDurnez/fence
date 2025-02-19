@@ -94,8 +94,6 @@ Plan ahead and think carefully about when to use your tools or delegates. Take y
 Importantly, your first instinct should ALWAYS be to use your tools or delegates, particularly for questions that involve math or logic. Do not trust your own reasoning for these questions.
 
 Finally, always remember to stick to the original task when delivering the final answer.
-
-Now, let's get started. Here is the initial input:
 '''
 
 # ReACT prompt for multi-agent flows

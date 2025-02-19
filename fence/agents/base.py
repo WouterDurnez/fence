@@ -35,6 +35,7 @@ class BaseAgent:
         description: str | None = None,
         memory: BaseMemory | None = None,
         environment: dict | None = None,
+        prefill: str | None = None,
         log_agentic_response: bool = True,
         are_you_serious: bool = False,
     ):
@@ -46,6 +47,7 @@ class BaseAgent:
         :param description: A description of the agent.
         :param environment: A dictionary of environment variables to pass to delegates and tools.
         :param memory: A memory object to store messages and system messages.
+        :param prefill: A string to prefill the memory with, i.e. an assistant message.
         :param log_agentic_response: A flag to determine if the agent's responses should be logged.
         :param are_you_serious: A flag to determine if the log message should be printed in a frivolous manner.
         """
@@ -53,6 +55,7 @@ class BaseAgent:
         self.identifier = identifier or self.__class__.__name__
         self.model = model
         self.description = description
+        self.prefill = prefill
 
         # Set the log configuration
         self.log_agentic_response = log_agentic_response
@@ -88,10 +91,18 @@ agent_description = """{self.description or self.__doc__}"""
         return toml_string
 
     def _flush_memory(self):
-        """Clear or reset the agent's memory context."""
+        """
+        Clear or reset the agent's memory context.
+
+        :param prefill: A string to prefill the memory with, i.e. an assistant message.
+        """
 
         # Check if there are any messages in the memory
         self.memory.messages = self.memory.get_messages()
+
+        # If there are no messages, add the prefill message
+        if not self.memory.messages and self.prefill:
+            self.memory.add_message(role="assistant", content=self.prefill)
 
         # Check if there is a system message in the memory
         self.memory.system = self.memory.get_system_message()
