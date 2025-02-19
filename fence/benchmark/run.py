@@ -14,6 +14,8 @@ from fence.benchmark.prompts import (
 )
 from fence.links import Link
 from fence.links import logger as link_logger
+from fence.models.anthropic.claude import Claude35Haiku as AnthropicClaude35Haiku
+from fence.models.anthropic.claude import Claude35Sonnet as AnthropicClaude35Sonnet
 from fence.models.base import LLM
 from fence.models.bedrock.claude import (
     Claude35Sonnet,
@@ -28,7 +30,7 @@ from fence.templates.messages import MessagesTemplate
 from fence.templates.models import Message, Messages
 from fence.utils.base import logger, time_it
 from fence.utils.logger import setup_logging
-from fence.utils.optim import parallelize
+from fence.utils.optim import parallelize, retry
 
 #########
 # SETUP #
@@ -59,6 +61,7 @@ template = MessagesTemplate(
 
 # Single model run
 @parallelize(max_workers=10)
+@retry(max_retries=3, delay=60)
 def test_model(index: int, model: LLM):
     start_time = time.time()
     link = Link(template=template, model=model)
@@ -78,11 +81,11 @@ def benchmark(models: list, n_calls: int = 20):
 
     @parallelize(max_workers=10)
     @time_it(only_warn=True, threshold=10)
-    def run_model_benchmark(model: LLM, n_calls: int = 20):
+    def run_model_benchmark(model: LLM, n_calls: int = n_calls):
         logger.info(f"Testing model: {model.__class__.__name__}")
 
         # Gather timings across N_CALLS runs
-        timings[model.__class__.__name__] = test_model(range(n_calls), model=model)
+        timings[model.model_name] = test_model(range(n_calls), model=model)
 
     run_model_benchmark(models, n_calls=n_calls)
 
@@ -110,6 +113,8 @@ def viz(timings: dict, target_folder: str | Path):
     # Add model family column
     def get_model_family(model_name):
         match model_name:
+            case name if "Anthropic" in name:
+                return "Anthropic"
             case name if "Claude" in name:
                 return "Claude"
             case name if "GPT" in name:
@@ -142,7 +147,7 @@ def viz(timings: dict, target_folder: str | Path):
         font=dict(size=12),
         showlegend=False,
         # Set y-axis range to 0-35 seconds
-        yaxis=dict(range=[0, 35]),
+        # yaxis=dict(range=[0, 35]),
     )
 
     # Adjust the size of the plot points
@@ -166,8 +171,10 @@ def viz(timings: dict, target_folder: str | Path):
 
 if __name__ == "__main__":
 
-    # Models to benchmark
-    models = [
+    models = []
+
+    # Add Bedrock models
+    models += [
         model(source="benchmark", region="us-east-1")
         for model in (
             ClaudeHaiku,
@@ -178,23 +185,24 @@ if __name__ == "__main__":
             NovaPro,
             NovaLite,
             NovaMicro,
-            GPT4o,
-            GPT4omini,
-            Gemini1_5_Pro,
-            GeminiFlash1_5,
-            GeminiFlash2_0,
         )
     ]
 
     # Add GPT models
     models += [model(source="benchmark") for model in (GPT4o, GPT4omini)]
 
+    # Add Gemini models
+    models += [model() for model in (Gemini1_5_Pro, GeminiFlash1_5, GeminiFlash2_0)]
+
+    # Add Anthropic models
+    models += [model() for model in (AnthropicClaude35Haiku, AnthropicClaude35Sonnet)]
+
     # Add source to all models
     for model in models:
         model.source = "benchmark"
 
     # Run the benchmark for each model
-    timings = benchmark(models, n_calls=20)
+    timings = benchmark(models, n_calls=5)
 
     # Visualize the results
     viz(timings, target_folder="figures")
