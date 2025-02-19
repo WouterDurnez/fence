@@ -46,7 +46,7 @@ class ClaudeHaiku(BedrockBase):
         super().__init__(**kwargs)
 
         self.model_id = MODEL_ID_HAIKU
-        self.model_name = "ClaudeHaiku"
+        self.model_name = "Claude Haiku"
 
 
 class ClaudeSonnet(BedrockBase):
@@ -62,7 +62,7 @@ class ClaudeSonnet(BedrockBase):
         super().__init__(**kwargs)
 
         self.model_id = MODEL_ID_SONNET
-        self.model_name = "ClaudeSonnet"
+        self.model_name = "Claude Sonnet"
 
 
 class Claude35Sonnet(BedrockBase):
@@ -94,7 +94,7 @@ class Claude35SonnetV2(BedrockBase):
         super().__init__(**kwargs)
 
         self.model_id = MODEL_ID_SONNET_3_5_V2
-        self.model_name = "Claude 3 Sonnet"
+        self.model_name = "Claude 3.5 Sonnet V2"
 
 
 if __name__ == "__main__":

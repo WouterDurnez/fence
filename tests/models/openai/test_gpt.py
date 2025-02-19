@@ -85,4 +85,4 @@ def test_gpt4o_init():
     gpt = GPT4o(source="test")
     assert gpt.source == "test"
     assert gpt.model_id == "gpt-4o"
-    assert gpt.model_name == "gpt-4o"
+    assert gpt.model_name == "GPT 4o"

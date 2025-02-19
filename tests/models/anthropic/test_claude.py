@@ -85,4 +85,4 @@ def test_claude_haiku_init():
     claude = Claude35Haiku(source="test")
     assert claude.source == "test"
     assert claude.model_id == "claude-3-5-haiku-20241022"
-    assert claude.model_name == "Claude 3.5 Haiku"
+    assert claude.model_name == "Claude 3.5 Haiku [Anthropic]"

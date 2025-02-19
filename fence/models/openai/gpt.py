@@ -187,7 +187,10 @@ class GPT(GPTBase):
         """
 
         super().__init__(**kwargs)
-        self.model_id = self.model_name = model_id
+        self.model_id = model_id
+
+        # Convert gpt to uppercase (and only 'gpt'), split on hyphen, and join with spaces
+        self.model_name = self.model_id.replace("gpt", "GPT").replace("-", " ")
 
 
 class GPT4o(GPT):
