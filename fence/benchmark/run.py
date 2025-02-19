@@ -175,7 +175,7 @@ if __name__ == "__main__":
 
     # Add Bedrock models
     models += [
-        model(source="benchmark", region="us-east-1")
+        model(region="us-east-1")
         for model in (
             ClaudeHaiku,
             ClaudeInstant,
@@ -189,7 +189,7 @@ if __name__ == "__main__":
     ]
 
     # Add GPT models
-    models += [model(source="benchmark") for model in (GPT4o, GPT4omini)]
+    models += [model() for model in (GPT4o, GPT4omini)]
 
     # Add Gemini models
     models += [model() for model in (Gemini1_5_Pro, GeminiFlash1_5, GeminiFlash2_0)]
