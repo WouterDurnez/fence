@@ -67,7 +67,7 @@ def setup_logging(
     """
 
     # If log level is `kill`, disable all logging
-    if log_level.lower().strip() == "kill":
+    if log_level and log_level.lower().strip() == "kill":
         logging.disable(logging.CRITICAL)
         return
 

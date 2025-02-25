@@ -6,7 +6,6 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 
-from fence import setup_logging
 from fence.benchmark.prompts import (
     HIGHLIGHT,
     LANGUAGE_NAME,
@@ -23,10 +22,12 @@ from fence.models.bedrock.claude import (
     ClaudeSonnet,
 )
 from fence.models.bedrock.nova import NovaLite, NovaMicro, NovaPro
+from fence.models.gemini.gemini import Gemini1_5_Pro, GeminiFlash1_5, GeminiFlash2_0
 from fence.models.openai.gpt import GPT4o, GPT4omini
 from fence.templates.messages import MessagesTemplate
 from fence.templates.models import Message, Messages
 from fence.utils.base import logger, time_it
+from fence.utils.logger import setup_logging
 from fence.utils.optim import parallelize
 
 #########
@@ -115,6 +116,8 @@ def viz(timings: dict, target_folder: str | Path):
                 return "GPT"
             case name if "Nova" in name:
                 return "Nova"
+            case name if "Gemini" in name:
+                return "Gemini"
             case _:
                 return "Other"
 
@@ -175,6 +178,11 @@ if __name__ == "__main__":
             NovaPro,
             NovaLite,
             NovaMicro,
+            GPT4o,
+            GPT4omini,
+            Gemini1_5_Pro,
+            GeminiFlash1_5,
+            GeminiFlash2_0,
         )
     ]
 
@@ -186,7 +194,7 @@ if __name__ == "__main__":
         model.source = "benchmark"
 
     # Run the benchmark for each model
-    timings = benchmark(models, n_calls=30)
+    timings = benchmark(models, n_calls=20)
 
     # Visualize the results
     viz(timings, target_folder="figures")
