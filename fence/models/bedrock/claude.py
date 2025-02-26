@@ -122,15 +122,15 @@ if __name__ == "__main__":
             extra_tags={"test": "test"},
             region="eu-central-1",
         )
-        #
-        # # Call the model
-        # response = claude("Hello, who are you?")
-        #
-        # # Print the response
-        # print(response)
 
-        # Stream the response
-        for chunk in claude.stream("Hello, who are you?"):
-            print(chunk, end="")
+        # Call the model
+        response = claude.invoke(prompt="Hello, who are you?")
 
-        print("\n")  # Add a newline at the end
+        # Print the response
+        print(response)
+
+        # # Stream the response
+        # for chunk in claude.stream("Hello, who are you?"):
+        #     print(chunk, end="")
+        #
+        # print("\n")  # Add a newline at the end

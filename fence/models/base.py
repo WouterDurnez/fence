@@ -95,6 +95,10 @@ class LLM(ABC):
         Check if the prompt is a valid user message or Messages object
         """
 
+        # Prompt should be a string or Messages object
+        if not isinstance(prompt, (str, Messages)):
+            raise ValueError("Prompt must be a string or a Messages object!")
+
         # Prompt should not be empty
         if isinstance(prompt, str) and not prompt.strip():
             raise ValueError("Prompt cannot be empty string!")

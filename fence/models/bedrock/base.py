@@ -25,7 +25,6 @@ class BedrockBase(LLM, MessagesMixin):
     def __init__(
         self,
         source: str | None = None,
-        full_response: bool = False,
         metric_prefix: str | None = None,
         extra_tags: dict | None = None,
         **kwargs,
@@ -34,14 +33,13 @@ class BedrockBase(LLM, MessagesMixin):
         Initialize a Bedrock model
 
         :param str source: An indicator of where (e.g., which feature) the model is operating from. Useful to pass to the logging callback
-        :param bool full_response: whether to return the full response object or just the TEXT completion
         :param str|None metric_prefix: Prefix for the metric names
         :param dict|None extra_tags: Additional tags to add to the logging tags
         :param **kwargs: Additional keyword arguments
         """
         super().__init__(metric_prefix=metric_prefix, extra_tags=extra_tags, **kwargs)
         self.source = source
-        self.full_response = full_response
+
         # Precompute logging prefix once to avoid reconstructing it in _log_callback
         self.log_prefix = ".".join(
             item for item in [self.metric_prefix, self.source] if item
@@ -101,6 +99,7 @@ class BedrockBase(LLM, MessagesMixin):
         :return: request parameters dictionary
         """
         messages = self._format_prompt(prompt)
+
         # Compute effective inference config by merging default and override kwargs
         inference_config = {**self.model_kwargs, **override_kwargs}
         invoke_params = {
@@ -130,7 +129,7 @@ class BedrockBase(LLM, MessagesMixin):
             self._log_callback(**metrics)
 
             # Return the response
-            return response if self.full_response else completion
+            return completion
 
         except Exception as e:
             raise ValueError(f"Error raised by bedrock service: {e}")
