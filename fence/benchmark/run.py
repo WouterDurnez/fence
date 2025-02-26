@@ -175,16 +175,16 @@ if __name__ == "__main__":
 
     # Add Bedrock models
     models += [
-        model(region="us-east-1")
+        model
         for model in (
-            ClaudeHaiku,
-            ClaudeInstant,
-            ClaudeSonnet,
-            Claude35Sonnet,
-            # Claude35SonnetV2,
-            NovaPro,
-            NovaLite,
-            NovaMicro,
+            ClaudeHaiku(),
+            ClaudeInstant(),
+            ClaudeSonnet(),
+            Claude35Sonnet(region="us-east-1"),
+            # Claude35SonnetV2(region="us-east-1"),
+            NovaPro(region="us-east-1"),
+            NovaLite(region="us-east-1"),
+            NovaMicro(region="us-east-1"),
         )
     ]
 

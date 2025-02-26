@@ -4,7 +4,6 @@ Claude models
 
 import logging
 
-from fence.models.base import register_log_callback, register_log_tags
 from fence.models.bedrock.base import BedrockBase
 
 logger = logging.getLogger(__name__)
@@ -99,19 +98,19 @@ class Claude35SonnetV2(BedrockBase):
 
 if __name__ == "__main__":
 
-    # Register logging callback
-    register_log_callback(lambda metrics, tags: print(metrics, tags))
-
-    # Register logging tags
-    register_log_tags({"team": "data-science-test", "project": "fence"})
+    # # Register logging callback
+    # register_log_callback(lambda metrics, tags: print(metrics, tags))
+    #
+    # # Register logging tags
+    # register_log_tags({"team": "data-science-test", "project": "fence"})
 
     # Initialize and test models
     for model in [
-        ClaudeInstant,
+        # ClaudeInstant,
         ClaudeHaiku,
-        ClaudeSonnet,
-        Claude35Sonnet,
-        Claude35SonnetV2,
+        # ClaudeSonnet,
+        # Claude35Sonnet,
+        # Claude35SonnetV2,
     ]:
 
         print(f"Testing {model.__name__}...")
@@ -121,11 +120,17 @@ if __name__ == "__main__":
             source="test",
             metric_prefix="supertest",
             extra_tags={"test": "test"},
-            region="us-east-1",
+            region="eu-central-1",
         )
+        #
+        # # Call the model
+        # response = claude("Hello, who are you?")
+        #
+        # # Print the response
+        # print(response)
 
-        # Call the model
-        response = claude("Hello, who are you?")
+        # Stream the response
+        for chunk in claude.stream("Hello, who are you?"):
+            print(chunk, end="")
 
-        # Print the response
-        print(response)
+        print("\n")  # Add a newline at the end
