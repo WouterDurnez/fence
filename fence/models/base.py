@@ -106,6 +106,38 @@ class LLM(ABC):
             raise ValueError("Prompt needs at least one user message!")
 
 
+class InvokeMixin:
+    """
+    Mixin for LLMs that can be invoked
+    """
+
+    @abstractmethod
+    def invoke(self, prompt: str | Messages, **kwargs) -> str:
+        """
+        Invoke the LLM
+        :param prompt: User message or Messages object
+        :param kwargs: Additional keyword arguments
+        :return: Response message
+        """
+        raise NotImplementedError
+
+
+class StreamMixin:
+    """
+    Mixin for LLMs that can stream responses
+    """
+
+    @abstractmethod
+    def stream(self, prompt: str | Messages, **kwargs) -> str:
+        """
+        Stream the LLM responses
+        :param prompt: User message or Messages object
+        :param kwargs: Additional keyword arguments
+        :return: Stream of responses
+        """
+        raise NotImplementedError
+
+
 ##########
 # Mixins #
 ##########

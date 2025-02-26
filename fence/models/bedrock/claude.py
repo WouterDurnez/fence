@@ -109,11 +109,12 @@ if __name__ == "__main__":
         # ClaudeInstant,
         ClaudeHaiku,
         # ClaudeSonnet,
-        # Claude35Sonnet,
+        Claude35Sonnet,
         # Claude35SonnetV2,
     ]:
 
-        print(f"Testing {model.__name__}...")
+        print(f"\nTesting {model.__name__}...")
+        print("-" * 40)
 
         # Create an instance of the model class
         claude = model(
@@ -123,14 +124,16 @@ if __name__ == "__main__":
             region="eu-central-1",
         )
 
-        # Call the model
+        # Invoke the model
+        print(f"-- Invoking {claude.model_name} model --")
         response = claude.invoke(prompt="Hello, who are you?")
 
         # Print the response
         print(response)
 
-        # # Stream the response
-        # for chunk in claude.stream("Hello, who are you?"):
-        #     print(chunk, end="")
-        #
-        # print("\n")  # Add a newline at the end
+        # Stream the response
+        print(f"\n-- Streaming {claude.model_name} model response --")
+        for chunk in claude.stream("Hello, who are you?"):
+            print(chunk, end="")
+
+        print("\n")  # Add a newline at the end

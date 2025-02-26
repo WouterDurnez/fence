@@ -7,13 +7,19 @@ from typing import Iterator
 
 import boto3
 
-from fence.models.base import LLM, MessagesMixin, get_log_callback
+from fence.models.base import (
+    LLM,
+    InvokeMixin,
+    MessagesMixin,
+    StreamMixin,
+    get_log_callback,
+)
 from fence.templates.messages import Messages
 
 logger = logging.getLogger(__name__)
 
 
-class BedrockBase(LLM, MessagesMixin):
+class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
     """Base class for Bedrock foundation models"""
 
     inference_type = "bedrock"
