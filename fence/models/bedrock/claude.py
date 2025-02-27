@@ -109,7 +109,7 @@ if __name__ == "__main__":
         # ClaudeInstant,
         ClaudeHaiku,
         # ClaudeSonnet,
-        Claude35Sonnet,
+        # Claude35Sonnet,
         # Claude35SonnetV2,
     ]:
 
@@ -126,14 +126,16 @@ if __name__ == "__main__":
 
         # Invoke the model
         print(f"-- Invoking {claude.model_name} model --")
-        response = claude.invoke(prompt="Hello, who are you?")
+        response = claude.invoke(
+            prompt="Write a sonnet about Nathalie, the love of my life"
+        )
 
         # Print the response
         print(response)
 
         # Stream the response
         print(f"\n-- Streaming {claude.model_name} model response --")
-        for chunk in claude.stream("Hello, who are you?"):
+        for chunk in claude.stream("Count to one thousand"):
             print(chunk, end="")
 
         print("\n")  # Add a newline at the end

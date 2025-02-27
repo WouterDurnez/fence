@@ -7,13 +7,7 @@ from typing import Iterator
 
 import boto3
 
-from fence.models.base import (
-    LLM,
-    InvokeMixin,
-    MessagesMixin,
-    StreamMixin,
-    get_log_callback,
-)
+from fence.models.base import LLM, InvokeMixin, MessagesMixin, StreamMixin
 from fence.templates.messages import Messages
 
 logger = logging.getLogger(__name__)
@@ -31,25 +25,16 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
     def __init__(
         self,
         source: str | None = None,
-        metric_prefix: str | None = None,
-        extra_tags: dict | None = None,
         **kwargs,
     ):
         """
         Initialize a Bedrock model
 
         :param str source: An indicator of where (e.g., which feature) the model is operating from. Useful to pass to the logging callback
-        :param str|None metric_prefix: Prefix for the metric names
-        :param dict|None extra_tags: Additional tags to add to the logging tags
         :param **kwargs: Additional keyword arguments
         """
-        super().__init__(metric_prefix=metric_prefix, extra_tags=extra_tags, **kwargs)
+        super().__init__(**kwargs)
         self.source = source
-
-        # Precompute logging prefix once to avoid reconstructing it in _log_callback
-        self.log_prefix = ".".join(
-            item for item in [self.metric_prefix, self.source] if item
-        )
 
         # Model parameters
         self.model_kwargs = {
@@ -234,26 +219,3 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         else:
             raise ValueError("Prompt must be a string or a list of messages")
         return messages
-
-    def _log_callback(self, **metrics):
-        """
-        Log the callback arguments
-        :param metrics: metrics to log
-        """
-        # Log all metrics if a log callback is registered
-        if log_callback := get_log_callback():
-            # Use precomputed log_prefix for efficiency
-            log_metrics = {
-                f"{self.log_prefix}.{metric_key}": metric_value
-                for metric_key, metric_value in metrics.items()
-            }
-            log_metrics[f"{self.log_prefix}.invocation"] = 1
-            log_args = [
-                # Add metrics
-                log_metrics,
-                # Add tags
-                self.logging_tags,
-            ]
-            # Log metrics
-            logger.debug(f"Logging args: {log_args}")
-            log_callback(*log_args)

@@ -78,7 +78,7 @@ class LLM(ABC):
         self.source = source
 
         # Logging parameters
-        self.metric_prefix = metric_prefix or ""
+        self.metric_prefix = metric_prefix
         self.logging_tags = get_log_tags() or {}
         self.logging_tags.update(extra_tags or {})
 
@@ -104,6 +104,31 @@ class LLM(ABC):
             raise ValueError("Prompt cannot be empty string!")
         if isinstance(prompt, Messages) and not prompt.messages:
             raise ValueError("Prompt needs at least one user message!")
+
+    def _log_callback(self, **metrics):
+        """
+        Log the callback arguments
+        :param metrics: metrics to log
+        """
+        # Log all metrics if a log callback is registered
+        if log_callback := get_log_callback():
+
+            # Use precomputed log_prefix for efficiency
+            log_metrics = {
+                f"{self.metric_prefix + '.' if self.metric_prefix else ''}{metric_key}": metric_value
+                for metric_key, metric_value in metrics.items()
+            }
+            log_metrics[
+                f"{self.metric_prefix + '.' if self.metric_prefix else ''}invocation"
+            ] = 1
+            log_args = [
+                # Add metrics
+                log_metrics,
+                # Add tags
+                self.logging_tags,
+            ]
+            # Log metrics
+            log_callback(*log_args)
 
 
 class InvokeMixin:
