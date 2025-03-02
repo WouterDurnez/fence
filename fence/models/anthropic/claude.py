@@ -210,7 +210,7 @@ class Claude35Haiku(Claude):
 
         super().__init__(
             model_id="claude-3-5-haiku-20241022",
-            model_name="Claude 3.5 Haiku",
+            model_name="Claude 3.5 Haiku [Anthropic]",
             **kwargs,
         )
 
@@ -229,7 +229,7 @@ class Claude35Sonnet(Claude):
 
         super().__init__(
             model_id="claude-3-5-sonnet-20241022",
-            model_name="Claude 3.5 Sonnet",
+            model_name="Claude 3.5 Sonnet [Anthropic]",
             **kwargs,
         )
 

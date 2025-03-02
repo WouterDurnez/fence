@@ -78,7 +78,7 @@ class LLM(ABC):
         self.source = source
 
         # Logging parameters
-        self.metric_prefix = metric_prefix or ""
+        self.metric_prefix = metric_prefix
         self.logging_tags = get_log_tags() or {}
         self.logging_tags.update(extra_tags or {})
 
@@ -95,11 +95,72 @@ class LLM(ABC):
         Check if the prompt is a valid user message or Messages object
         """
 
+        # Prompt should be a string or Messages object
+        if not isinstance(prompt, (str, Messages)):
+            raise ValueError("Prompt must be a string or a Messages object!")
+
         # Prompt should not be empty
         if isinstance(prompt, str) and not prompt.strip():
             raise ValueError("Prompt cannot be empty string!")
         if isinstance(prompt, Messages) and not prompt.messages:
             raise ValueError("Prompt needs at least one user message!")
+
+    def _log_callback(self, **metrics):
+        """
+        Log the callback arguments
+        :param metrics: metrics to log
+        """
+        # Log all metrics if a log callback is registered
+        if log_callback := get_log_callback():
+
+            # Use precomputed log_prefix for efficiency
+            log_metrics = {
+                f"{self.metric_prefix + '.' if self.metric_prefix else ''}{metric_key}": metric_value
+                for metric_key, metric_value in metrics.items()
+            }
+            log_metrics[
+                f"{self.metric_prefix + '.' if self.metric_prefix else ''}invocation"
+            ] = 1
+            log_args = [
+                # Add metrics
+                log_metrics,
+                # Add tags
+                self.logging_tags,
+            ]
+            # Log metrics
+            log_callback(*log_args)
+
+
+class InvokeMixin:
+    """
+    Mixin for LLMs that can be invoked
+    """
+
+    @abstractmethod
+    def invoke(self, prompt: str | Messages, **kwargs) -> str:
+        """
+        Invoke the LLM
+        :param prompt: User message or Messages object
+        :param kwargs: Additional keyword arguments
+        :return: Response message
+        """
+        raise NotImplementedError
+
+
+class StreamMixin:
+    """
+    Mixin for LLMs that can stream responses
+    """
+
+    @abstractmethod
+    def stream(self, prompt: str | Messages, **kwargs) -> str:
+        """
+        Stream the LLM responses
+        :param prompt: User message or Messages object
+        :param kwargs: Additional keyword arguments
+        :return: Stream of responses
+        """
+        raise NotImplementedError
 
 
 ##########

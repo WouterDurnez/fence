@@ -39,6 +39,8 @@ class Agent(BaseAgent):
         tools: list[BaseTool] | None = None,
         memory: BaseMemory | None = None,
         environment: dict | None = None,
+        prefill: str | None = None,
+        log_agentic_response: bool = True,
         are_you_serious: bool = False,
         max_iterations: int = 5,
         iteration_timeout: float = 30.0,
@@ -55,6 +57,8 @@ class Agent(BaseAgent):
         :param tools: A list of Tool objects.
         :param memory: A memory class. Defaults to FleetingMemory.
         :param environment: A dictionary of environment variables to pass to delegates and tools.
+        :param prefill: A string (i.e., assistant message) to prefill the memory with.
+        :param log_agentic_response: A flag to determine if the agent's responses should be logged.
         :param are_you_serious: A flag to determine if the log message should be printed in a frivolous manner.
         :param max_iterations: The maximum number of iterations to run before stopping the agent.
         :param iteration_timeout: The maximum time in seconds to run an iteration.
@@ -66,6 +70,8 @@ class Agent(BaseAgent):
             description=description,
             memory=memory,
             environment=environment or {},
+            prefill=prefill,
+            log_agentic_response=log_agentic_response,
             are_you_serious=are_you_serious,
         )
 

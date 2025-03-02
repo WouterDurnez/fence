@@ -11,7 +11,7 @@ __all__ = ["GPT", "GPT4o", "GPT4", "GPT4omini"]
 
 import logging
 
-from fence.models.base import LLM, MessagesMixin, get_log_callback
+from fence.models.base import LLM, MessagesMixin
 from fence.templates.messages import Message, Messages
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class GPTBase(LLM, MessagesMixin):
         # Get response completion
         completion = response["choices"][0]["message"]["content"]
 
-        # Get input and output word count
+        # Calculate word count
         if isinstance(prompt, str):
             input_word_count = len(prompt.split())
         elif isinstance(prompt, Messages):
@@ -92,23 +92,15 @@ class GPTBase(LLM, MessagesMixin):
             )
         output_word_count = len(completion.split())
 
+        metrics = {
+            "input_token_count": input_token_count,
+            "output_token_count": output_token_count,
+            "input_word_count": input_word_count,
+            "output_word_count": output_word_count,
+        }
+
         # Log all metrics if a log callback is registered
-        if log_callback := get_log_callback():
-            prefix = ".".join(
-                item for item in [self.metric_prefix, self.source] if item
-            )
-            log_callback(
-                # Add metrics
-                {
-                    f"{prefix}.invocation": 1,
-                    f"{prefix}.input_token_count": input_token_count,
-                    f"{prefix}.output_token_count": output_token_count,
-                    f"{prefix}.input_word_count": input_word_count,
-                    f"{prefix}.output_word_count": output_word_count,
-                },
-                # Format tags as ['key:value', 'key:value', ...]
-                self.logging_tags,
-            )
+        self._log_callback(**metrics)
 
         # Calculate token metrics for the response and send them to Datadog
         return completion
@@ -187,7 +179,10 @@ class GPT(GPTBase):
         """
 
         super().__init__(**kwargs)
-        self.model_id = self.model_name = model_id
+        self.model_id = model_id
+
+        # Convert gpt to uppercase (and only 'gpt'), split on hyphen, and join with spaces
+        self.model_name = self.model_id.replace("gpt", "GPT").replace("-", " ")
 
 
 class GPT4o(GPT):
