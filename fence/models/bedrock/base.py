@@ -1,54 +1,50 @@
+"""
+Base class for Bedrock foundation models
+"""
+
 import logging
+from typing import Iterator
 
 import boto3
 
-from fence.models.base import LLM, MessagesMixin, get_log_callback
+from fence.models.base import LLM, InvokeMixin, MessagesMixin, StreamMixin
 from fence.templates.messages import Messages
 
 logger = logging.getLogger(__name__)
-MODEL_ID_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
-MODEL_ID_PRO = "amazon.nova-pro-v1:0"
 
 
-class BedrockBase(LLM, MessagesMixin):
+class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
     """Base class for Bedrock foundation models"""
 
     inference_type = "bedrock"
 
+    ###############
+    # Constructor #
+    ###############
+
     def __init__(
         self,
         source: str | None = None,
-        full_response: bool = False,
-        metric_prefix: str | None = None,
-        extra_tags: dict | None = None,
         **kwargs,
     ):
         """
         Initialize a Bedrock model
 
         :param str source: An indicator of where (e.g., which feature) the model is operating from. Useful to pass to the logging callback
-        :param bool full_response: whether to return the full response object or just the TEXT completion
-        :param str|None metric_prefix: Prefix for the metric names
-        :param dict|None extra_tags: Additional tags to add to the logging tags
         :param **kwargs: Additional keyword arguments
         """
-
-        super().__init__(metric_prefix=metric_prefix, extra_tags=extra_tags)
-
+        super().__init__(**kwargs)
         self.source = source
-        self.full_response = full_response
 
-        # LLM parameters
+        # Model parameters
         self.model_kwargs = {
             "temperature": kwargs.get("temperature", 0.01),
             "maxTokens": kwargs.get("max_tokens", 2048),
             "topP": kwargs.get("top_p", 0.9),
         }
 
-        # AWS parameters
+        # AWS
         self.region = kwargs.get("region", "eu-central-1")
-
-        # Initialize the client
         self.client = boto3.client("bedrock-runtime", self.region)
 
     def invoke(self, prompt: str | Messages, **override_kwargs) -> str:
@@ -58,81 +54,150 @@ class BedrockBase(LLM, MessagesMixin):
         :param override_kwargs: Additional keyword arguments to override the default model kwargs
         :return: response
         """
+        return self._invoke(prompt=prompt, stream=False, **override_kwargs)
 
-        # Prompt should not be empty
+    def stream(self, prompt: str | Messages, **override_kwargs) -> Iterator[str]:
+        """
+        Stream the model response with the given prompt.
+        :param prompt: text to feed the model
+        :param override_kwargs: Additional keyword arguments to override the default model kwargs
+        :return: stream of responses
+        """
+        yield from self._invoke(prompt=prompt, stream=True, **override_kwargs)
+
+    def _invoke(self, prompt: str | Messages, stream: bool, **override_kwargs):
+        """
+        Centralized method to handle both invoke and stream.
+        """
+        # Check if the prompt is valid
         self._check_if_prompt_is_valid(prompt=prompt)
 
-        # Update model kwargs with any overrides
-        original_model_kwargs = self.model_kwargs.copy()
-        self.model_kwargs.update(override_kwargs)
+        # Prepare the request parameters with override kwargs
+        invoke_params = self._prepare_request(prompt, override_kwargs)
 
-        # Call the model
-        response = self._invoke(prompt=prompt)
-
-        # Get response completion
-        response_body = response.get("output", {}).get("message", None)
-
-        # Get token counts
-        input_token_count = response.get("usage", {}).get("inputTokens", 0)
-        output_token_count = response.get("usage", {}).get("outputTokens", 0)
-
-        # Get completion
-        if response_body and "content" in response_body and response_body["content"]:
-            completion = response_body["content"][0].get("text", "")
+        # Invoke the model
+        if stream:
+            return self._handle_stream(invoke_params)
         else:
-            completion = ""
+            return self._handle_invoke(invoke_params)
 
-        # Get input and output word count
-        if isinstance(prompt, str):
-            input_word_count = len(prompt.split())
-        elif isinstance(prompt, Messages):
-            input_word_count = self.count_words_in_messages(prompt)
-        else:
-            raise ValueError(
-                f"Prompt must be a string or a list of messages. Got {type(prompt)}"
-            )
-        output_word_count = len(completion.split())
-
-        # Log all metrics if a log callback is registered
-        if log_callback := get_log_callback():
-            prefix = ".".join(
-                item for item in [self.metric_prefix, self.source] if item
-            )
-            log_args = [
-                # Add metrics
-                {
-                    f"{prefix}.invocation": 1,
-                    f"{prefix}.input_token_count": input_token_count,
-                    f"{prefix}.output_token_count": output_token_count,
-                    f"{prefix}.input_word_count": input_word_count,
-                    f"{prefix}.output_word_count": output_word_count,
-                },
-                # Add tags
-                self.logging_tags,
-            ]
-
-            # Log metrics
-            logger.debug(f"Logging args: {log_args}")
-            log_callback(*log_args)
-
-        # Reset model kwargs
-        self.model_kwargs = original_model_kwargs
-
-        # Depending on the full_response flag, return either the full response or just the completion
-        return response if self.full_response else completion
-
-    def _invoke(self, prompt: str | Messages) -> dict:
+    def _prepare_request(self, prompt: str | Messages, override_kwargs: dict) -> dict:
         """
-        Handle the API request to the service
-        :param prompt: text to feed the model
-        :return: response completion
-        """
+        Prepares the request parameters for the Bedrock API.
 
+        :param prompt: text or Messages object to format
+        :param override_kwargs: Additional keyword arguments to override model kwargs
+        :return: request parameters dictionary
+        """
+        messages = self._format_prompt(prompt)
+
+        # Compute effective inference config by merging default and override kwargs
+        inference_config = {**self.model_kwargs, **override_kwargs}
+        invoke_params = {
+            "modelId": self.model_id,
+            "messages": messages["messages"],
+            "inferenceConfig": inference_config,
+        }
+        if "system" in messages:
+            invoke_params["system"] = messages["system"]
+        return invoke_params
+
+    def _handle_invoke(self, invoke_params: dict) -> str:
+        """
+        Handles synchronous invocation.
+
+        :param invoke_params: parameters for the Bedrock API
+        :return: completion text
+        """
+        try:
+            # Call the Bedrock API
+            response = self.client.converse(**invoke_params)
+
+            # Process the response
+            completion, metrics = self._process_response(response)
+
+            # Log the metrics
+            self._log_callback(**metrics)
+
+            # Return the response
+            return completion
+
+        except Exception as e:
+            raise ValueError(f"Error raised by bedrock service: {e}")
+
+    def _handle_stream(self, invoke_params: dict) -> Iterator[str]:
+        """
+        Handles streaming invocation.
+
+        :param invoke_params: parameters for the Bedrock API
+        :return: stream of responses
+        """
+        try:
+            # Call the Bedrock streaming API
+            response = self.client.converse_stream(**invoke_params)
+
+            # Process the streaming response
+            stream = response.get("stream")
+            if not stream:
+                raise ValueError("No stream found in response")
+
+            # Stream the response
+            for event in stream:
+                # If the event is a message start, print the role
+                if "messageStart" in event:
+                    logger.debug(
+                        f"Message started. Role: {event['messageStart']['role']}"
+                    )
+
+                # Yield the completion text if available
+                if "contentBlockDelta" in event:
+                    text = event["contentBlockDelta"]["delta"]["text"]
+                    logger.debug(f"Streaming chunk: {text}")
+                    yield text
+
+                # If the event is a message stop, print the stop reason
+                if "messageStop" in event:
+                    logger.debug(
+                        f"Message stopped. Reason: {event['messageStop']['stopReason']}"
+                    )
+
+                if "metadata" in event:
+                    self._log_callback(**self._extract_metrics(event["metadata"]))
+
+        except Exception as e:
+            raise ValueError(f"Error in streaming response from Bedrock service: {e}")
+
+    def _process_response(self, response: dict) -> tuple[str, dict]:
+        """
+        Extracts completion text and metrics from the response.
+        """
+        response_body = response.get("output", {}).get("message", {})
+        completion = response_body.get("content", [{}])[0].get("text", "")
+        metrics = self._extract_metrics(response.get("usage", {}))
+        return completion, metrics
+
+    def _extract_metrics(self, metadata: dict) -> dict:
+        """
+        Extracts relevant metrics from the metadata.
+        """
+        return {
+            "input_token_count": metadata.get("inputTokens", 0),
+            "output_token_count": metadata.get("outputTokens", 0),
+            "total_token_count": metadata.get("totalTokens", 0),
+            "latency_ms": metadata.get("metrics", {}).get("latencyMs"),
+        }
+
+    def _format_prompt(self, prompt: str | Messages) -> dict:
+        """
+        Format the prompt for the Bedrock API
+
+        :param prompt: text or Messages object to format
+        :return: formatted messages dictionary
+        """
         # Format prompt: Claude3 models expect a list of messages, with content, roles, etc.
         # However, if we receive a string, we will format it as a single user message for ease of use.
         if isinstance(prompt, Messages):
             messages = prompt.model_dump_bedrock_converse()
-
             # Strip `type` key from each message
             messages["messages"] = [
                 {k: v for k, v in message.items() if k != "type"}
@@ -153,40 +218,4 @@ class BedrockBase(LLM, MessagesMixin):
             }
         else:
             raise ValueError("Prompt must be a string or a list of messages")
-
-        # Build request body
-        request_body = {
-            "anthropic_version": "bedrock-2023-05-31",
-            **messages,
-            **self.model_kwargs,
-        }
-
-        logger.debug(f"Request body: {request_body}")
-
-        # Prepare the request parameters
-        invoke_params = {
-            "modelId": self.model_id,
-            "messages": messages["messages"],
-            "inferenceConfig": self.model_kwargs,
-        }
-        if "system" in messages:
-            invoke_params["system"] = messages["system"]
-
-        # Shooting our shot
-        try:
-            response = self.client.converse(**invoke_params)
-
-            # Log invocation
-            self.invocation_logging()
-
-            return response
-
-        except Exception as e:
-            raise ValueError(f"Error raised by bedrock service: {e}")
-
-    def invocation_logging(self) -> None:
-        """
-        Log invocation
-        :return:
-        """
-        pass
+        return messages
