@@ -89,51 +89,9 @@ class OpenAIEmbeddings(OpenAIEmbeddingsBase):
         self.model_name = f"{model_id.capitalize()}"
 
 
-class OpenAITextEmbedding_3_Small(OpenAIEmbeddings):
-    """
-    OpenAI Text Embedding 3 Small model
-    """
-
-    def __init__(self, **kwargs):
-        """
-        Initialize an OpenAI Text Embedding 3 Small model
-        :param source: An indicator of where (e.g., which feature) the model is operating from.
-        :param **kwargs: Additional keyword arguments
-        """
-        super().__init__(model_id="text-embedding-3-small", **kwargs)
-
-
-class OpenAITextEmbedding_3_Large(OpenAIEmbeddings):
-    """
-    OpenAI Text Embedding 3 Large model
-    """
-
-    def __init__(self, **kwargs):
-        """
-        Initialize an OpenAI Text Embedding 3 Large model
-        :param source: An indicator of where (e.g., which feature) the model is operating from.
-        :param **kwargs: Additional keyword arguments
-        """
-        super().__init__(model_id="text-embedding-3-large", **kwargs)
-
-
-class OpenAITextEmbeddingAda002(OpenAIEmbeddings):
-    """
-    OpenAI Text Embedding Ada 002 model
-    """
-
-    def __init__(self, **kwargs):
-        """
-        Initialize an OpenAI Text Embedding Ada 002 model
-        :param source: An indicator of where (e.g., which feature) the model is operating from.
-        :param **kwargs: Additional keyword arguments
-        """
-        super().__init__(model_id="text-embedding-ada-002", **kwargs)
-
-
 if __name__ == "__main__":
     # Initialize OpenAI embeddings model
-    openai = OpenAITextEmbeddingAda002(source="openai")
+    openai = OpenAIEmbeddings(source="openai", model_id="text-embedding-ada-002")
 
     # Embed text
     text = "Hello, world!"
