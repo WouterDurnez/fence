@@ -272,7 +272,6 @@ def test_model_dump_ollama_no_array(messages_template_no_array):
     input_dict = {"system_var": "test1", "user_var": "test2", "assistant_var": "test3"}
     rendered_messages = messages_template_no_array.render(input_dict=input_dict)
     ollama = rendered_messages.model_dump_ollama()
-    print(ollama)
     assert ollama == [
         {'role': 'system', 'content': 'System message test1'},
         {'role': 'user', 'content': 'User message test2'},
@@ -297,5 +296,8 @@ def test_model_dump_mistral_no_array(messages_template_no_array):
     input_dict = {"system_var": "test1", "user_var": "test2", "assistant_var": "test3"}
     rendered_messages = messages_template_no_array.render(input_dict=input_dict)
     mistral = rendered_messages.model_dump_mistral()
-    print(mistral)
-    
+    assert mistral == [
+        {'role': 'system', 'content': 'System message test1'},
+        {'role': 'user', 'content': 'User message test2'},
+        {'role': 'assistant', 'content': 'Assistant message test3'}]
+

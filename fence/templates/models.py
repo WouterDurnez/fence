@@ -402,7 +402,7 @@ class Messages(BaseModel):
 
         return {"contents": contents, "system_instruction": system}
 
-    def model_dump_ollama(self) -> dict:
+    def model_dump_ollama(self) -> list[dict]:
         """
         Dump the model into a dictionary for use in the Ollama API.
 
@@ -441,7 +441,7 @@ class Messages(BaseModel):
 
         return messages
 
-    def model_dump_mistral(self) -> dict:
+    def model_dump_mistral(self) -> list[dict]:
         """
         Dump the model into a dictionary for use in the Ollama API.
 
