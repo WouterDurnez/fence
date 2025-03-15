@@ -10,7 +10,7 @@ import requests
 import logging
 
 from fence.models.base import LLM, MessagesMixin
-from fence.templates.messages import Message, Messages
+from fence.templates.messages import Message, Messages, MessagesTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -197,4 +197,22 @@ if __name__ == "__main__":
 
     prompt = "What is the meaning of life?"
     response = model(prompt)
+    print(response)
+
+     # You can also use the MessagesTemplates for more complex prompts
+    messages = Messages(
+        system="Respond in a {tone} tone",
+        messages=[
+            Message(role="user", content="Why is the sky {color}?"),
+            # Equivalent to Message(role='user', content=Content(type='text', text='Why is the sky blue?'))
+            # But Content can also be an image, etc.
+        ],
+    )
+
+    messages_template = MessagesTemplate(source=messages)
+
+    response = model.invoke(
+        prompt=messages_template.render(tone="sarcastic", color="blue")
+    )
+
     print(response)

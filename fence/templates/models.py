@@ -467,7 +467,6 @@ class Messages(BaseModel):
         for message in self.messages:
             # Each message has a role (str) and content (list of content objects)
             role, content = message.role, ""
-
             # If content is a string, append it as text
             if isinstance(message.content, str):
                 content = message.content

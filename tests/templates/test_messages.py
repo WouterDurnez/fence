@@ -277,3 +277,25 @@ def test_model_dump_ollama_no_array(messages_template_no_array):
         {'role': 'system', 'content': 'System message test1'},
         {'role': 'user', 'content': 'User message test2'},
         {'role': 'assistant', 'content': 'Assistant message test3'}]
+
+
+def test_model_dump_mistral(messages_template):
+    """
+    Test case for the model_dump_mistral method of the MessagesTemplate class.
+    This test checks if the model_dump_mistral method correctly converts the MessagesTemplate instance to a dict.
+    """
+    input_dict = {"system_var": "test1", "user_var": "test2", "assistant_var": "test3"}
+    rendered_messages = messages_template.render(input_dict=input_dict)
+    with pytest.raises(TypeError):
+        rendered_messages.model_dump_mistral()
+
+def test_model_dump_mistral_no_array(messages_template_no_array):
+    """
+    Test case for the model_dump_mistral method of the MessagesTemplate class.
+    This test checks if the model_dump_mistral method correctly converts the MessagesTemplate instance to a dict.
+    """
+    input_dict = {"system_var": "test1", "user_var": "test2", "assistant_var": "test3"}
+    rendered_messages = messages_template_no_array.render(input_dict=input_dict)
+    mistral = rendered_messages.model_dump_mistral()
+    print(mistral)
+    
