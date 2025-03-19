@@ -135,7 +135,7 @@ class GeminiBase(LLM):
 
         try:
 
-            # senf request to Google
+            # send request to Google
             headers = {
                 "Content-Type": "application/json",
             }

@@ -116,7 +116,7 @@ class OllamaBase(LLM, MessagesMixin):
 
         return completion
 
-    def _invoke(self, prompt: str) -> dict[str, str]:
+    def _invoke(self, prompt: str | Messages) -> dict[str, str]:
         """
         Handle the API request to the service
         :param prompt: text to feed the model

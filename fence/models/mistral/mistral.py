@@ -1,5 +1,5 @@
 """
-OpenAI GPT models
+Mistral models
 """
 
 import json
@@ -7,22 +7,20 @@ import os
 
 import requests
 
-__all__ = ["GPT", "GPT4o", "GPT4", "GPT4omini"]
-
 import logging
 
 from fence.models.base import LLM, MessagesMixin
-from fence.templates.messages import Message, Messages
+from fence.templates.messages import Message, Messages, MessagesTemplate
 
 logger = logging.getLogger(__name__)
 
 
-class GPTBase(LLM, MessagesMixin):
-    """Base class for GPT models"""
+class MistralBase(LLM, MessagesMixin):
+    """Base class for Mistral models"""
 
     model_id = None
     model_name = None
-    inference_type = "openai"
+    inference_type = "mistral"
 
     def __init__(
         self,
@@ -33,41 +31,47 @@ class GPTBase(LLM, MessagesMixin):
         **kwargs,
     ):
         """
-        Initialize a GPT model
+        Initialize a Mistral model
 
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param str|None metric_prefix: Prefix for the metric names
         :param dict|None extra_tags: Additional tags to add to the logging tags
-        :param str|None api_key: OpenAI API key
+        :param str|None api_key: Mistral
         :param **kwargs: Additional keyword arguments
         """
 
         super().__init__(
             source=source, metric_prefix=metric_prefix, extra_tags=extra_tags
         )
-        # Model parameters
-        self.model_kwargs = {
-            "temperature": kwargs.get("temperature", 1),
-            "max_tokens": kwargs.get("max_tokens", None),
-        }
-
+        
         # Find API key
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY", None)
+        self.api_key = api_key or os.environ.get("MISTRAL_API_KEY", None)
         if not self.api_key:
             raise ValueError(
-                "OpenAI API key must be provided, either as an argument or in the environment variable `OPENAI_API_KEY`"
+                "Mistral API key must be provided, either as an argument or in the environment variable `MISTRAL_API_KEY`"
             )
+        
+        self.url = "https://api.mistral.ai"
+        self.chat_endpoint = self.url + "/v1/chat/completions"
 
-        # OpenAI parameters
-        self.url = "https://api.openai.com/v1/chat/completions"
+        # LLM parameters
+        self.model_kwargs = {
+            "temperature": kwargs.get("temperature", None),
+            "max_tokens": kwargs.get("max_tokens", None),
+            "top_p": kwargs.get("top_p", 1),
+            "stop": kwargs.get("stop", None),
+        }
 
     def invoke(self, prompt: str | Messages, **kwargs) -> str:
         """
-        Call the model with the given prompt
-        :param prompt: text to feed the model
-        :return: response
-        """
+        Invoke the model
 
+        :param str|Messages prompt: The prompt to send to the model
+        :param **kwargs: Additional keyword arguments
+        :return: The model's response
+        :rtype: str
+        """
+        
         # Prompt should not be empty
         self._check_if_prompt_is_valid(prompt=prompt)
 
@@ -105,7 +109,8 @@ class GPTBase(LLM, MessagesMixin):
         # Calculate token metrics for the response and send them to Datadog
         return completion
 
-    def _invoke(self, prompt: str | Messages) -> dict:
+
+    def _invoke(self, prompt: str | Messages, **kwargs) -> str:
         """
         Handle the API request to the service
         :param prompt: text to feed the model
@@ -117,7 +122,7 @@ class GPTBase(LLM, MessagesMixin):
         if isinstance(prompt, Messages):
 
             # Format messages
-            messages = prompt.model_dump_openai()
+            messages = prompt.model_dump_mistral()
 
         elif isinstance(prompt, str):
             messages = [
@@ -131,9 +136,11 @@ class GPTBase(LLM, MessagesMixin):
                 f"Prompt must be a string or a list of messages. Got {type(prompt)}"
             )
 
+        model_kwargs = {k: v for k, v in self.model_kwargs.items() if v is not None}
+
         # Build request body
         request_body = {
-            **self.model_kwargs,
+            **model_kwargs,
             "messages": messages,
             "model": self.model_id,
         }
@@ -143,112 +150,69 @@ class GPTBase(LLM, MessagesMixin):
         # Send request
         try:
 
-            # Send request to OpenAI
             headers = {
-                "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
             }
 
-            # Send request to OpenAI
+            # Send request to Mistral
             response = requests.post(
-                url=self.url, headers=headers, data=json.dumps(request_body)
+                url=self.chat_endpoint, headers=headers, data=json.dumps(request_body)
             )
 
             # Check status code
             if response.status_code != 200:
-                raise ValueError(f"Error raised by OpenAI service: {response.text}")
-
+                raise ValueError(f"Error raised by Mistral service: {response.text}")
+            
             # Parse response
             response = response.json()
 
             return response
-
+        
         except Exception as e:
-            raise ValueError(f"Error raised by OpenAI service: {e}")
-
-
-class GPT(GPTBase):
+            raise ValueError(f"Error raised by Mistral service: {e}")
+        
+class Mistral(MistralBase):
     """
-    GPT model
+    Mistral model
     """
 
     def __init__(self, model_id: str, **kwargs):
         """
-        Initialize a GPT model
-        :param model_id: The model ID
-        :param source: An indicator of where (e.g., which feature) the model is operating from.
+        Initialize a Mistral model
+
+        :param str model_id: The Mistral model ID
         :param **kwargs: Additional keyword arguments
         """
 
         super().__init__(**kwargs)
         self.model_id = model_id
 
-        # Convert gpt to uppercase (and only 'gpt'), split on hyphen, and join with spaces
-        self.model_name = self.model_id.replace("gpt", "GPT").replace("-", " ")
-
-
-class GPT4o(GPT):
-    """
-    GPT-4o model
-    """
-
-    def __init__(self, **kwargs):
-        """
-        Initialize a GPT-4o model
-        :param source: An indicator of where (e.g., which feature) the model is operating from.
-        :param **kwargs: Additional keyword arguments
-        """
-        super().__init__(model_id="gpt-4o", **kwargs)
-
-
-class GPT4(GPT):
-    """
-    GPT-4 model
-    """
-
-    def __init__(self, **kwargs):
-        """
-        Initialize a GPT-4 model
-        :param source: An indicator of where (e.g., which feature) the model is operating from.
-        :param **kwargs: Additional keyword arguments
-        """
-        super().__init__(model_id="gpt-4", **kwargs)
-
-
-class GPT4omini(GPT):
-    """
-    GPT-4mini model
-    """
-
-    def __init__(self, **kwargs):
-        """
-        Initialize a GPT-4mini model
-        :param source: An indicator of where (e.g., which feature) the model is operating from.
-        :param **kwargs: Additional keyword arguments
-        """
-        super().__init__(model_id="gpt-4o-mini", **kwargs)
+        self.model_name = self.model_id.capitalize()
 
 
 if __name__ == "__main__":
 
-    # Initialize GPT model
-    # gpt = GPT4o(source="test")
-    # gpt = GPT(model_id="gpt-4", source="test")
-    gpt = GPT4omini(source="test")
+    model = Mistral(model_id="mistral-large-latest")
 
-    # Test prompt
-    prompt = "Hello, how are you today?"
+    prompt = "What is the meaning of life?"
+    response = model(prompt)
+    print(response)
 
-    # Call the model
-    response = gpt(prompt)
-    logger.info(f"GPT response: {response}")
-
-    # Test with Messages
+     # You can also use the MessagesTemplates for more complex prompts
     messages = Messages(
-        system="Respond in a all caps",
-        messages=[Message(role="user", content="Hello, how are you today?")],
+        system="Respond in a {tone} tone",
+        messages=[
+            Message(role="user", content="Why is the sky {color}?"),
+            # Equivalent to Message(role='user', content=Content(type='text', text='Why is the sky blue?'))
+            # But Content can also be an image, etc.
+        ],
     )
 
-    # Call the model
-    response_rude = gpt(messages)
-    logger.info(f"GPT response: {response_rude}")
+    messages_template = MessagesTemplate(source=messages)
+
+    response = model.invoke(
+        prompt=messages_template.render(tone="sarcastic", color="blue")
+    )
+
+    print(response)
