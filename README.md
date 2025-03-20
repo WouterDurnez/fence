@@ -87,24 +87,6 @@ Much wow, very next level. There's more in the [notebook](notebooks) section, wi
 - **Agents** to move on to the sweet, sweet next level of LLM orchestration. Built using the ReAct pattern.
 - **Basic utils on board** for typical tasks like retries, parallelization, logging, output parsers, etc.
 
-### What can't I do with Fence?
-
-It's obviously not as powerful as some of the other packages out there, that hold tons more of features. We're also not trying to fall into the trap of building 'yet another framework' (insert [XKCD](https://xkcd.com/927/) here), so we're trying to guard our scope. If you need a lot of bells and whistles, you might want to look at any of these:
-
-- [`LangChain`](https://www.langchain.com/)
-
-The OG, no explanation needed.
-
-- [`Griptape`](https://www.griptape.ai)
-
-A more recent package, with a lot of cool features! Great for building PoCs, too. Built by ex-AWS folks, and promises to be a lot more industry-oriented.
-
-## 🗺️ Roadmap
-
-- [ ] Add more models (e.g., native Anthropic models)
-- [ ] Add more tests 😬
-- [ ] Add more notebook tutorials to showcase features
-
 ## 🤝 Contributing
 
 We welcome contributions! Check out the [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
