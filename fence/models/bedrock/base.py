@@ -3,14 +3,89 @@ Base class for Bedrock foundation models
 """
 
 import logging
-from typing import Iterator
+from typing import Iterator, Literal
 
 import boto3
+from pydantic import BaseModel, Field
 
 from fence.models.base import LLM, InvokeMixin, MessagesMixin, StreamMixin
 from fence.templates.messages import Messages
 
 logger = logging.getLogger(__name__)
+
+##########
+# Models #
+##########
+
+
+class InferenceConfig(BaseModel):
+    max_tokens: int | None = Field(
+        None,
+        ge=1,
+        description="The maximum number of tokens to allow in the generated response. "
+        "The default value is the maximum allowed value for the model that you are using.",
+    )
+    stop_sequences: list[str] | None = Field(
+        None,
+        min_items=0,
+        max_items=4,
+        description="A list of stop sequences. A stop sequence is a sequence of characters that causes the model to stop generating the response.",
+    )
+    temperature: float | None = Field(
+        None,
+        ge=0,
+        le=1,
+        description="The likelihood of the model selecting higher-probability options while generating a response. "
+        "A lower value makes the model more likely to choose higher-probability options, while a higher value "
+        "makes the model more likely to choose lower-probability options.",
+    )
+    top_p: float | None = Field(
+        None,
+        ge=0,
+        le=1,
+        description="The percentage of most-likely candidates that the model considers for the next token. "
+        "For example, if you choose a value of 0.8 for topP, the model selects from the top 80% of the probability "
+        "distribution of tokens that could be next in the sequence.",
+    )
+
+
+class JSONSchema(BaseModel):
+    type: Literal["object"]
+    properties: dict[str, dict[str, str]]
+    required: list[str]
+
+
+class ToolInputSchema(BaseModel):
+    json_field: JSONSchema = Field(
+        ..., alias="json", description="The input schema for the tool in JSON format."
+    )
+
+
+class ToolSpec(BaseModel):
+    name: str = Field(
+        ..., min_length=1, max_length=64, description="The name for the tool."
+    )
+    description: str | None = Field(
+        None, min_length=1, description="The description for the tool."
+    )
+    inputSchema: ToolInputSchema = Field(
+        ..., description="The input schema for the tool in JSON format."
+    )
+
+
+class Tool(BaseModel):
+    toolSpec: ToolSpec | None = Field(..., description="The tool specification.")
+
+
+class ToolConfig(BaseModel):
+    tools: list[Tool] = Field(
+        ..., min_length=1, description="The tools to use for the conversation."
+    )
+
+
+############################################
+# Base class for Bedrock foundation models #
+############################################
 
 
 class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
@@ -25,6 +100,9 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
     def __init__(
         self,
         source: str | None = None,
+        inferenceConfig: InferenceConfig | dict | None = None,
+        toolConfig: ToolConfig | dict | None = None,
+        full_response: bool = False,
         **kwargs,
     ):
         """
@@ -36,36 +114,44 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         super().__init__(**kwargs)
         self.source = source
 
-        # Model parameters
-        self.model_kwargs = {
-            "temperature": kwargs.get("temperature", 0.01),
-            "maxTokens": kwargs.get("max_tokens", 2048),
-            "topP": kwargs.get("top_p", 0.9),
-        }
+        # Config
+        self.inferenceConfig = (
+            InferenceConfig(**inferenceConfig)
+            if isinstance(inferenceConfig, dict)
+            else inferenceConfig
+        )
+        self.toolConfig = (
+            ToolConfig(**toolConfig) if isinstance(toolConfig, dict) else toolConfig
+        )
+        self.full_response = full_response
 
         # AWS
         self.region = kwargs.get("region", "eu-central-1")
         self.client = boto3.client("bedrock-runtime", self.region)
 
-    def invoke(self, prompt: str | Messages, **override_kwargs) -> str:
+    def invoke(self, prompt: str | Messages, **kwargs) -> str:
         """
         Call the model with the given prompt
         :param prompt: text to feed the model
-        :param override_kwargs: Additional keyword arguments to override the default model kwargs
+        :param **kwargs: Additional keyword arguments to override the default model kwargs
         :return: response
         """
-        return self._invoke(prompt=prompt, stream=False, **override_kwargs)
+        if "full_response" in kwargs:
+            self.full_response = kwargs["full_response"]
+        return self._invoke(prompt=prompt, stream=False, **kwargs)
 
-    def stream(self, prompt: str | Messages, **override_kwargs) -> Iterator[str]:
+    def stream(self, prompt: str | Messages, **kwargs) -> Iterator[str]:
         """
         Stream the model response with the given prompt.
         :param prompt: text to feed the model
-        :param override_kwargs: Additional keyword arguments to override the default model kwargs
+        :param **kwargs: Additional keyword arguments to override the default model kwargs
         :return: stream of responses
         """
-        yield from self._invoke(prompt=prompt, stream=True, **override_kwargs)
+        if "full_response" in kwargs:
+            self.full_response = kwargs["full_response"]
+        yield from self._invoke(prompt=prompt, stream=True, **kwargs)
 
-    def _invoke(self, prompt: str | Messages, stream: bool, **override_kwargs):
+    def _invoke(self, prompt: str | Messages, stream: bool, **kwargs):
         """
         Centralized method to handle both invoke and stream.
         """
@@ -73,64 +159,68 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         self._check_if_prompt_is_valid(prompt=prompt)
 
         # Prepare the request parameters with override kwargs
-        invoke_params = self._prepare_request(prompt, override_kwargs)
+        invoke_params = self._prepare_request(prompt)
 
         # Invoke the model
         if stream:
-            return self._handle_stream(invoke_params)
+            return self._handle_stream(invoke_params=invoke_params)
         else:
-            return self._handle_invoke(invoke_params)
+            return self._handle_invoke(invoke_params=invoke_params)
 
-    def _prepare_request(self, prompt: str | Messages, override_kwargs: dict) -> dict:
+    def _prepare_request(self, prompt: str | Messages) -> dict:
         """
         Prepares the request parameters for the Bedrock API.
 
         :param prompt: text or Messages object to format
-        :param override_kwargs: Additional keyword arguments to override model kwargs
         :return: request parameters dictionary
         """
         messages = self._format_prompt(prompt)
 
-        # Compute effective inference config by merging default and override kwargs
-        inference_config = {**self.model_kwargs, **override_kwargs}
+        # Prepare the request parameters
         invoke_params = {
             "modelId": self.model_id,
             "messages": messages["messages"],
-            "inferenceConfig": inference_config,
         }
+        if self.inferenceConfig:
+            invoke_params["inferenceConfig"] = self.inferenceConfig.model_dump()
+        if self.toolConfig:
+            invoke_params["toolConfig"] = self.toolConfig.model_dump(by_alias=True)
         if "system" in messages:
             invoke_params["system"] = messages["system"]
         return invoke_params
 
-    def _handle_invoke(self, invoke_params: dict) -> str:
+    def _handle_invoke(self, invoke_params: dict) -> str | dict:
         """
         Handles synchronous invocation.
 
         :param invoke_params: parameters for the Bedrock API
-        :return: completion text
+        :return: completion text or full response object if full_response is True
         """
         try:
             # Call the Bedrock API
             response = self.client.converse(**invoke_params)
 
-            # Process the response
-            completion, metrics = self._process_response(response)
-
-            # Log the metrics
+            # Extract and log metrics regardless of full_response setting
+            metrics = self._extract_metrics(response.get("usage", {}))
             self._log_callback(**metrics)
 
-            # Return the response
+            # Return the full response if requested, without processing
+            if self.full_response:
+                return response
+
+            # Process the response for completion text
+            completion = self._process_response(response)
             return completion
 
         except Exception as e:
             raise ValueError(f"Error raised by bedrock service: {e}")
 
-    def _handle_stream(self, invoke_params: dict) -> Iterator[str]:
+    def _handle_stream(self, invoke_params: dict) -> Iterator[str | dict]:
         """
         Handles streaming invocation.
 
         :param invoke_params: parameters for the Bedrock API
-        :return: stream of responses
+        :return: stream of responses or full response objects if full_response is True
         """
         try:
             # Call the Bedrock streaming API
@@ -143,17 +233,28 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
 
             # Stream the response
             for event in stream:
+                # If full_response is True, yield the entire event
+                if self.full_response:
+                    yield event
+                    continue
+
                 # If the event is a message start, print the role
                 if "messageStart" in event:
                     logger.debug(
                         f"Message started. Role: {event['messageStart']['role']}"
                     )
 
-                # Yield the completion text if available
+                # Handle content blocks - both text and tool calls
                 if "contentBlockDelta" in event:
-                    text = event["contentBlockDelta"]["delta"]["text"]
-                    logger.debug(f"Streaming chunk: {text}")
-                    yield text
+                    delta = event["contentBlockDelta"]["delta"]
+                    if "text" in delta:
+                        text = delta["text"]
+                        logger.debug(f"Streaming chunk: {text}")
+                        yield text
+                    elif "toolCall" in delta:
+                        tool_call = delta["toolCall"]
+                        logger.debug(f"Tool call: {tool_call}")
+                        yield str(tool_call)
 
                 # If the event is a message stop, print the stop reason
                 if "messageStop" in event:
@@ -167,14 +268,13 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         except Exception as e:
             raise ValueError(f"Error in streaming response from Bedrock service: {e}")
 
-    def _process_response(self, response: dict) -> tuple[str, dict]:
+    def _process_response(self, response: dict) -> str:
         """
-        Extracts completion text and metrics from the response.
+        Extracts completion text from the response.
         """
         response_body = response.get("output", {}).get("message", {})
         completion = response_body.get("content", [{}])[0].get("text", "")
-        metrics = self._extract_metrics(response.get("usage", {}))
-        return completion, metrics
+        return completion
 
     def _extract_metrics(self, metadata: dict) -> dict:
         """
@@ -219,3 +319,33 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         else:
             raise ValueError("Prompt must be a string or a list of messages")
         return messages
+
+
+if __name__ == "__main__":
+    tool_config = {
+        "tools": [
+            {
+                "toolSpec": {
+                    "name": "top_song",
+                    "description": "Get the most popular song played on a radio station.",
+                    "inputSchema": {
+                        "json": {
+                            "type": "object",
+                            "properties": {
+                                "sign": {
+                                    "type": "string",
+                                    "description": "The call sign for the radio station for which you want the most popular song. Example calls signs are WZPZ, and WKRP.",
+                                }
+                            },
+                            "required": ["sign"],
+                        }
+                    },
+                }
+            }
+        ]
+    }
+    # Try to parse the tool config
+    try:
+        tool_config = ToolConfig(**tool_config)
+    except Exception as e:
+        print(e)

@@ -98,44 +98,80 @@ class Claude35SonnetV2(BedrockBase):
 
 if __name__ == "__main__":
 
-    # # Register logging callback
-    # register_log_callback(lambda metrics, tags: print(metrics, tags))
-    #
-    # # Register logging tags
-    # register_log_tags({"team": "data-science-test", "project": "fence"})
+    # Create model with tools
+    claude_with_tools = Claude35Sonnet(
+        source="test",
+        metric_prefix="supertest",
+        extra_tags={"test": "test"},
+        region="eu-central-1",
+        toolConfig={
+            "tools": [
+                {
+                    "toolSpec": {
+                        "name": "top_song",
+                        "description": "Get the most popular song played on a radio station.",
+                        "inputSchema": {
+                            "json": {
+                                "type": "object",
+                                "properties": {
+                                    "sign": {
+                                        "type": "string",
+                                        "description": "The call sign for the radio station for which you want the most popular song. Example calls signs are WZPZ, and WKRP.",
+                                    }
+                                },
+                                "required": ["sign"],
+                            }
+                        },
+                    }
+                }
+            ]
+        },
+    )
 
-    # Initialize and test models
-    for model in [
-        # ClaudeInstant,
-        ClaudeHaiku,
-        # ClaudeSonnet,
-        # Claude35Sonnet,
-        # Claude35SonnetV2,
-    ]:
+    # Create model without tools
+    claude_without_tools = Claude35Sonnet(
+        source="test",
+        metric_prefix="supertest",
+        extra_tags={"test": "test"},
+        region="eu-central-1",
+    )
 
-        print(f"\nTesting {model.__name__}...")
-        print("-" * 40)
+    prompt = "What is the top music played on WABC?"
 
-        # Create an instance of the model class
-        claude = model(
-            source="test",
-            metric_prefix="supertest",
-            extra_tags={"test": "test"},
-            region="eu-central-1",
-        )
+    # Test with tools
+    print("\n=== Testing with tools ===")
 
-        # Invoke the model
-        print(f"-- Invoking {claude.model_name} model --")
-        response = claude.invoke(
-            prompt="Write a sonnet about Nathalie, the love of my life"
-        )
+    print("\n1. Invoke without full_response:")
+    response = claude_with_tools.invoke(prompt)
+    print(response)
 
-        # Print the response
-        print(response)
+    print("\n2. Invoke with full_response:")
+    response = claude_with_tools.invoke(prompt, full_response=True)
+    print(response)
 
-        # Stream the response
-        print(f"\n-- Streaming {claude.model_name} model response --")
-        for chunk in claude.stream("Count to one thousand"):
-            print(chunk, end="")
+    print("\n3. Stream without full_response:")
+    for chunk in claude_with_tools.stream(prompt):
+        print(chunk, end="")
 
-        print("\n")  # Add a newline at the end
+    print("\n4. Stream with full_response:")
+    for chunk in claude_with_tools.stream(prompt, full_response=True):
+        print(chunk)
+
+    # Test without tools
+    print("\n=== Testing without tools ===")
+
+    print("\n1. Invoke without full_response:")
+    response = claude_without_tools.invoke(prompt)
+    print(response)
+
+    print("\n2. Invoke with full_response:")
+    response = claude_without_tools.invoke(prompt, full_response=True)
+    print(response)
+
+    print("\n3. Stream without full_response:")
+    for chunk in claude_without_tools.stream(prompt):
+        print(chunk, end="")
+
+    print("\n4. Stream with full_response:")
+    for chunk in claude_without_tools.stream(prompt, full_response=True):
+        print(chunk)
