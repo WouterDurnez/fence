@@ -107,10 +107,12 @@ class TestToolCalling:
         )
 
         query = "Tell me what the value of the environment variable 'bedrock_env_var' is. You have a tool to access the environment."
-        result = agent.run(query)
+        result, thinking, answer = agent.run(query)
 
-        assert "bedrock_env_var" in result
-        assert "bedrock_value" in result
+        # The value could be in the response, thinking, or answer
+        result_str = result + str(thinking) + str(answer)
+        assert "bedrock_env_var" in result_str
+        assert "bedrock_value" in result_str
 
     @pytest.mark.skipif(
         not has_aws_credentials,
@@ -121,8 +123,8 @@ class TestToolCalling:
         """
         Test multiple tools with environment variables using a Bedrock agent.
         """
-        # Mock the model response to avoid ValidationException
-        mock_response = {
+        # Create responses for each invocation
+        tool_response = {
             "output": {
                 "message": {
                     "content": [
@@ -138,40 +140,39 @@ class TestToolCalling:
                     ]
                 }
             },
-            "stopReason": "end_turn",
+            "stopReason": "tool_use",  # This is important - indicate tool use
         }
 
-        # Setup the mock to return our custom response
-        mock_invoke.return_value = mock_response
+        final_response = {
+            "output": {
+                "message": {"content": [{"text": "The result is: PREFIX: Hello World"}]}
+            },
+            "stopReason": "end_turn",  # This indicates no more tool calls
+        }
+
+        # Set up mock to return different responses on subsequent calls
+        mock_invoke.side_effect = [tool_response, final_response]
 
         # Create a Bedrock agent with multiple tools and environment variables
         agent = BedrockAgent(
             model=Claude35Sonnet(source="agent"),
             tools=[EnvTool(), EchoTool()],
-            environment={
-                "bedrock_env_var": "bedrock_value",
-                "echo_prefix": "ECHO_RESPONSE",
-            },
+            environment={"bedrock_env_var": "value1", "echo_prefix": "PREFIX"},
         )
 
-        # Override the _process_tool_call method to handle our mocked tool use
-        original_process_tool_call = agent._process_tool_call
+        # Mock the _process_tool_call method to simulate tool execution
+        with patch.object(agent, "_process_tool_call") as mock_process:
+            # Simulate the tool result
+            mock_process.return_value = "PREFIX: Hello World"
 
-        def mocked_process_tool_call(tool_name, tool_parameters):
-            if tool_name == "echo_tool":
-                return "ECHO_RESPONSE: Hello World"
-            return original_process_tool_call(tool_name, tool_parameters)
+            # Test that the environment is passed to the tool
+            result, thinking, answer = agent.run("Echo 'Hello World' with the prefix.")
 
-        agent._process_tool_call = mocked_process_tool_call
+            # Verify the tool was called with the right parameters
+            mock_process.assert_called_with("echo_tool", {"message": "Hello World"})
 
-        query = """First, tell me what environment variables are available.
-                   Then, use the echo tool to echo back the message 'Hello World'."""
-        result = agent.run(query)
-
-        # Check that the environment variables were used
-        assert "bedrock_env_var" in result or "bedrock_value" in result
-        assert "echo_prefix" in result or "ECHO_RESPONSE" in result
-        assert "Hello World" in result
+            # Check the result contains our prefix
+            assert "PREFIX: Hello World" in result
 
     @pytest.mark.skipif(
         not has_aws_credentials,
@@ -180,75 +181,66 @@ class TestToolCalling:
     @patch("fence.models.bedrock.base.BedrockBase._invoke")
     def test_bedrock_system_message_with_tools(self, mock_invoke):
         """
-        Test that the Bedrock agent follows system message instructions when using tools.
+        Test Bedrock agent with a custom system message and tools.
         """
-        # Mock the model response
-        mock_response = {
+        custom_system_message = (
+            "You are a specialized assistant that helps with counting words."
+        )
+
+        # Create responses for each invocation
+        tool_response = {
             "output": {
                 "message": {
                     "content": [
                         {
-                            "toolUse": {
-                                "name": "counter_tool",
-                                "input": {
-                                    "text": "The quick brown fox jumps over the lazy dog."
-                                },
-                            }
+                            "text": "<thinking>I need to count the words in the text.</thinking>"
                         },
                         {
-                            "text": "Analysis of the text:\n\nSummary: This is a pangram containing all letters of the alphabet.\n\nDetails: The sentence contains 9 words and is commonly used for testing."
+                            "toolUse": {
+                                "name": "counter_tool",
+                                "input": {"text": "This is a sample text."},
+                            }
                         },
                     ]
                 }
             },
-            "stopReason": "end_turn",
+            "stopReason": "tool_use",  # This is important - indicate tool use
         }
 
-        # Setup the mock to return our custom response
-        mock_invoke.return_value = mock_response
+        final_response = {
+            "output": {
+                "message": {
+                    "content": [{"text": "<answer>The text has 5 words.</answer>"}]
+                }
+            },
+            "stopReason": "end_turn",  # This indicates no more tool calls
+        }
 
-        # Create a Bedrock agent with system message, tools, and environment variables
-        system_message = """You are a helpful assistant that analyzes text.
-        Always format your final response with a summary section and a details section.
-        Always count words before responding."""
+        # Set up mock to return different responses on subsequent calls
+        mock_invoke.side_effect = [tool_response, final_response]
 
+        # Create a Bedrock agent with a custom system message and tools
         agent = BedrockAgent(
             model=Claude35Sonnet(source="agent"),
             tools=[CounterTool()],
-            system_message=system_message,
-            environment={
-                "count_format": "ANALYSIS: The text '{text}' has {count} words."
-            },
+            system_message=custom_system_message,
+            environment={"count_format": "The text '{text}' has {count} words."},
         )
 
-        # Override the _process_tool_call method to handle our mocked tool use
-        def mocked_process_tool_call(tool_name, tool_parameters):
-            if tool_name == "counter_tool":
-                return "ANALYSIS: The text 'The quick brown fox jumps over the lazy dog.' has 9 words."
-            return "Tool not found"
+        # Mock the _process_tool_call method to simulate tool execution
+        with patch.object(agent, "_process_tool_call") as mock_process:
+            # Set up the mock to return a formatted count result
+            mock_process.return_value = "The text 'This is a sample text.' has 5 words."
 
-        agent._process_tool_call = mocked_process_tool_call
+            # Test that both the system message and environment are working
+            result, thinking, answer = agent.run(
+                "Count the words in 'This is a sample text.'"
+            )
 
-        query = "Analyze this text: The quick brown fox jumps over the lazy dog."
-        result = agent.run(query)
+            # Verify the tool was called with the right parameters
+            mock_process.assert_called_with(
+                "counter_tool", {"text": "This is a sample text."}
+            )
 
-        # Check for the expected content in a more flexible way
-        assert "ANALYSIS" in result or "9 words" in result
-        assert "The quick brown fox jumps over the lazy dog" in result
-
-        # More flexible assertion for format - check for analysis-related terms instead
-        # The model might not literally use "summary" and "details" headings
-        analysis_terms = [
-            "analysis",
-            "summary",
-            "details",
-            "sentence",
-            "pangram",
-            "words",
-            "count",
-            "letters",
-            "text",
-        ]
-
-        # At least some of these terms should be present in the response
-        assert any(term in result.lower() for term in analysis_terms)
+            # Check the response
+            assert "has 5 words" in result

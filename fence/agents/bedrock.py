@@ -270,14 +270,14 @@ class BedrockAgent(BaseAgent):
 
     def run(
         self, prompt: str, max_iterations: int = 10, stream: bool = False
-    ) -> str | Iterator[str]:
+    ) -> tuple[str, list[str], str | None] | Iterator[str]:
         """
         Run the agent with the given prompt.
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
         :param stream: Whether to stream the response or return the full text
-        :return: The agent's response as a string or an iterator of response chunks if stream=True
+        :return: A tuple of (response, thinking, answer) or an iterator of response chunks if stream=True
         """
         # If streaming is requested, use the stream method directly
         if stream:
@@ -361,13 +361,15 @@ class BedrockAgent(BaseAgent):
 
         return content, thinking, answer, tool_used, tool_result_messages
 
-    def invoke(self, prompt: str, max_iterations: int = 10) -> str:
+    def invoke(
+        self, prompt: str, max_iterations: int = 10
+    ) -> tuple[str, list[str], str | None]:
         """
         Run the agent with the given prompt using the model's invoke method.
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
-        :return: The agent's response as a string
+        :return: A tuple of (response, thinking, answer)
         """
         # Clear or reset the agent's memory context
         self._flush_memory()
@@ -425,8 +427,8 @@ class BedrockAgent(BaseAgent):
                 )
                 break
 
-        # There should only be one answer
-        answer = all_answer[0]
+        # Get the final answer if any was extracted
+        answer = all_answer[0] if all_answer else None
 
         return "\n\n".join(full_response), all_thinking, answer
 
