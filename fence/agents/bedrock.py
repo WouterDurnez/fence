@@ -76,9 +76,16 @@ class BedrockAgent(BaseAgent):
             are_you_serious=are_you_serious,
         )
 
-        # Save and set the system message if provided
+        # Save and set the system message
         if system_message:
-            self.memory.set_system_message(system_message)
+            # Combine with the default system message
+            self._system_message = f"{SYSTEM_MESSAGE}\n\n{system_message}"
+        else:
+            # Use just the default system message
+            self._system_message = SYSTEM_MESSAGE
+
+        # Set the system message in memory
+        self.memory.set_system_message(self._system_message)
 
         self.tools = tools or []
 
@@ -129,6 +136,22 @@ class BedrockAgent(BaseAgent):
         """
         self.log(text, AgentLogType.ANSWER)
 
+    def _safe_callback(self, callback_name: str, *args, **kwargs) -> None:
+        """
+        Safely dispatch a callback, handling cases where the callback isn't assigned.
+
+        :param callback_name: The name of the callback to invoke
+        :param args: Positional arguments to pass to the callback
+        :param kwargs: Keyword arguments to pass to the callback
+        """
+        callback = self.callbacks.get(callback_name)
+        if callback and callable(callback):
+            try:
+                callback(*args, **kwargs)
+            except Exception as e:
+                logger.warning(f"Error in {callback_name} callback: {e}")
+                # Continue execution even if callback fails
+
     ###########
     # Helpers #
     ###########
@@ -165,7 +188,7 @@ class BedrockAgent(BaseAgent):
         :return: The formatted tool result message
         """
         # Call the action callback
-        self.callbacks["on_action"](tool_name, tool_parameters)
+        self._safe_callback("on_action", tool_name, tool_parameters)
         tool_result_message = ""
 
         # Find and execute the matching tool
@@ -178,7 +201,7 @@ class BedrockAgent(BaseAgent):
                     )
 
                     # Call the observation callback
-                    self.callbacks["on_observation"](tool_name, tool_result)
+                    self._safe_callback("on_observation", tool_name, tool_result)
 
                     # Create tool message for logs
                     tool_result_message = f"[Tool Result: {tool_name}] {tool_result}"
@@ -193,7 +216,7 @@ class BedrockAgent(BaseAgent):
                     error_msg = f"[Tool Error: {tool_name}] {str(e)}"
 
                     # Log the error using the observation callback
-                    self.callbacks["on_observation"](tool_name, f"Error: {str(e)}")
+                    self._safe_callback("on_observation", tool_name, f"Error: {str(e)}")
 
                     # Add error to memory
                     self.memory.add_message(
@@ -296,7 +319,7 @@ class BedrockAgent(BaseAgent):
         # Add assistant's response to memory
         if content:
             self.memory.add_message(role="assistant", content=content)
-            self.callbacks["on_answer"](content)
+            self._safe_callback("on_answer", content)
 
         # Process tool call if found in the response
         if tool_used and tool_name and tool_parameters:
@@ -423,7 +446,7 @@ class BedrockAgent(BaseAgent):
                     iteration_response += text
 
                     # Call the answer callback
-                    self.callbacks["on_answer"](text)
+                    self._safe_callback("on_answer", text)
                     yield text
 
                 # Handle tool use input collection
