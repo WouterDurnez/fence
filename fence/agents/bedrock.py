@@ -4,6 +4,7 @@ Bedrock agent class that uses native tool calling and streaming capabilities.
 
 import json
 import logging
+import re
 import sys
 from typing import Any, Callable, Iterator
 
@@ -28,6 +29,9 @@ class BedrockAgent(BaseAgent):
     """
     Bedrock agent that uses native tool calling and streaming capabilities.
     """
+
+    _THINKING_PATTERN = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
+    _ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
 
     def __init__(
         self,
@@ -204,7 +208,9 @@ class BedrockAgent(BaseAgent):
                     self._safe_callback("on_observation", tool_name, tool_result)
 
                     # Create tool message for logs
-                    tool_result_message = f"[Tool Result: {tool_name}] {tool_result}"
+                    tool_result_message = (
+                        f"[Tool Result] {tool_name}({tool_parameters}) -> {tool_result}"
+                    )
 
                     # Add tool result to memory as user message
                     self.memory.add_message(
@@ -230,6 +236,34 @@ class BedrockAgent(BaseAgent):
 
         return tool_result_message
 
+    def _process_content(self, content: str) -> tuple[list[str], list[str]]:
+        """
+        Process the content to extract thinking and answer parts.
+
+        :param content: The content to process
+        :return: A tuple of (thinking, answer)
+        """
+        thinking = []
+        answer = []
+
+        # Find all thinking and answer tags
+        thinking_matches = self._THINKING_PATTERN.findall(content)
+        answer_matches = self._ANSWER_PATTERN.findall(content)
+
+        # Strip whitespace from matches
+        thinking_matches = [match.strip() for match in thinking_matches]
+        answer_matches = [match.strip() for match in answer_matches]
+
+        # If no matches are found, return empty lists
+        if not thinking_matches and not answer_matches:
+            return [], []
+
+        # Add the matches to the respective lists
+        thinking.extend(thinking_matches)
+        answer.extend(answer_matches)
+
+        return thinking, answer
+
     #######
     # Run #
     #######
@@ -249,7 +283,8 @@ class BedrockAgent(BaseAgent):
         if stream:
             return self.stream(prompt, max_iterations)
 
-        return self.invoke(prompt, max_iterations)
+        response, thinking, answer = self.invoke(prompt, max_iterations)
+        return response, thinking, answer
 
     def _invoke_iteration(self, prompt_obj: Messages) -> tuple[str, bool, list[str]]:
         """
@@ -273,6 +308,7 @@ class BedrockAgent(BaseAgent):
 
         # Process Bedrock response structure
         if isinstance(response, dict):
+
             # Get the message from the response
             if "output" in response and "message" in response["output"]:
                 message = response["output"]["message"]
@@ -300,15 +336,6 @@ class BedrockAgent(BaseAgent):
                 # Check stopReason for tool_use to confirm tool usage
                 if "stopReason" in response and response["stopReason"] == "tool_use":
                     tool_used = True
-
-            # Fallback to simpler response formats if necessary
-            elif "content" in response:
-                content = response.get("content", "")
-            elif "body" in response and isinstance(response["body"], dict):
-                if "content" in response["body"]:
-                    content = response["body"].get("content", "")
-            elif "completion" in response:
-                content = response.get("completion", "")
             else:
                 # For logging purposes only
                 logger.warning("Couldn't find content in response structure")
@@ -316,8 +343,12 @@ class BedrockAgent(BaseAgent):
             # Direct string response
             content = response
 
-        # Add assistant's response to memory
+        # Handle content
         if content:
+            # Process the content to handle thinking/answer tags
+            thinking, answer = self._process_content(content)
+
+            # Add assistant's response to memory
             self.memory.add_message(role="assistant", content=content)
             self._safe_callback("on_answer", content)
 
@@ -326,42 +357,9 @@ class BedrockAgent(BaseAgent):
             # Use the centralized _process_tool_call method
             tool_result = self._process_tool_call(tool_name, tool_parameters)
             tool_result_messages.append(tool_result)
-            return content, True, tool_result_messages
+            return content, thinking, answer, True, tool_result_messages
 
-        # Look for tool_calls format if tool_use wasn't found
-        if not tool_used and isinstance(response, dict):
-            # Find tool calls in various possible formats
-            tool_calls = (
-                response.get("tool_calls", [])
-                or (
-                    response.get("body", {}).get("tool_calls", [])
-                    if isinstance(response.get("body"), dict)
-                    else []
-                )
-                or response.get("toolCalls", [])
-            )
-
-            # Process any found tool calls using the centralized method
-            for tool_call in tool_calls:
-                if not isinstance(tool_call, dict):
-                    continue
-
-                tool_used = True
-                if "name" in tool_call:
-                    tool_name = tool_call.get("name")
-                    tool_parameters = tool_call.get("parameters", {})
-                elif "toolName" in tool_call:
-                    tool_name = tool_call.get("toolName")
-                    tool_parameters = tool_call.get("parameters", {})
-                else:
-                    logger.warning(f"Unexpected tool call format: {tool_call}")
-                    continue
-
-                # Use the centralized _process_tool_call method
-                tool_result = self._process_tool_call(tool_name, tool_parameters)
-                tool_result_messages.append(tool_result)
-
-        return content, tool_used, tool_result_messages
+        return content, thinking, answer, tool_used, tool_result_messages
 
     def invoke(self, prompt: str, max_iterations: int = 10) -> str:
         """
@@ -377,10 +375,14 @@ class BedrockAgent(BaseAgent):
         # Add the user's prompt to memory
         self.memory.add_message(role="user", content=prompt)
 
+        # Initialize buffers for thinking and answer
+        all_thinking = []
+        all_answer = []
         full_response = []
         iterations = 0
 
         while iterations < max_iterations:
+
             # Get current messages and system
             messages = self.memory.get_messages()
             system = self.memory.get_system_message()
@@ -389,9 +391,17 @@ class BedrockAgent(BaseAgent):
             prompt_obj = Messages(system=system, messages=messages)
 
             # Process one iteration and get response and tool use flag
-            response, tool_used, tool_result_messages = self._invoke_iteration(
-                prompt_obj
-            )
+            (
+                response,
+                iteration_thinking,
+                iteration_answer,
+                tool_used,
+                tool_result_messages,
+            ) = self._invoke_iteration(prompt_obj)
+
+            # Add thoughts and answer to the buffers
+            all_thinking.extend(iteration_thinking)
+            all_answer.extend(iteration_answer)
 
             # Add to the full response if we got a valid response
             if response:
@@ -415,7 +425,10 @@ class BedrockAgent(BaseAgent):
                 )
                 break
 
-        return "\n\n".join(full_response)
+        # There should only be one answer
+        answer = all_answer[0]
+
+        return "\n\n".join(full_response), all_thinking, answer
 
     def _stream_iteration(self, prompt_obj: Messages) -> Iterator[str]:
         """
@@ -688,7 +701,7 @@ if __name__ == "__main__":
     callback_handler = CallbackHandler()
 
     # Example 3: Using BedrockAgent with multiple tools
-    print("\nExample 3: Using BedrockAgent with multiple tools:")
+    logger.info("\nExample 3: Using BedrockAgent with multiple tools:")
     agent = BedrockAgent(
         identifier="WeatherAssistant",
         model=Claude35Sonnet(),
@@ -697,26 +710,28 @@ if __name__ == "__main__":
         memory=FleetingMemory(),
         log_agentic_response=False,  # Disable default logging since we're using callbacks
         system_message=SYSTEM_MESSAGE,
-        # callbacks={
-        #     "on_action": callback_handler.on_action,
-        #     "on_observation": callback_handler.on_observation,
-        #     "on_answer": callback_handler.on_answer,
-        # },
+        callbacks={
+            "on_action": callback_handler.on_action,
+            "on_observation": callback_handler.on_observation,
+            "on_answer": callback_handler.on_answer,
+        },
     )
 
     # Run the agent with a prompt that requires multiple tool calls
     prompt = "What's the current weather in Tokyo and then convert the temperature to Celsius?"
     # prompt = "Hi, how are you?"
     print(f"\nUser question: {prompt}")
-    # Use streaming mode
 
+    # Use streaming mode
     for chunk in agent.run(prompt, stream=True):
         # Chunks are already being handled by the on_answer callback
         # This loop just ensures we process all chunks
         pass
 
     # Run the agent with streaming set to False
-    print("\nExample 4: Using BedrockAgent with streaming set to False")
+    logger.info("\nExample 4: Using BedrockAgent with streaming set to False")
 
-    full_response = agent.run(prompt, stream=False)
-    print(f"\nFull response: {full_response}")
+    response, thinking, answer = agent.run(prompt, stream=False)
+    print(f"Answer: {answer}")
+    print(f"Thinking: {thinking}")
+    # print(f"Response: {response}")
