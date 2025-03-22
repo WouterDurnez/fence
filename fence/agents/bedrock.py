@@ -307,7 +307,6 @@ class BedrockAgent(BaseAgent):
         iterations = 0
 
         while iterations < max_iterations:
-            iterations += 1
 
             # Get current messages and system
             messages = self.memory.get_messages()
@@ -324,12 +323,12 @@ class BedrockAgent(BaseAgent):
             # Add to the full response - ensuring consistent formatting between
             # tool results and model responses
             if response:
-                # Format thinking tags to start on new lines
-                if "<thinking>" in response and not response.startswith("<thinking>"):
-                    # Only insert newline if not already preceded by one
-                    if not response.startswith("\n<thinking>"):
-                        if "\n<thinking>" not in response:
-                            response = response.replace("<thinking>", "\n<thinking>")
+                # # Format thinking tags to start on new lines
+                # if "<thinking>" in response and not response.startswith("<thinking>"):
+                #     # Only insert newline if not already preceded by one
+                #     if not response.startswith("\n<thinking>"):
+                #         if "\n<thinking>" not in response:
+                #             response = response.replace("<thinking>", "\n<thinking>")
 
                 full_response.append(response)
 
@@ -347,6 +346,8 @@ class BedrockAgent(BaseAgent):
                     f"Reached maximum iterations ({max_iterations}). Stopping."
                 )
                 break
+
+            iterations += 1
 
         return "\n\n".join(full_response)
 
@@ -370,7 +371,6 @@ class BedrockAgent(BaseAgent):
 
         # Stream and process the response
         for chunk in self.model.stream(prompt=prompt_obj):
-
             # Handle different chunk types
             if "contentBlockDelta" in chunk:
                 delta = chunk["contentBlockDelta"]["delta"]
@@ -389,8 +389,7 @@ class BedrockAgent(BaseAgent):
                 # Handle tool use input collection
                 elif "toolUse" in delta and "input" in delta["toolUse"]:
                     if is_collecting_tool_data:
-                        # Accumulate the input string before trying to parse it, because the
-                        # input is a json object and may not be complete (e.g. partial keys)
+                        # Accumulate the input string before trying to parse it
                         tool_input_chunk = delta["toolUse"].get("input", "")
                         current_tool_buffer += tool_input_chunk
 
@@ -434,13 +433,12 @@ class BedrockAgent(BaseAgent):
                 if current_tool_name and current_tool_data:
                     tool_used = True
 
-                    # Process the tool call and get the formatted message
-                    tool_message = self._process_tool_call(
+                    # Process the tool call and get the formatted message - but don't yield it
+                    self._process_tool_call(
                         current_tool_name, current_tool_data["parameters"]
                     )
 
-                    # Yield the tool message
-                    yield tool_message
+                    # For internal tracking only, don't yield the message
 
                     # Reset tool collection state
                     is_collecting_tool_data = False
@@ -459,6 +457,11 @@ class BedrockAgent(BaseAgent):
                 # Check if we need to report any metadata
                 if "metadata" in chunk:
                     logger.info(f"Response metadata: {chunk['metadata']}")
+
+        # Return tool_used as a hidden value for the stream method
+        if tool_used:
+            # This is a special marker that will not be displayed but will be detected by the stream method
+            yield "[[TOOL_USED]]"
 
     def stream(self, prompt: str, max_iterations: int = 10) -> Iterator[str]:
         """
@@ -491,11 +494,14 @@ class BedrockAgent(BaseAgent):
             tool_used = False
 
             for chunk in self._stream_iteration(prompt_obj):
-                yield chunk
-
-                # Check if this chunk indicated a tool was used
-                if chunk.startswith("\n[Tool Result:"):
+                # Check if this is our special marker for tool usage
+                if chunk == "[[TOOL_USED]]":
                     tool_used = True
+                    # Don't yield this special marker
+                    continue
+
+                # Yield all other chunks normally
+                yield chunk
 
             # If no tool was used in this iteration, we're done
             if not tool_used:
@@ -534,11 +540,8 @@ class BedrockAgent(BaseAgent):
                     self.callbacks["on_observation"](tool_name, tool_result)
 
                     # Create tool message for logs - with consistent newlines
-                    # Note: We need \n at the start to ensure a blank line before the tool result
+                    # Note: Tool result is formatted for internal usage and logs, but not shown in streaming output
                     tool_result_message = f"[Tool Result: {tool_name}] {tool_result}"
-
-                    # # Call the answer callback with the tool message
-                    # self.callbacks['on_answer'](tool_result_message)
 
                     # Add tool result to memory as user message
                     self.memory.add_message(
@@ -547,13 +550,10 @@ class BedrockAgent(BaseAgent):
                     )
 
                 except Exception as e:
-                    error_msg = f"\n[Tool Error: {tool_name}] {str(e)}\n\n"
+                    error_msg = f"[Tool Error: {tool_name}] {str(e)}"
 
                     # Log the error using the observation callback
                     self.callbacks["on_observation"](tool_name, f"Error: {str(e)}")
-
-                    # Call the answer callback with the error message
-                    self.callbacks["on_answer"](error_msg)
 
                     # Add error to memory
                     self.memory.add_message(
@@ -700,10 +700,10 @@ if __name__ == "__main__":
     print(f"\nUser question: {prompt}")
     # Use streaming mode
 
-    # for chunk in agent.run(prompt, stream=True):
-    #     # Chunks are already being handled by the on_answer callback
-    #     # This loop just ensures we process all chunks
-    #     pass
+    for chunk in agent.run(prompt, stream=True):
+        # Chunks are already being handled by the on_answer callback
+        # This loop just ensures we process all chunks
+        pass
 
     # Run the agent with streaming set to False
     print("\nExample 4: Using BedrockAgent with streaming set to False")
