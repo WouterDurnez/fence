@@ -74,7 +74,7 @@ class BedrockJSONSchema(BaseModel):
         ..., description="The properties of the schema."
     )
     required: list[str] = Field(
-        ..., description="The required properties of the schema."
+        [], description="The required properties of the schema."
     )
 
 

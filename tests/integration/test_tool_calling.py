@@ -24,7 +24,7 @@ class TestToolCalling:
             environment={"some_env_var": "some_value"},
         )
 
-        query = "Tell me what the value of the environment variable 'some_env_var' is"
+        query = "Tell me what the value of the environment variable 'some_env_var' is. You have a tool to access the environment."
         result = agent.run(query)
 
         assert "some_env_var" in result

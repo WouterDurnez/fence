@@ -147,19 +147,69 @@ class BedrockAgent(BaseAgent):
             )
             return
 
-        # Convert BaseTool objects to BedrockTool format
-        bedrock_tools = []
-        for tool in self.tools:
-            bedrock_tool_dict = tool.model_dump_bedrock_converse()
-            bedrock_tools.append(BedrockTool(**bedrock_tool_dict))
+        # Convert BaseTool objects to BedrockTool format and collect them efficiently
+        bedrock_tools = [
+            BedrockTool(**tool.model_dump_bedrock_converse()) for tool in self.tools
+        ]
 
         # Set the toolConfig on the model
         self.model.toolConfig = BedrockToolConfig(tools=bedrock_tools)
         logger.info(f"Registered {len(bedrock_tools)} tools with Bedrock model")
 
-    ##########
+    def _process_tool_call(self, tool_name: str, tool_parameters: dict) -> str:
+        """
+        Process a single tool call.
+
+        :param tool_name: Name of the tool to call
+        :param tool_parameters: Parameters to pass to the tool
+        :return: The formatted tool result message
+        """
+        # Call the action callback
+        self.callbacks["on_action"](tool_name, tool_parameters)
+        tool_result_message = ""
+
+        # Find and execute the matching tool
+        for tool in self.tools:
+            if tool.get_tool_name() == tool_name:
+                try:
+                    tool_result = tool.run(
+                        environment=self.environment,
+                        **tool_parameters,
+                    )
+
+                    # Call the observation callback
+                    self.callbacks["on_observation"](tool_name, tool_result)
+
+                    # Create tool message for logs
+                    tool_result_message = f"[Tool Result: {tool_name}] {tool_result}"
+
+                    # Add tool result to memory as user message
+                    self.memory.add_message(
+                        role="user",
+                        content=f"[SYSTEM DIRECTIVE] The {tool_name} returned: {tool_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+                    )
+
+                except Exception as e:
+                    error_msg = f"[Tool Error: {tool_name}] {str(e)}"
+
+                    # Log the error using the observation callback
+                    self.callbacks["on_observation"](tool_name, f"Error: {str(e)}")
+
+                    # Add error to memory
+                    self.memory.add_message(
+                        role="user",
+                        content=f"Your tool call resulted in an error: {str(e)}. Please try a different approach.",
+                    )
+
+                    tool_result_message = error_msg
+
+                break
+
+        return tool_result_message
+
+    #######
     # Run #
-    ##########
+    #######
 
     def run(
         self, prompt: str, max_iterations: int = 10, stream: bool = False
@@ -200,7 +250,6 @@ class BedrockAgent(BaseAgent):
 
         # Process Bedrock response structure
         if isinstance(response, dict):
-
             # Get the message from the response
             if "output" in response and "message" in response["output"]:
                 message = response["output"]["message"]
@@ -245,10 +294,8 @@ class BedrockAgent(BaseAgent):
             content = response
 
         # Add assistant's response to memory
-        self.memory.add_message(role="assistant", content=content)
-
-        # Call the answer callback with the model's response
         if content:
+            self.memory.add_message(role="assistant", content=content)
             self.callbacks["on_answer"](content)
 
         # Process tool call if found in the response
@@ -259,24 +306,28 @@ class BedrockAgent(BaseAgent):
             return content, True, tool_result_messages
 
         # Look for tool_calls format if tool_use wasn't found
-        if not tool_used:
-            tool_calls = []
-
-            if isinstance(response, dict):
-                if "tool_calls" in response:
-                    tool_calls = response.get("tool_calls", [])
-                elif "body" in response and isinstance(response["body"], dict):
-                    tool_calls = response["body"].get("tool_calls", [])
-                elif "toolCalls" in response:  # Alternative naming
-                    tool_calls = response.get("toolCalls", [])
+        if not tool_used and isinstance(response, dict):
+            # Find tool calls in various possible formats
+            tool_calls = (
+                response.get("tool_calls", [])
+                or (
+                    response.get("body", {}).get("tool_calls", [])
+                    if isinstance(response.get("body"), dict)
+                    else []
+                )
+                or response.get("toolCalls", [])
+            )
 
             # Process any found tool calls using the centralized method
             for tool_call in tool_calls:
+                if not isinstance(tool_call, dict):
+                    continue
+
                 tool_used = True
-                if isinstance(tool_call, dict) and "name" in tool_call:
+                if "name" in tool_call:
                     tool_name = tool_call.get("name")
                     tool_parameters = tool_call.get("parameters", {})
-                elif isinstance(tool_call, dict) and "toolName" in tool_call:
+                elif "toolName" in tool_call:
                     tool_name = tool_call.get("toolName")
                     tool_parameters = tool_call.get("parameters", {})
                 else:
@@ -307,7 +358,6 @@ class BedrockAgent(BaseAgent):
         iterations = 0
 
         while iterations < max_iterations:
-
             # Get current messages and system
             messages = self.memory.get_messages()
             system = self.memory.get_system_message()
@@ -320,25 +370,20 @@ class BedrockAgent(BaseAgent):
                 prompt_obj
             )
 
-            # Add to the full response - ensuring consistent formatting between
-            # tool results and model responses
+            # Add to the full response if we got a valid response
             if response:
-                # # Format thinking tags to start on new lines
-                # if "<thinking>" in response and not response.startswith("<thinking>"):
-                #     # Only insert newline if not already preceded by one
-                #     if not response.startswith("\n<thinking>"):
-                #         if "\n<thinking>" not in response:
-                #             response = response.replace("<thinking>", "\n<thinking>")
-
                 full_response.append(response)
 
             # Add tool result messages to the full response
-            for tool_msg in tool_result_messages:
-                full_response.append(tool_msg)
+            if tool_result_messages:
+                full_response.extend(tool_result_messages)
 
             # If no tool was used, we're done
             if not tool_used:
                 break
+
+            # Increment iteration counter
+            iterations += 1
 
             # If we've hit max iterations, exit
             if iterations >= max_iterations:
@@ -346,8 +391,6 @@ class BedrockAgent(BaseAgent):
                     f"Reached maximum iterations ({max_iterations}). Stopping."
                 )
                 break
-
-            iterations += 1
 
         return "\n\n".join(full_response)
 
@@ -360,14 +403,13 @@ class BedrockAgent(BaseAgent):
         """
         # Track the response for this iteration
         iteration_response = ""
+        tool_used = False
 
-        # State tracking for tool use
+        # State tracking for tool use - initialize only what's needed
         current_tool_data = {}
         is_collecting_tool_data = False
         current_tool_name = None
         current_tool_buffer = ""
-        current_text_buffer = ""
-        tool_used = False
 
         # Stream and process the response
         for chunk in self.model.stream(prompt=prompt_obj):
@@ -378,25 +420,25 @@ class BedrockAgent(BaseAgent):
                 # Handle text deltas
                 if "text" in delta:
                     text = delta["text"]
-                    current_text_buffer += text
                     iteration_response += text
 
                     # Call the answer callback
                     self.callbacks["on_answer"](text)
-
                     yield text
 
                 # Handle tool use input collection
-                elif "toolUse" in delta and "input" in delta["toolUse"]:
-                    if is_collecting_tool_data:
-                        # Accumulate the input string before trying to parse it
-                        tool_input_chunk = delta["toolUse"].get("input", "")
-                        current_tool_buffer += tool_input_chunk
+                elif (
+                    "toolUse" in delta
+                    and "input" in delta["toolUse"]
+                    and is_collecting_tool_data
+                ):
+                    # Accumulate the input string before trying to parse it
+                    current_tool_buffer += delta["toolUse"].get("input", "")
 
             # Handle tool call start
-            elif "contentBlockStart" in chunk and "toolUse" in chunk[
-                "contentBlockStart"
-            ].get("start", {}):
+            elif "contentBlockStart" in chunk and "toolUse" in chunk.get(
+                "contentBlockStart", {}
+            ).get("start", {}):
                 is_collecting_tool_data = True
                 tool_info = chunk["contentBlockStart"]["start"]["toolUse"]
                 current_tool_name = tool_info.get("name")
@@ -433,12 +475,10 @@ class BedrockAgent(BaseAgent):
                 if current_tool_name and current_tool_data:
                     tool_used = True
 
-                    # Process the tool call and get the formatted message - but don't yield it
+                    # Process the tool call but don't yield the message
                     self._process_tool_call(
                         current_tool_name, current_tool_data["parameters"]
                     )
-
-                    # For internal tracking only, don't yield the message
 
                     # Reset tool collection state
                     is_collecting_tool_data = False
@@ -478,7 +518,6 @@ class BedrockAgent(BaseAgent):
         self.memory.add_message(role="user", content=prompt)
 
         iterations = 0
-        tool_used = False
 
         while iterations < max_iterations:
             iterations += 1
@@ -513,59 +552,6 @@ class BedrockAgent(BaseAgent):
                     f"Reached maximum iterations ({max_iterations}). Stopping."
                 )
                 break
-
-    def _process_tool_call(self, tool_name: str, tool_parameters: dict) -> str:
-        """
-        Process a single tool call.
-
-        :param tool_name: Name of the tool to call
-        :param tool_parameters: Parameters to pass to the tool
-        :return: The formatted tool result message
-        """
-        # Call the action callback
-        self.callbacks["on_action"](tool_name, tool_parameters)
-
-        tool_result_message = ""
-
-        # Find and execute the matching tool
-        for tool in self.tools:
-            if tool.get_tool_name() == tool_name:
-                try:
-                    tool_result = tool.run(
-                        environment=self.environment,
-                        **tool_parameters,
-                    )
-
-                    # Call the observation callback
-                    self.callbacks["on_observation"](tool_name, tool_result)
-
-                    # Create tool message for logs - with consistent newlines
-                    # Note: Tool result is formatted for internal usage and logs, but not shown in streaming output
-                    tool_result_message = f"[Tool Result: {tool_name}] {tool_result}"
-
-                    # Add tool result to memory as user message
-                    self.memory.add_message(
-                        role="user",
-                        content=f"[SYSTEM DIRECTIVE] The {tool_name} returned: {tool_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
-                    )
-
-                except Exception as e:
-                    error_msg = f"[Tool Error: {tool_name}] {str(e)}"
-
-                    # Log the error using the observation callback
-                    self.callbacks["on_observation"](tool_name, f"Error: {str(e)}")
-
-                    # Add error to memory
-                    self.memory.add_message(
-                        role="user",
-                        content=f"Your tool call resulted in an error: {str(e)}. Please try a different approach.",
-                    )
-
-                    tool_result_message = error_msg
-
-                break
-
-        return tool_result_message
 
 
 if __name__ == "__main__":
@@ -697,6 +683,7 @@ if __name__ == "__main__":
 
     # Run the agent with a prompt that requires multiple tool calls
     prompt = "What's the current weather in Tokyo and then convert the temperature to Celsius?"
+    # prompt = "Hi, how are you?"
     print(f"\nUser question: {prompt}")
     # Use streaming mode
 

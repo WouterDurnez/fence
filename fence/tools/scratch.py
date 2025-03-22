@@ -11,5 +11,5 @@ class EnvTool(BaseTool):
         environment = kwargs.get("environment", {})
         env_vars = ", ".join([f"{k}: {v}" for k, v in environment.items()])
         return json.dumps(
-            f"The environment currently holds these variables:\n) {env_vars}"
+            f"The environment currently holds these variables:\n{env_vars}"
         )

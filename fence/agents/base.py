@@ -38,6 +38,7 @@ class BaseAgent:
         prefill: str | None = None,
         log_agentic_response: bool = True,
         are_you_serious: bool = False,
+        system_message: str | None = None,
     ):
         """
         Initialize the Agent object.
@@ -93,23 +94,19 @@ agent_description = """{self.description or self.__doc__}"""
     def _flush_memory(self):
         """
         Clear or reset the agent's memory context.
-
-        :param prefill: A string to prefill the memory with, i.e. an assistant message.
         """
 
-        # Check if there are any messages in the memory
-        self.memory.messages = self.memory.get_messages()
+        # Create a fresh memory object of the same type as the current one
+        memory_type = type(self.memory)
+        self.memory = memory_type()
 
-        # If there are no messages, add the prefill message
-        if not self.memory.messages and self.prefill:
+        # Apply the system message if available
+        if hasattr(self, "_system_message") and self._system_message:
+            self.memory.set_system_message(self._system_message)
+
+        # If we have a prefill, add it
+        if self.prefill:
             self.memory.add_message(role="assistant", content=self.prefill)
-
-        # Check if there is a system message in the memory
-        self.memory.system = self.memory.get_system_message()
-
-        # If no system message is present, add a new one
-        if not self.memory.system:
-            self.memory.set_system_message(content=self._system_message)
 
     def log(
         self,

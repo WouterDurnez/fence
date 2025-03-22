@@ -182,6 +182,9 @@ class Agent(BaseAgent):
             tools=self._format_entities(list(self.tools.values())),
         )
 
+        # Also update the system message in memory
+        self.memory.set_system_message(self._system_message)
+
     def run(self, prompt: str, max_iterations: int | None = None) -> str:
         """
         Main execution loop to process the input prompt.
@@ -255,6 +258,10 @@ class Agent(BaseAgent):
 
     def _extract_thought(self, response: str) -> str:
         """Extract the thought from the response. Starts with [THOUGHT], and ends before [ACTION], [DELEGATE], or [ANSWER]."""
+        if "[THOUGHT]" not in response:
+            logger.warning("No thought found in response")
+            return ""
+
         thought = (
             response.split("[THOUGHT]")[1]
             .split("[ACTION]")[0]
@@ -352,7 +359,7 @@ TimeoutError("Iteration exceeded maximum time")
 
 if __name__ == "__main__":
 
-    setup_logging(log_level="kill", are_you_serious=False)
+    setup_logging(log_level="debug", are_you_serious=False)
 
     # # Create the delegate agent
     # delegate = ToolAgent(
