@@ -34,9 +34,6 @@ class BaseTool(ABC):
         # Initialize environment if not provided
         self.environment = environment or self.environment
 
-        # Preprocess environment if needed
-        # self.preprocess_environment(environment)
-
         # Pass the environment to the execute_tool method
         kwargs["environment"] = environment
 
@@ -54,11 +51,23 @@ class BaseTool(ABC):
         """
         raise NotImplementedError
 
-    # def preprocess_environment(self, environment: dict):
-    #     """
-    #     Optional method to preprocess the environment, can be overridden by subclasses.
-    #     """
-    #     pass
+    def get_tool_name(self):
+        """
+        Get the name of the tool.
+        """
+        return self.__class__.__name__
+
+    def get_tool_description(self):
+        """
+        Get the description of the tool.
+        """
+        return self.description or self.__doc__
+
+    def get_tool_params(self):
+        """
+        Get the parameters of the tool.
+        """
+        return inspect.signature(self.execute_tool).parameters
 
     def format_toml(self):
         """
@@ -67,7 +76,7 @@ class BaseTool(ABC):
         of the `run` method.
         """
         # Get the arguments of the run method
-        run_args = inspect.signature(self.execute_tool).parameters
+        run_args = self.get_tool_params()
 
         # Add all arguments, and ensure that the argument
         # is annotated with str if no type is provided
@@ -110,6 +119,85 @@ tool_description = "{tool_description}"
 
         return toml_string
 
+    def model_dump_bedrock_converse(self):
+        """
+        Dump the tool in the format required by Bedrock Converse.
+
+        Example output:
+        ```
+        {
+            "toolSpec": {
+                "name": "top_song",
+                "description": "Get the most popular song played on a radio station.",
+                "inputSchema": {
+                    "json": {
+                        "type": "object",
+                        "properties": {
+                            "sign": {
+                                "type": "string",
+                                "description": "The call sign for the radio station for which you want the most popular song. Example calls signs are WZPZ, and WKRP.",
+                            }
+                        },
+                        "required": ["sign"],
+                    }
+                }
+            }
+        }
+        ```
+        """
+        # Get the tool's parameters from its execute_tool method
+        run_args = self.get_tool_params()
+        properties = {}
+        required = []
+
+        for arg_name, arg_type in run_args.items():
+            if arg_name in ["environment", "kwargs"]:
+                continue
+
+            # Get the type annotation or default to string
+            type_annotation = (
+                arg_type.annotation
+                if arg_type.annotation != inspect.Parameter.empty
+                else str
+            )
+            type_name = (
+                type_annotation.__name__
+                if hasattr(type_annotation, "__name__")
+                else "string"
+            )
+
+            # Convert Python types to JSON schema types
+            json_type = {
+                "str": "string",
+                "int": "integer",
+                "float": "number",
+                "bool": "boolean",
+                "list": "array",
+                "dict": "object",
+            }.get(type_name, "string")
+
+            properties[arg_name] = {
+                "type": json_type,
+                "description": f"Parameter {arg_name} for the {self.__class__.__name__} tool",
+            }
+
+            if arg_type.default == inspect.Parameter.empty:
+                required.append(arg_name)
+
+        return {
+            "toolSpec": {
+                "name": self.get_tool_name(),
+                "description": self.get_tool_description(),
+                "inputSchema": {
+                    "json": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": required,
+                    }
+                },
+            }
+        }
+
 
 ##############
 # Decorators #
@@ -132,6 +220,20 @@ def tool(description: str = None):
             f"{class_name}Tool" if not class_name.endswith("Tool") else class_name
         )
 
+        # Get the original function's signature to see which params it accepts
+        func_signature = inspect.signature(func)
+        func_params = set(func_signature.parameters.keys())
+
+        # Define the execute_tool method with proper handling of environment
+        def execute_tool_wrapper(self, **kwargs):
+            # Filter kwargs to only include parameters that the function accepts
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k in func_params}
+            return func(**filtered_kwargs)
+
+        # Custom get_tool_params method for the decorated function
+        def get_tool_params(self):
+            return func_signature.parameters
+
         # Define the class dynamically
         ToolClass = type(
             class_name,
@@ -140,7 +242,8 @@ def tool(description: str = None):
                 "__init__": lambda self: BaseTool.__init__(
                     self, description=description or func.__doc__
                 ),
-                "execute_tool": lambda self, **kwargs: func(**kwargs),
+                "execute_tool": execute_tool_wrapper,
+                "get_tool_params": get_tool_params,
             },
         )
 
@@ -151,12 +254,12 @@ def tool(description: str = None):
 
 if __name__ == "__main__":
 
-    class Tool(BaseTool):
-        def execute_tool(self, arg1, arg2: str, **kwargs):
-            return "Tool executed"
+    # Create a tool from a function
+    @tool(description="A tool that returns the current time")
+    def get_current_time(location: str):
+        return f"The current time in {location} is 12:00 PM"
 
-    a = Tool()
+    print(get_current_time.get_tool_description())
+    print(get_current_time.get_tool_params())
 
-    sig = inspect.signature(a.execute_tool)
-    print(sig)
-    print(sig.parameters)
+    print(get_current_time.run(location="New York"))

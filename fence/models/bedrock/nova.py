@@ -4,9 +4,7 @@ Claude Gen 3 models
 
 import logging
 
-from fence.models.base import register_log_callback, register_log_tags
 from fence.models.bedrock.base import BedrockBase
-from fence.utils.logger import setup_logging
 
 MODEL_ID_PRO = "amazon.nova-pro-v1:0"
 MODEL_ID_LITE = "amazon.nova-lite-v1:0"
@@ -66,16 +64,80 @@ class NovaMicro(BedrockBase):
 
 if __name__ == "__main__":
 
-    setup_logging(log_level="debug", are_you_serious=False)
+    # Create model with tools
+    nova_with_tools = NovaPro(
+        source="test",
+        metric_prefix="supertest",
+        extra_tags={"test": "test"},
+        region="us-east-1",
+        toolConfig={
+            "tools": [
+                {
+                    "toolSpec": {
+                        "name": "top_song",
+                        "description": "Get the most popular song played on a radio station.",
+                        "inputSchema": {
+                            "json": {
+                                "type": "object",
+                                "properties": {
+                                    "sign": {
+                                        "type": "string",
+                                        "description": "The call sign for the radio station for which you want the most popular song. Example calls signs are WZPZ, and WKRP.",
+                                    }
+                                },
+                                "required": ["sign"],
+                            }
+                        },
+                    }
+                }
+            ]
+        },
+    )
 
-    # Register logging callback
-    register_log_callback(lambda metrics, tags: print(metrics, tags))
+    # Create model without tools
+    nova_without_tools = NovaPro(
+        source="test",
+        metric_prefix="supertest",
+        extra_tags={"test": "test"},
+        region="us-east-1",
+    )
 
-    # Register logging tags
-    register_log_tags({"team": "data-science-test", "project": "fence"})
+    prompt = "What is the top music played on WABC?"
 
-    # Create an instance of the ClaudeHaiku class
-    model = NovaPro(source="test", metric_prefix="yolo", region="us-east-1")
+    # Test with tools
+    print("\n=== Testing with tools ===")
 
-    # Call the invoke method with a prompt
-    response = model.invoke(prompt="The sun is shining brightly")
+    print("\n1. Invoke without full_response:")
+    response = nova_with_tools.invoke(prompt)
+    print(response)
+
+    print("\n2. Invoke with full_response:")
+    response = nova_with_tools.invoke(prompt, full_response=True)
+    print(response)
+
+    print("\n3. Stream without full_response:")
+    for chunk in nova_with_tools.stream(prompt):
+        print(chunk, end="")
+
+    print("\n4. Stream with full_response:")
+    for chunk in nova_with_tools.stream(prompt, full_response=True):
+        print(chunk)
+
+    # Test without tools
+    print("\n=== Testing without tools ===")
+
+    print("\n1. Invoke without full_response:")
+    response = nova_without_tools.invoke(prompt)
+    print(response)
+
+    print("\n2. Invoke with full_response:")
+    response = nova_without_tools.invoke(prompt, full_response=True)
+    print(response)
+
+    print("\n3. Stream without full_response:")
+    for chunk in nova_without_tools.stream(prompt):
+        print(chunk, end="")
+
+    print("\n4. Stream with full_response:")
+    for chunk in nova_without_tools.stream(prompt, full_response=True):
+        print(chunk)

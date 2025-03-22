@@ -1,237 +1,460 @@
+"""
+Tests for the BedrockBase class and related functionality.
+
+This module contains tests for the base Bedrock model implementation, including:
+1. Initialization with different configurations
+2. Handling of tool configurations in various formats
+3. Basic invocation patterns (sync and streaming)
+4. Response handling with and without tools
+5. Full response object handling
+"""
+
 import pytest
 
 from fence.models.base import Messages
-from fence.models.bedrock.base import BedrockBase
+from fence.models.bedrock.base import (
+    BedrockBase,
+    BedrockInferenceConfig,
+    BedrockJSONSchema,
+    BedrockTool,
+    BedrockToolConfig,
+    BedrockToolInputSchema,
+    BedrockToolSpec,
+)
 
 
 # Create a mock model class that inherits from BedrockBase
 class MockBedrockModel(BedrockBase):
-    """Mock Bedrock model for testing"""
+    """
+    Mock implementation of the BedrockBase class for testing purposes.
+
+    This class overrides the _invoke method to simulate API responses without
+    making actual calls to the Bedrock service. It handles different response
+    formats based on configuration (tools, streaming, full_response).
+    """
 
     def __init__(self, **kwargs):
         """
-        Initialize mock model with a predefined model_id
-        :param kwargs: Additional keyword arguments
+        Initialize mock model with a predefined model_id.
+
+        :param kwargs: Additional keyword arguments to pass to the parent class
         """
         super().__init__(**kwargs)
         self.model_id = "MODEL_ID_HAIKU"
-        self.inferenceConfig = {
-            "temperature": 1,
-            "max_tokens": None,
-        }
-        self.toolConfig = kwargs.get(
-            "toolConfig",
-            {
-                "stream": False,
-            },
-        )
 
-    def _invoke(self, prompt: str | Messages, stream=False, **kwargs) -> str | dict:
+    def _invoke(
+        self, prompt: str | Messages, stream=False, **kwargs
+    ) -> str | dict | list:
         """
-        Override _invoke to simulate a successful response without actual AWS call
+        Simulate model invocation with appropriate mock responses.
+
+        This method returns different responses based on:
+        - Whether toolConfig is present and has tools
+        - Whether full_response is True/False
+        - Whether streaming is enabled
+
         :param prompt: The input prompt
         :param stream: Whether to stream the response
         :param kwargs: Additional keyword arguments
-        :return: The mock response text or full response object
+        :return: Mock response mimicking the Bedrock API response format
         """
         self._check_if_prompt_is_valid(prompt)
 
-        # Simulate tool call response if toolConfig is present
-        if self.toolConfig and "tools" in self.toolConfig:
-            if self.full_response:
-                if stream:
-                    return [
-                        {
-                            "messageStart": {"role": "assistant"},
-                        },
-                        {
-                            "contentBlockDelta": {
-                                "delta": {
-                                    "toolCall": {
-                                        "name": "top_song",
-                                        "arguments": {"sign": "WABC"},
-                                    }
-                                }
-                            }
-                        },
-                        {"messageStop": {"stopReason": "tool_call"}},
-                    ]
-                return {
-                    "output": {
-                        "message": {
-                            "content": [
-                                {
-                                    "toolCall": {
-                                        "name": "top_song",
-                                        "arguments": {"sign": "WABC"},
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "usage": {"inputTokens": 10, "outputTokens": 20},
-                }
-            if stream:
-                return ["I'll check the top song for WABC."]
-            return "I'll check the top song for WABC."
+        # Check if toolConfig exists and has tools
+        has_tools = False
+        if isinstance(self.toolConfig, BedrockToolConfig) and self.toolConfig.tools:
+            has_tools = True
+        elif isinstance(self.toolConfig, dict) and "tools" in self.toolConfig:
+            has_tools = True
 
-        # Regular text response
+        # Simulate tool call response if tools are present
+        if has_tools:
+            return self._generate_tool_response(stream)
+
+        # Generate regular text response
+        return self._generate_text_response(stream)
+
+    def _generate_tool_response(self, stream: bool) -> str | dict | list:
+        """
+        Generate a mock response containing a tool call.
+
+        :param stream: Whether to stream the response
+        :return: Tool response in the appropriate format
+        """
         if self.full_response:
             if stream:
+                # Streamed full response with tool call - returns chunks
                 return [
+                    {"messageStart": {"role": "assistant"}},
                     {
-                        "messageStart": {"role": "assistant"},
+                        "contentBlockDelta": {
+                            "delta": {
+                                "toolCall": {
+                                    "name": "top_song",
+                                    "arguments": {"sign": "WABC"},
+                                }
+                            }
+                        }
                     },
-                    {
-                        "contentBlockDelta": {"delta": {"text": "Test response"}},
-                    },
+                    {"messageStop": {"stopReason": "tool_call"}},
+                ]
+            # Synchronous full response with tool call
+            return {
+                "output": {
+                    "message": {
+                        "content": [
+                            {
+                                "toolCall": {
+                                    "name": "top_song",
+                                    "arguments": {"sign": "WABC"},
+                                }
+                            }
+                        ]
+                    }
+                },
+                "usage": {"inputTokens": 10, "outputTokens": 20},
+            }
+
+        # Simple text response for tools (when full_response=False)
+        if stream:
+            return ["I'll check the top song for WABC."]
+        return "I'll check the top song for WABC."
+
+    def _generate_text_response(self, stream: bool) -> str | dict | list:
+        """
+        Generate a mock response with regular text content.
+
+        :param stream: Whether to stream the response
+        :return: Text response in the appropriate format
+        """
+        if self.full_response:
+            if stream:
+                # Streamed full response - returns event chunks
+                return [
+                    {"messageStart": {"role": "assistant"}},
+                    {"contentBlockDelta": {"delta": {"text": "Test response"}}},
                     {"messageStop": {"stopReason": "end_turn"}},
                 ]
+            # Synchronous full response with text
             return {
                 "output": {"message": {"content": [{"text": "Test response"}]}},
                 "usage": {"inputTokens": 10, "outputTokens": 20},
             }
+
+        # Simple text response (when full_response=False)
         if stream:
             return ["Test response"]
         return "Test response"
 
 
 class MockBedrockModelNoConfig(BedrockBase):
-    """Mock Bedrock model for testing without configs"""
+    """
+    Mock model that initializes with minimal configuration.
+
+    This class is used to test the behavior of BedrockBase when inferenceConfig
+    and toolConfig are not explicitly provided.
+    """
 
     def __init__(self, **kwargs):
         """
-        Initialize mock model with a predefined model_id and no configs
-        :param kwargs: Additional keyword arguments
+        Initialize a minimal mock model with only required parameters.
+
+        :param kwargs: Additional keyword arguments to pass to the parent class
         """
         super().__init__(**kwargs)
         self.model_id = "MODEL_ID_HAIKU"
 
 
 class TestBedrockBase:
+    """
+    Test suite for the BedrockBase class.
+
+    This suite covers initialization, configuration, invocation patterns,
+    and response handling for the BedrockBase class and its derivatives.
+    """
+
+    # -------------------------------------------------------------------------
+    # Fixtures
+    # -------------------------------------------------------------------------
+
     @pytest.fixture
-    def bedrock_base(self):
-        """Create a MockBedrockModel instance for testing"""
-        return MockBedrockModel(
-            source="test_source",
-            full_response=False,
-            metric_prefix="test_prefix",
-            extra_tags={"test_tag": "value"},
+    def common_params(self):
+        """
+        Return common parameters used across test fixtures.
+
+        Having these parameters in a separate fixture reduces duplication
+        and makes it easier to change them globally if needed.
+        """
+        return {
+            "source": "test_source",
+            "metric_prefix": "test_prefix",
+            "extra_tags": {"test_tag": "value"},
+        }
+
+    @pytest.fixture
+    def sample_tool_config(self):
+        """
+        Create a sample BedrockToolConfig object for testing.
+
+        This fixture provides a reusable tool configuration that can be
+        used across multiple tests.
+        """
+        return BedrockToolConfig(
+            tools=[
+                BedrockTool(
+                    toolSpec=BedrockToolSpec(
+                        name="top_song",
+                        description="Get the most popular song played on a radio station.",
+                        inputSchema=BedrockToolInputSchema(
+                            json=BedrockJSONSchema(
+                                type="object",
+                                properties={
+                                    "sign": {
+                                        "type": "string",
+                                        "description": "The call sign for the radio station",
+                                    }
+                                },
+                                required=["sign"],
+                            )
+                        ),
+                    )
+                )
+            ]
         )
 
     @pytest.fixture
-    def bedrock_base_full_response(self):
-        """Create a MockBedrockModel instance with full_response=True for testing"""
+    def bedrock_base(self, common_params):
+        """
+        Create a standard MockBedrockModel instance for testing.
+
+        This fixture is the base case for most tests - a model with
+        default configurations and full_response=False.
+        """
         return MockBedrockModel(
-            source="test_source",
+            full_response=False,
+            inferenceConfig=BedrockInferenceConfig(
+                temperature=1,
+                max_tokens=None,
+            ),
+            **common_params,
+        )
+
+    @pytest.fixture
+    def bedrock_base_full_response(self, common_params):
+        """
+        Create a MockBedrockModel instance with full_response=True.
+
+        This fixture is used to test the behavior when full API responses
+        are returned instead of just completion text.
+        """
+        return MockBedrockModel(
             full_response=True,
-            metric_prefix="test_prefix",
-            extra_tags={"test_tag": "value"},
+            inferenceConfig=BedrockInferenceConfig(
+                temperature=1,
+                max_tokens=None,
+            ),
+            **common_params,
         )
 
     @pytest.fixture
-    def bedrock_base_no_config(self):
-        """Create a MockBedrockModelNoConfig instance for testing"""
-        return MockBedrockModelNoConfig(
-            source="test_source",
-            full_response=False,
-            metric_prefix="test_prefix",
-            extra_tags={"test_tag": "value"},
-        )
+    def bedrock_base_no_config(self, common_params):
+        """
+        Create a MockBedrockModelNoConfig instance with minimal configuration.
+
+        This fixture is used to test the behavior when inferenceConfig and
+        toolConfig are not explicitly provided.
+        """
+        return MockBedrockModelNoConfig(full_response=False, **common_params)
 
     @pytest.fixture
-    def bedrock_base_with_tools(self):
-        """Create a MockBedrockModel instance with tools for testing"""
+    def bedrock_base_with_tools(self, common_params, sample_tool_config):
+        """
+        Create a MockBedrockModel instance with tool configuration.
+
+        This fixture is used to test the behavior when the model is
+        configured with tools that can be invoked.
+        """
         return MockBedrockModel(
-            source="test_source",
             full_response=False,
-            metric_prefix="test_prefix",
-            extra_tags={"test_tag": "value"},
-            toolConfig={
-                "tools": [
-                    {
-                        "toolSpec": {
-                            "name": "top_song",
-                            "description": "Get the most popular song played on a radio station.",
-                            "inputSchema": {
-                                "json": {
-                                    "type": "object",
-                                    "properties": {
-                                        "sign": {
-                                            "type": "string",
-                                            "description": "The call sign for the radio station",
-                                        }
-                                    },
-                                    "required": ["sign"],
-                                }
-                            },
-                        }
-                    }
-                ]
-            },
+            inferenceConfig=BedrockInferenceConfig(
+                temperature=1,
+                max_tokens=None,
+            ),
+            toolConfig=sample_tool_config,
+            **common_params,
         )
 
     @pytest.fixture
-    def bedrock_base_with_tools_full_response(self):
-        """Create a MockBedrockModel instance with tools and full_response=True for testing"""
+    def bedrock_base_with_tools_full_response(self, common_params, sample_tool_config):
+        """
+        Create a MockBedrockModel with tools and full_response=True.
+
+        This fixture is used to test the behavior when both tools are
+        configured and full API responses are requested.
+        """
         return MockBedrockModel(
-            source="test_source",
             full_response=True,
-            metric_prefix="test_prefix",
-            extra_tags={"test_tag": "value"},
-            toolConfig={
-                "tools": [
-                    {
-                        "toolSpec": {
-                            "name": "top_song",
-                            "description": "Get the most popular song played on a radio station.",
-                            "inputSchema": {
-                                "json": {
-                                    "type": "object",
-                                    "properties": {
-                                        "sign": {
-                                            "type": "string",
-                                            "description": "The call sign for the radio station",
-                                        }
-                                    },
-                                    "required": ["sign"],
-                                }
-                            },
-                        }
-                    }
-                ]
-            },
+            inferenceConfig=BedrockInferenceConfig(
+                temperature=1,
+                max_tokens=None,
+            ),
+            toolConfig=sample_tool_config,
+            **common_params,
         )
+
+    # -------------------------------------------------------------------------
+    # Initialization Tests
+    # -------------------------------------------------------------------------
 
     def test_initialization(self, bedrock_base):
-        """Test that the BedrockBase is initialized correctly"""
+        """
+        Test that the BedrockBase initializes correctly with default settings.
+
+        This test verifies:
+        1. Basic attributes are set correctly
+        2. inferenceConfig is initialized with default values
+        3. toolConfig is correctly handled when a dictionary format is used
+        """
         assert bedrock_base.source == "test_source"
         assert bedrock_base.metric_prefix == "test_prefix"
         assert bedrock_base.logging_tags == {"test_tag": "value"}
         assert bedrock_base.model_id == "MODEL_ID_HAIKU"
 
-        # Check default config values
-        assert bedrock_base.inferenceConfig == {
-            "temperature": 1,
-            "max_tokens": None,
-        }
-        assert bedrock_base.toolConfig == {
-            "stream": False,
-        }
+        # Validate inferenceConfig initialization
+        assert isinstance(bedrock_base.inferenceConfig, BedrockInferenceConfig)
+        assert bedrock_base.inferenceConfig.temperature == 1
+        assert bedrock_base.inferenceConfig.max_tokens is None
+
+        # Validate toolConfig handling
+        assert bedrock_base.toolConfig is None
 
     def test_initialization_without_configs(self, bedrock_base_no_config):
-        """Test that the BedrockBase is initialized correctly without configs"""
+        """
+        Test BedrockBase initialization when no configs are provided.
+
+        This test verifies that the model correctly initializes with None
+        values for inferenceConfig and toolConfig when they are not provided.
+        """
         assert bedrock_base_no_config.source == "test_source"
         assert bedrock_base_no_config.metric_prefix == "test_prefix"
         assert bedrock_base_no_config.logging_tags == {"test_tag": "value"}
         assert bedrock_base_no_config.model_id == "MODEL_ID_HAIKU"
 
-        # Check that configs are None when not provided
+        # Config values should be None when not provided
         assert bedrock_base_no_config.inferenceConfig is None
         assert bedrock_base_no_config.toolConfig is None
 
+    def test_toolconfig_initialization_formats(self, common_params):
+        """
+        Test initialization with different toolConfig formats.
+
+        This test verifies that the BedrockBase correctly handles three
+        different formats for providing tool configurations:
+        1. Dictionary format (mimicking JSON input)
+        2. BedrockToolConfig object
+        3. List of BedrockTool objects
+
+        All three formats should result in a valid BedrockToolConfig object.
+        """
+        # Test with dictionary format (resembling parsed JSON)
+        model_dict = MockBedrockModelNoConfig(
+            toolConfig={
+                "tools": [
+                    {
+                        "toolSpec": {
+                            "name": "test_tool",
+                            "description": "A test tool",
+                            "inputSchema": {
+                                "json": {
+                                    "type": "object",
+                                    "properties": {
+                                        "param": {
+                                            "type": "string",
+                                            "description": "A test parameter",
+                                        }
+                                    },
+                                    "required": ["param"],
+                                }
+                            },
+                        }
+                    }
+                ]
+            },
+            **common_params,
+        )
+        assert isinstance(model_dict.toolConfig, BedrockToolConfig)
+        assert len(model_dict.toolConfig.tools) == 1
+        assert model_dict.toolConfig.tools[0].toolSpec.name == "test_tool"
+
+        # Test with BedrockToolConfig object
+        model_config = MockBedrockModelNoConfig(
+            toolConfig=BedrockToolConfig(
+                tools=[
+                    BedrockTool(
+                        toolSpec=BedrockToolSpec(
+                            name="test_tool",
+                            description="A test tool",
+                            inputSchema=BedrockToolInputSchema(
+                                json=BedrockJSONSchema(
+                                    type="object",
+                                    properties={
+                                        "param": {
+                                            "type": "string",
+                                            "description": "A test parameter",
+                                        }
+                                    },
+                                    required=["param"],
+                                )
+                            ),
+                        )
+                    )
+                ]
+            ),
+            **common_params,
+        )
+        assert isinstance(model_config.toolConfig, BedrockToolConfig)
+        assert len(model_config.toolConfig.tools) == 1
+        assert model_config.toolConfig.tools[0].toolSpec.name == "test_tool"
+
+        # Test with list of tools format
+        model_list = MockBedrockModelNoConfig(
+            toolConfig=[
+                BedrockTool(
+                    toolSpec=BedrockToolSpec(
+                        name="test_tool",
+                        description="A test tool",
+                        inputSchema=BedrockToolInputSchema(
+                            json=BedrockJSONSchema(
+                                type="object",
+                                properties={
+                                    "param": {
+                                        "type": "string",
+                                        "description": "A test parameter",
+                                    }
+                                },
+                                required=["param"],
+                            )
+                        ),
+                    )
+                )
+            ],
+            **common_params,
+        )
+        assert isinstance(model_list.toolConfig, BedrockToolConfig)
+        assert len(model_list.toolConfig.tools) == 1
+        assert model_list.toolConfig.tools[0].toolSpec.name == "test_tool"
+
+    # -------------------------------------------------------------------------
+    # Basic Invocation Tests
+    # -------------------------------------------------------------------------
+
     def test_invoke_with_different_prompt_types(self, bedrock_base):
-        """Test invoking with different prompt types"""
+        """
+        Test invocation with different prompt input types.
+
+        This test verifies that the model can handle both string prompts
+        and structured Messages objects as input.
+        """
         # Test with string prompt
         str_response = bedrock_base.invoke("Test prompt")
         assert str_response == "Test response"
@@ -242,36 +465,71 @@ class TestBedrockBase:
         assert msg_response == "Test response"
 
     def test_invoke_with_override_kwargs(self, bedrock_base):
-        """Test invoking with override kwargs"""
+        """
+        Test invoking with override kwargs.
+
+        This test verifies that the model accepts additional keyword arguments
+        when invoking. In a real API call, these would override the default
+        model configuration parameters.
+        """
         response = bedrock_base.invoke("Test prompt", temperature=0.7, maxTokens=1024)
         assert response == "Test response"
 
     def test_invalid_prompt_type(self, bedrock_base):
-        """Test invoking with an invalid prompt type"""
+        """
+        Test error handling with invalid prompt types.
+
+        This test verifies that the model correctly raises a ValueError
+        when an unsupported prompt type is provided.
+        """
         with pytest.raises(
             ValueError, match="Prompt must be a string or a Messages object!"
         ):
-            print(bedrock_base.invoke(123))  # Invalid type
+            bedrock_base.invoke(123)  # Invalid type
+
+    # -------------------------------------------------------------------------
+    # Full Response Tests
+    # -------------------------------------------------------------------------
 
     def test_invoke_with_full_response(self, bedrock_base_full_response):
-        """Test invoking with full_response=True"""
+        """
+        Test invocation with full_response=True.
+
+        This test verifies that when full_response=True, the model returns
+        the complete API response object rather than just the completion text.
+        """
         response = bedrock_base_full_response.invoke("Test prompt")
         assert isinstance(response, dict)
         assert response["output"]["message"]["content"][0]["text"] == "Test response"
         assert response["usage"]["inputTokens"] == 10
         assert response["usage"]["outputTokens"] == 20
 
+    # -------------------------------------------------------------------------
+    # Tool Tests
+    # -------------------------------------------------------------------------
+
     def test_invoke_with_tools(self, bedrock_base_with_tools):
-        """Test invoking with tools"""
+        """
+        Test invocation with tools configured.
+
+        This test verifies that when tools are configured, the model returns
+        an appropriate response indicating tool use.
+        """
         response = bedrock_base_with_tools.invoke("Test prompt")
         assert response == "I'll check the top song for WABC."
 
     def test_invoke_with_tools_full_response(
         self, bedrock_base_with_tools_full_response
     ):
-        """Test invoking with tools and full_response=True"""
+        """
+        Test invocation with tools and full_response=True.
+
+        This test verifies that when both tools are configured and full_response=True,
+        the model returns the complete API response object with tool call information.
+        """
         response = bedrock_base_with_tools_full_response.invoke("Test prompt")
         assert isinstance(response, dict)
+        assert "toolCall" in response["output"]["message"]["content"][0]
         assert (
             response["output"]["message"]["content"][0]["toolCall"]["name"]
             == "top_song"
@@ -283,8 +541,17 @@ class TestBedrockBase:
         assert response["usage"]["inputTokens"] == 10
         assert response["usage"]["outputTokens"] == 20
 
+    # -------------------------------------------------------------------------
+    # Streaming Tests
+    # -------------------------------------------------------------------------
+
     def test_stream_with_tools(self, bedrock_base_with_tools):
-        """Test streaming with tools"""
+        """
+        Test streaming with tools configured.
+
+        This test verifies that when tools are configured and streaming is used,
+        the model returns a stream of response chunks with tool information.
+        """
         chunks = list(bedrock_base_with_tools.stream("Test prompt"))
         assert len(chunks) == 1
         assert chunks[0] == "I'll check the top song for WABC."
@@ -292,21 +559,37 @@ class TestBedrockBase:
     def test_stream_with_tools_full_response(
         self, bedrock_base_with_tools_full_response
     ):
-        """Test streaming with tools and full_response=True"""
+        """
+        Test streaming with tools and full_response=True.
+
+        This test verifies that when both tools are configured, streaming is used,
+        and full_response=True, the model returns a stream of API event objects.
+        """
         chunks = list(bedrock_base_with_tools_full_response.stream("Test prompt"))
         assert len(chunks) == 3  # messageStart, contentBlockDelta, messageStop
         assert chunks[0]["messageStart"]["role"] == "assistant"
+        assert "toolCall" in chunks[1]["contentBlockDelta"]["delta"]
         assert chunks[1]["contentBlockDelta"]["delta"]["toolCall"]["name"] == "top_song"
         assert chunks[2]["messageStop"]["stopReason"] == "tool_call"
 
     def test_stream_without_tools(self, bedrock_base):
-        """Test streaming without tools"""
+        """
+        Test streaming without tools.
+
+        This test verifies that when streaming is used without tools,
+        the model returns a stream of text chunks.
+        """
         chunks = list(bedrock_base.stream("Test prompt"))
         assert len(chunks) == 1
         assert chunks[0] == "Test response"
 
     def test_stream_without_tools_full_response(self, bedrock_base_full_response):
-        """Test streaming without tools and full_response=True"""
+        """
+        Test streaming without tools and full_response=True.
+
+        This test verifies that when streaming is used without tools and
+        full_response=True, the model returns a stream of API event objects.
+        """
         chunks = list(bedrock_base_full_response.stream("Test prompt"))
         assert len(chunks) == 3  # messageStart, contentBlockDelta, messageStop
         assert chunks[0]["messageStart"]["role"] == "assistant"
