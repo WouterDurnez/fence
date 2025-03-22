@@ -161,7 +161,8 @@ class Agent(BaseAgent):
         :param delegate: Delegate to add
         """
         if delegate.__class__.__name__ not in self.delegates:
-            self.delegates[delegate.__class__.__name__]
+            self.delegates[delegate.__class__.__name__] = delegate
+            self._update_system_message()
 
     def remove_delegate(self, delegate_name: str) -> None:
         """

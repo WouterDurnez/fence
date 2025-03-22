@@ -243,7 +243,7 @@ class TestBedrockAgent:
             mock_log.assert_called_once()
             assert (
                 mock_log.call_args[0][0]
-                == "Using tool: test_tool with parameters: {'param': 'value'}"
+                == "Using tool [test_tool] with parameters: {'param': 'value'}"
             )
             assert mock_log.call_args[0][1] == AgentLogType.ACTION
 
@@ -251,7 +251,7 @@ class TestBedrockAgent:
         with patch.object(agent, "log") as mock_log:
             agent._default_on_observation("test_tool", "result")
             mock_log.assert_called_once()
-            assert mock_log.call_args[0][0] == "Tool result: result"
+            assert mock_log.call_args[0][0] == "Tool result [test_tool]: result"
             assert mock_log.call_args[0][1] == AgentLogType.OBSERVATION
 
         # Test on_answer

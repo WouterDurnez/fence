@@ -107,7 +107,7 @@ class BedrockAgent(BaseAgent):
         :param parameters: The parameters passed to the tool
         """
         self.log(
-            f"Using tool: {tool_name} with parameters: {parameters}",
+            f"Using tool [{tool_name}] with parameters: {parameters}",
             AgentLogType.ACTION,
         )
 
@@ -118,7 +118,7 @@ class BedrockAgent(BaseAgent):
         :param result: The result returned by the tool
         """
         self.log(
-            f"Tool result: {result}",
+            f"Tool result [{tool_name}]: {result}",
             AgentLogType.OBSERVATION,
         )
 
@@ -674,11 +674,11 @@ if __name__ == "__main__":
         memory=FleetingMemory(),
         log_agentic_response=False,  # Disable default logging since we're using callbacks
         system_message=SYSTEM_MESSAGE,
-        callbacks={
-            "on_action": callback_handler.on_action,
-            "on_observation": callback_handler.on_observation,
-            "on_answer": callback_handler.on_answer,
-        },
+        # callbacks={
+        #     "on_action": callback_handler.on_action,
+        #     "on_observation": callback_handler.on_observation,
+        #     "on_answer": callback_handler.on_answer,
+        # },
     )
 
     # Run the agent with a prompt that requires multiple tool calls

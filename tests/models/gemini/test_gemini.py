@@ -2,6 +2,7 @@
 Google Gemini model tests
 """
 
+import os
 from unittest.mock import Mock
 
 import pytest
@@ -9,7 +10,13 @@ import pytest
 from fence.models.gemini.gemini import Gemini
 from fence.templates.messages import Message, Messages
 
+# Check if Google Gemini API key is present
+has_gemini_api_key = os.environ.get("GOOGLE_GEMINI_API_KEY") is not None
 
+
+@pytest.mark.skipif(
+    not has_gemini_api_key, reason="Google Gemini API key not found in environment"
+)
 def test_gemini_base_invoke_with_empty_prompt():
     """
     Test case for the invoke method of the GeminiBase class with an empty prompt.
@@ -20,6 +27,9 @@ def test_gemini_base_invoke_with_empty_prompt():
         gemini.invoke(prompt="")
 
 
+@pytest.mark.skipif(
+    not has_gemini_api_key, reason="Google Gemini API key not found in environment"
+)
 def test_gemini_base_invoke_with_none_prompt():
     """
     Test case for the invoke method of the GeminiBase class with a None
@@ -31,6 +41,9 @@ def test_gemini_base_invoke_with_none_prompt():
         gemini.invoke(prompt=None)
 
 
+@pytest.mark.skipif(
+    not has_gemini_api_key, reason="Google Gemini API key not found in environment"
+)
 def test_gemini_base_invoke_with_empty_messages_prompt():
     """
     Test case for the invoke method of the GeminiBase class with an empty
@@ -66,15 +79,16 @@ def test_gemini_base_invoke_with_messages_prompt():
     mock_gemini = Mock(Gemini)
     mock_gemini.invoke.return_value = "mocked response"
     messages = Messages(
-        system="Respond with a sarcastic tone", 
-        messages=[
-            Message(role="user", content="Hello, how are you today?")
-        ]
+        system="Respond with a sarcastic tone",
+        messages=[Message(role="user", content="Hello, how are you today?")],
     )
     response = mock_gemini.invoke(prompt=messages)
     assert response == "mocked response"
 
 
+@pytest.mark.skipif(
+    not has_gemini_api_key, reason="Google Gemini API key not found in environment"
+)
 def test_gemini_base_invoke_with_invalid_prompt():
     """
     Test case for the invoke method of the GeminiBase class with an invalid
@@ -86,6 +100,9 @@ def test_gemini_base_invoke_with_invalid_prompt():
         gemini.invoke(prompt=123)
 
 
+@pytest.mark.skipif(
+    not has_gemini_api_key, reason="Google Gemini API key not found in environment"
+)
 def test_gemini_flash2_0():
     """
     Test case for the GeminiFlash2_0 class.
@@ -95,6 +112,9 @@ def test_gemini_flash2_0():
     assert gemini.model_id == "gemini-2.0-flash"
 
 
+@pytest.mark.skipif(
+    not has_gemini_api_key, reason="Google Gemini API key not found in environment"
+)
 def test_gemini_flash1_5():
     """
     Test case for the GeminiFlash1_5 class.
@@ -104,6 +124,9 @@ def test_gemini_flash1_5():
     assert gemini.model_id == "gemini-1.5-flash"
 
 
+@pytest.mark.skipif(
+    not has_gemini_api_key, reason="Google Gemini API key not found in environment"
+)
 def test_gemini_1_5_pro():
     """
     Test case for the Gemini1_5_Pro class.

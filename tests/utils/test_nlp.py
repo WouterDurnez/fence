@@ -2,10 +2,15 @@
 NLP utility tests
 """
 
+import os
+
 import pytest
 
 from fence.models.openai.gpt import GPT4omini
 from fence.utils.nlp import LLMHelper, TextChunker, get_first_n_words, get_word_count
+
+# Check if OpenAI API key is present
+has_openai_api_key = os.environ.get("OPENAI_API_KEY") is not None
 
 ##############
 # Test Utils #
@@ -158,10 +163,13 @@ def test_remove_text_references(mocker, llm_helper):
     mock_run.assert_called_once()
 
 
+@pytest.mark.skipif(
+    not has_openai_api_key, reason="OpenAI API key not found in environment"
+)
 def test_check_relevancy_using_model(mocker, llm_helper):
     """
     Test `check_relevancy` method using an actual model instance.
-    This test runs the method without mocking, using the `ClaudeHaiku` model to check text relevancy.
+    This test runs the method without mocking, using the `GPT4omini` model to check text relevancy.
     """
     llm_helper = LLMHelper(model=GPT4omini())
     result = llm_helper.check_relevancy(

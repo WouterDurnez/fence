@@ -28,8 +28,8 @@ class BedrockInferenceConfig(BaseModel):
     )
     stop_sequences: list[str] | None = Field(
         None,
-        min_items=0,
-        max_items=4,
+        min_length=0,
+        max_length=4,
         description="A list of stop sequences. A stop sequence is a sequence of characters that causes the model to stop generating the response.",
     )
     temperature: float | None = Field(
