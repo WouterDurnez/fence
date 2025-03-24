@@ -22,6 +22,29 @@ from fence.models.bedrock.base import (
     BedrockToolSpec,
 )
 
+# Check if AWS credentials are available via profile
+try:
+    import boto3
+    from botocore.exceptions import SSOTokenLoadError
+
+    session = boto3.Session()
+    credentials = session.get_credentials()
+    if credentials:
+        try:
+            # Try to get a token to verify credentials are valid
+            sts = session.client("sts")
+            sts.get_caller_identity()
+            has_aws_credentials = True
+        except SSOTokenLoadError:
+            has_aws_credentials = False
+        except Exception:
+            has_aws_credentials = False
+    else:
+        has_aws_credentials = False
+except (ImportError, Exception) as e:
+    has_aws_credentials = False
+    print(f"AWS credentials check failed: {str(e)}")
+
 
 # Create a mock model class that inherits from BedrockBase
 class MockBedrockModel(BedrockBase):
@@ -595,3 +618,135 @@ class TestBedrockBase:
         assert chunks[0]["messageStart"]["role"] == "assistant"
         assert chunks[1]["contentBlockDelta"]["delta"]["text"] == "Test response"
         assert chunks[2]["messageStop"]["stopReason"] == "end_turn"
+
+    # -------------------------------------------------------------------------
+    # Real Bedrock Model Tests
+    # -------------------------------------------------------------------------
+
+    @pytest.mark.skipif(
+        not has_aws_credentials,
+        reason="AWS credentials not found in configured profiles",
+    )
+    def test_real_bedrock_invoke(self):
+        """
+        Test invoking a real Bedrock model with a simple prompt.
+        """
+        from fence.models.bedrock.claude import Claude35Sonnet
+
+        model = Claude35Sonnet(source="test")
+        response = model.invoke("What is 2+2?")
+        assert isinstance(response, str)
+        assert "4" in response
+
+    @pytest.mark.skipif(
+        not has_aws_credentials,
+        reason="AWS credentials not found in configured profiles",
+    )
+    def test_real_bedrock_stream(self):
+        """
+        Test streaming from a real Bedrock model.
+        """
+        from fence.models.bedrock.claude import Claude35Sonnet
+
+        model = Claude35Sonnet(source="test")
+        chunks = list(model.stream("Count from 1 to 3."))
+        assert len(chunks) > 0
+        assert all(isinstance(chunk, str) for chunk in chunks)
+        assert any("1" in chunk for chunk in chunks)
+        assert any("2" in chunk for chunk in chunks)
+        assert any("3" in chunk for chunk in chunks)
+
+    @pytest.mark.skipif(
+        not has_aws_credentials,
+        reason="AWS credentials not found in configured profiles",
+    )
+    def test_real_bedrock_full_response(self):
+        """
+        Test getting a full response from a real Bedrock model.
+        """
+        from fence.models.bedrock.claude import Claude35Sonnet
+
+        model = Claude35Sonnet(source="test", full_response=True)
+        response = model.invoke("What is the capital of France?")
+        assert isinstance(response, dict)
+        assert "output" in response
+        assert "message" in response["output"]
+        assert "content" in response["output"]["message"]
+        assert any(
+            "Paris" in content.get("text", "")
+            for content in response["output"]["message"]["content"]
+        )
+        assert "usage" in response
+        assert "inputTokens" in response["usage"]
+        assert "outputTokens" in response["usage"]
+
+    @pytest.mark.skipif(
+        not has_aws_credentials,
+        reason="AWS credentials not found in configured profiles",
+    )
+    def test_real_bedrock_with_tools(self):
+        """
+        Test using a real Bedrock model with tools.
+        """
+        from fence.models.bedrock.base import (
+            BedrockJSONSchema,
+            BedrockTool,
+            BedrockToolConfig,
+            BedrockToolInputSchema,
+            BedrockToolSpec,
+        )
+        from fence.models.bedrock.claude import Claude35Sonnet
+
+        # Create a simple calculator tool
+        calculator_tool = BedrockTool(
+            toolSpec=BedrockToolSpec(
+                name="calculator",
+                description="A simple calculator that can add two numbers",
+                inputSchema=BedrockToolInputSchema(
+                    json=BedrockJSONSchema(
+                        type="object",
+                        properties={
+                            "a": {"type": "number", "description": "First number"},
+                            "b": {"type": "number", "description": "Second number"},
+                        },
+                        required=["a", "b"],
+                    )
+                ),
+            )
+        )
+
+        model = Claude35Sonnet(
+            source="test",
+            full_response=True,
+            toolConfig=BedrockToolConfig(tools=[calculator_tool]),
+        )
+
+        response = model.invoke("Add 5 and 3 using the calculator tool.")
+        assert isinstance(response, dict)
+        assert "output" in response
+        assert "message" in response["output"]
+        assert "content" in response["output"]["message"]
+
+        # Print the response for debugging
+        print(f"Response: {response}")
+
+        # Check if any content block contains a toolUse or toolCall
+        has_tool_use = any(
+            "toolUse" in content or "toolCall" in content
+            for content in response["output"]["message"]["content"]
+        )
+        assert has_tool_use, "Expected tool use in response"
+
+        # Check if the tool name is mentioned in any text block
+        has_calculator_mention = any(
+            "calculator" in content.get("text", "").lower()
+            for content in response["output"]["message"]["content"]
+        )
+        assert has_calculator_mention, "Expected calculator tool to be mentioned"
+
+        # Check if the numbers 5 and 3 are mentioned in any text block
+        has_numbers = any(
+            "5" in content.get("text", "") and "3" in content.get("text", "")
+            for content in response["output"]["message"]["content"]
+        )
+        assert has_numbers, "Expected numbers 5 and 3 to be mentioned"

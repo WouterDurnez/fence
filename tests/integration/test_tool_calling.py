@@ -20,11 +20,25 @@ has_openai_api_key = os.environ.get("OPENAI_API_KEY") is not None
 # Check if AWS credentials are available via profile
 try:
     import boto3
+    from botocore.exceptions import SSOTokenLoadError
 
     session = boto3.Session()
-    has_aws_credentials = session.get_credentials() is not None
-except (ImportError, Exception):
+    credentials = session.get_credentials()
+    if credentials:
+        try:
+            # Try to get a token to verify credentials are valid
+            sts = session.client("sts")
+            sts.get_caller_identity()
+            has_aws_credentials = True
+        except SSOTokenLoadError:
+            has_aws_credentials = False
+        except Exception:
+            has_aws_credentials = False
+    else:
+        has_aws_credentials = False
+except (ImportError, Exception) as e:
     has_aws_credentials = False
+    print(f"AWS credentials check failed: {str(e)}")
 
 
 class EchoTool(BaseTool):
