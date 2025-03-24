@@ -18,17 +18,16 @@ from fence.tools.base import BaseTool
 logger = logging.getLogger(__name__)
 
 
-SYSTEM_MESSAGE = """
-You are a helpful assistant that can provide weather information and perform temperature conversions. Always start by planning your response in <thinking>...</thinking> tags. Return your final response in <answer>...</answer> tags.
-
-IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowledge or thank users for tool results. After a tool returns a result, immediately continue to the next logical step without any transition phrases like "Certainly", "Now", or "Thank you". You are allowed to think, using <thinking>...</thinking> tags. If the next step is to use another tool, immediately call that tool. If all tools have been used, immediately provide your final answer in the requested format without any introduction.
-"""
-
-
 class BedrockAgent(BaseAgent):
     """
     Bedrock agent that uses native tool calling and streaming capabilities.
     """
+
+    _BASE_SYSTEM_MESSAGE = """
+You are a helpful assistant that can provide weather information and perform temperature conversions. Always start by planning your response in <thinking>...</thinking> tags. Return your final response in <answer>...</answer> tags.
+
+IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowledge or thank users for tool results. After a tool returns a result, immediately continue to the next logical step without any transition phrases like "Certainly", "Now", or "Thank you". You are allowed to think, using <thinking>...</thinking> tags. If the next step is to use another tool, immediately call that tool. If all tools have been used, immediately provide your final answer in the requested format without any introduction.
+"""
 
     _THINKING_PATTERN = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
     _ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
@@ -80,13 +79,13 @@ class BedrockAgent(BaseAgent):
             are_you_serious=are_you_serious,
         )
 
-        # Save and set the system message
+        # Set up the system message
         if system_message:
             # Combine with the default system message
-            self._system_message = f"{SYSTEM_MESSAGE}\n\n{system_message}"
+            self._system_message = f"{self._BASE_SYSTEM_MESSAGE}\n\n{system_message}"
         else:
             # Use just the default system message
-            self._system_message = SYSTEM_MESSAGE
+            self._system_message = self._BASE_SYSTEM_MESSAGE
 
         # Set the system message in memory
         self.memory.set_system_message(self._system_message)
@@ -711,7 +710,7 @@ if __name__ == "__main__":
         tools=[weather_tool, convert_tool],
         memory=FleetingMemory(),
         log_agentic_response=False,  # Disable default logging since we're using callbacks
-        system_message=SYSTEM_MESSAGE,
+        system_message="Answer like a pirate",
         callbacks={
             "on_action": callback_handler.on_action,
             "on_observation": callback_handler.on_observation,
