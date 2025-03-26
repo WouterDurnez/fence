@@ -44,7 +44,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         are_you_serious: bool = False,
         tools: list[BaseTool] | None = None,
         system_message: str | None = None,
-        callbacks: dict[str, Callable] | None = None,
+        event_handlers: dict[str, Callable] | None = None,
     ):
         """
         Initialize the BedrockAgent object.
@@ -59,9 +59,9 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         :param are_you_serious: A flag to determine if the log message should be printed in a frivolous manner
         :param tools: A list of tools to make available to the agent
         :param system_message: A system message to set for the agent
-        :param callbacks: A dictionary of callbacks for different agent events:
-                         - 'on_action': Called when the agent uses a tool
-                         - 'on_observation': Called when a tool returns a result
+        :param event_handlers: A dictionary of event handlers for different agent events:
+                         - 'on_tool_use': Called when the agent uses a tool
+                         - 'on_thinking': Called when the agent is thinking
                          - 'on_answer': Called when the agent provides text answer chunks
         """
 
@@ -92,16 +92,16 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
         self.tools = tools or []
 
-        # Set up callbacks with defaults
-        self.callbacks = {
-            "on_action": self._default_on_action,
-            "on_observation": self._default_on_observation,
+        # Set up event handlers with defaults
+        self.event_handlers = {
+            "on_tool_use": self._default_on_tool_use,
+            "on_thinking": self._default_on_thinking,
             "on_answer": self._default_on_answer,
         }
 
-        # Update with user-provided callbacks
-        if callbacks:
-            self.callbacks.update(callbacks)
+        # Update with user-provided event handlers
+        if event_handlers:
+            self.event_handlers.update(event_handlers)
 
         # Register tools with the model if supported
         self._register_tools()
@@ -110,27 +110,26 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
     # Callbacks #
     #############
 
-    def _default_on_action(self, tool_name: str, parameters: dict) -> None:
-        """Default callback for tool actions.
+    def _default_on_tool_use(
+        self, tool_name: str, parameters: dict, result: Any
+    ) -> None:
+        """Default callback for tool use.
 
         :param tool_name: The name of the tool being called
         :param parameters: The parameters passed to the tool
-        """
-        self.log(
-            f"Using tool [{tool_name}] with parameters: {parameters}",
-            AgentLogType.ACTION,
-        )
-
-    def _default_on_observation(self, tool_name: str, result: Any) -> None:
-        """Default callback for tool observations.
-
-        :param tool_name: The name of the tool that was called
         :param result: The result returned by the tool
         """
         self.log(
-            f"Tool result [{tool_name}]: {result}",
-            AgentLogType.OBSERVATION,
+            f"Using tool [{tool_name}] with parameters: {parameters} -> {result}",
+            AgentLogType.TOOL_USE,
         )
+
+    def _default_on_thinking(self, text: str) -> None:
+        """Default callback for agent thinking.
+
+        :param text: The text chunk produced by the agent
+        """
+        self.log(text, AgentLogType.THINKING)
 
     def _default_on_answer(self, text: str) -> None:
         """Default callback for agent answers.
@@ -139,21 +138,21 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         """
         self.log(text, AgentLogType.ANSWER)
 
-    def _safe_callback(self, callback_name: str, *args, **kwargs) -> None:
+    def _safe_event_handler(self, event_name: str, *args, **kwargs) -> None:
         """
-        Safely dispatch a callback, handling cases where the callback isn't assigned.
+        Safely dispatch an event handler, handling cases where the event handler isn't assigned.
 
-        :param callback_name: The name of the callback to invoke
-        :param args: Positional arguments to pass to the callback
-        :param kwargs: Keyword arguments to pass to the callback
+        :param event_name: The name of the event to invoke
+        :param args: Positional arguments to pass to the event handler
+        :param kwargs: Keyword arguments to pass to the event handler
         """
-        callback = self.callbacks.get(callback_name)
-        if callback and callable(callback):
+        event_handler = self.event_handlers.get(event_name)
+        if event_handler and callable(event_handler):
             try:
-                callback(*args, **kwargs)
+                event_handler(*args, **kwargs)
             except Exception as e:
-                logger.warning(f"Error in {callback_name} callback: {e}")
-                # Continue execution even if callback fails
+                logger.warning(f"Error in {event_name} event handler: {e}")
+                # Continue execution even if event handler fails
 
     ###########
     # Helpers #
@@ -190,9 +189,6 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         :param tool_parameters: Parameters to pass to the tool
         :return: The formatted tool result message
         """
-        # Call the action callback
-        self._safe_callback("on_action", tool_name, tool_parameters)
-        tool_result_message = ""
 
         # Find and execute the matching tool
         for tool in self.tools:
@@ -204,7 +200,12 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
                     )
 
                     # Call the observation callback
-                    self._safe_callback("on_observation", tool_name, tool_result)
+                    self._safe_event_handler(
+                        event_name="on_tool_use",
+                        tool_name=tool_name,
+                        parameters=tool_parameters,
+                        result=tool_result,
+                    )
 
                     # Create tool message for logs
                     tool_result_message = (
@@ -221,7 +222,11 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
                     error_msg = f"[Tool Error: {tool_name}] {str(e)}"
 
                     # Log the error using the observation callback
-                    self._safe_callback("on_observation", tool_name, f"Error: {str(e)}")
+                    self._safe_event_handler(
+                        event_name="on_tool_use",
+                        tool_name=tool_name,
+                        result=f"Error: {str(e)}",
+                    )
 
                     # Add error to memory
                     self.memory.add_message(
@@ -349,7 +354,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
             # Add assistant's response to memory
             self.memory.add_message(role="assistant", content=content)
-            self._safe_callback("on_answer", content)
+            self._safe_event_handler(event_name="on_answer", text=content)
 
         # Process tool call if found in the response
         if tool_used and tool_name and tool_parameters:
@@ -460,7 +465,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
                     iteration_response += text
 
                     # Call the answer callback
-                    self._safe_callback("on_answer", text)
+                    self._safe_event_handler(event_name="on_answer", text=text)
                     yield text
 
                 # Handle tool use input collection
@@ -656,29 +661,29 @@ if __name__ == "__main__":
     convert_tool = convert_temperature
     print(f"Tool types: {type(weather_tool)}, {type(convert_tool)}")
 
-    # Define a callback handler class to avoid using globals
-    class CallbackHandler:
-        """Callback handler for managing agent callbacks with internal state."""
+    # Define a event handler class to avoid using globals
+    class EventHandler:
+        """Event handler for managing agent event handlers with internal state."""
 
         def __init__(self):
-            """Initialize the callback handler with default state."""
+            """Initialize the event handler with default state."""
             self.last_output_was_tool_result = False
 
-        def on_action(self, tool_name, parameters):
-            """Handle tool action events.
+        def on_tool_use(self, tool_name, parameters, result):
+            """Handle tool use events.
 
             :param tool_name: Name of the tool being called
             :param parameters: Parameters passed to the tool
-            """
-            print(f"\n\n🔧 TOOL CALLED: {tool_name} with {parameters}")
-
-        def on_observation(self, tool_name, result):
-            """Handle tool observation events.
-
-            :param tool_name: Name of the tool that was called
             :param result: Result returned by the tool
             """
-            print(f"📊 TOOL RESULT: {result}")
+            print(f"\n\n🔧 TOOL USED: {tool_name} with {parameters} -> {result}")
+
+        def on_thinking(self, text):
+            """Handle agent thinking events.
+
+            :param text: Text chunk produced by the agent
+            """
+            print(f"🧠 THINKING: {text}")
             # Set flag to indicate we just had a tool result
             self.last_output_was_tool_result = True
 
@@ -698,8 +703,8 @@ if __name__ == "__main__":
             sys.stdout.write(text)
             sys.stdout.flush()
 
-    # Create the callback handler instance
-    callback_handler = CallbackHandler()
+    # Create the event handler instance
+    event_handler = EventHandler()
 
     # Example 3: Using BedrockAgent with multiple tools
     logger.info("\nExample 3: Using BedrockAgent with multiple tools:")
@@ -711,10 +716,10 @@ if __name__ == "__main__":
         memory=FleetingMemory(),
         log_agentic_response=False,  # Disable default logging since we're using callbacks
         system_message="Answer like a pirate",
-        callbacks={
-            "on_action": callback_handler.on_action,
-            "on_observation": callback_handler.on_observation,
-            "on_answer": callback_handler.on_answer,
+        event_handlers={
+            "on_tool_use": event_handler.on_tool_use,
+            "on_thinking": event_handler.on_thinking,
+            "on_answer": event_handler.on_answer,
         },
     )
 
