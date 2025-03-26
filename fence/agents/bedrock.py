@@ -5,7 +5,6 @@ Bedrock agent class that uses native tool calling and streaming capabilities.
 import json
 import logging
 import re
-import sys
 from typing import Any, Callable, Iterator
 
 from fence.agents.base import AgentLogType, BaseAgent
@@ -247,26 +246,22 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         :param content: The content to process
         :return: A tuple of (thinking, answer)
         """
-        thinking = []
-        answer = []
 
         # Find all thinking and answer tags
-        thinking_matches = self._THINKING_PATTERN.findall(content)
-        answer_matches = self._ANSWER_PATTERN.findall(content)
+        thoughts = [match.strip() for match in self._THINKING_PATTERN.findall(content)]
+        answers = [match.strip() for match in self._ANSWER_PATTERN.findall(content)]
 
-        # Strip whitespace from matches
-        thinking_matches = [match.strip() for match in thinking_matches]
-        answer_matches = [match.strip() for match in answer_matches]
+        # Trigger callbacks for thinking and answer
+        for thought in thoughts:
+            self._safe_event_handler(event_name="on_thinking", text=thought)
+        for answer in answers:
+            self._safe_event_handler(event_name="on_answer", text=answer)
 
         # If no matches are found, return empty lists
-        if not thinking_matches and not answer_matches:
+        if not thoughts and not answers:
             return [], []
 
-        # Add the matches to the respective lists
-        thinking.extend(thinking_matches)
-        answer.extend(answer_matches)
-
-        return thinking, answer
+        return thoughts, answers
 
     #######
     # Run #
@@ -274,21 +269,21 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
     def run(
         self, prompt: str, max_iterations: int = 10, stream: bool = False
-    ) -> tuple[str, list[str], str | None] | Iterator[str]:
+    ) -> dict[str, Any] | Iterator[str]:
         """
         Run the agent with the given prompt.
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
         :param stream: Whether to stream the response or return the full text
-        :return: A tuple of (response, thinking, answer) or an iterator of response chunks if stream=True
+        :return: A dictionary containing 'content', 'thinking', 'tool_use', and 'answer' or an iterator of response chunks if stream=True
         """
         # If streaming is requested, use the stream method directly
         if stream:
             return self.stream(prompt, max_iterations)
 
-        response, thinking, answer = self.invoke(prompt, max_iterations)
-        return response, thinking, answer
+        response = self.invoke(prompt, max_iterations)
+        return response
 
     def _invoke_iteration(self, prompt_obj: Messages) -> tuple[str, bool, list[str]]:
         """
@@ -308,7 +303,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         tool_used = False
         tool_name = None
         tool_parameters = {}
-        tool_result_messages = []
+        tool_results = []
 
         # Process Bedrock response structure
         if isinstance(response, dict):
@@ -349,31 +344,41 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
         # Handle content
         if content:
+
             # Process the content to handle thinking/answer tags
             thinking, answer = self._process_content(content)
 
             # Add assistant's response to memory
             self.memory.add_message(role="assistant", content=content)
-            self._safe_event_handler(event_name="on_answer", text=content)
 
         # Process tool call if found in the response
         if tool_used and tool_name and tool_parameters:
             # Use the centralized _process_tool_call method
             tool_result = self._process_tool_call(tool_name, tool_parameters)
-            tool_result_messages.append(tool_result)
-            return content, thinking, answer, True, tool_result_messages
+            tool_results.append(tool_result)
+            return {
+                "content": content,
+                "thinking": thinking,
+                "answer": answer,
+                "tool_used": True,
+                "tool_results": tool_results,
+            }
 
-        return content, thinking, answer, tool_used, tool_result_messages
+        return {
+            "content": content,
+            "thinking": thinking,
+            "answer": answer,
+            "tool_used": tool_used,
+            "tool_results": tool_results,
+        }
 
-    def invoke(
-        self, prompt: str, max_iterations: int = 10
-    ) -> tuple[str, list[str], str | None]:
+    def invoke(self, prompt: str, max_iterations: int = 10) -> dict[str, Any]:
         """
         Run the agent with the given prompt using the model's invoke method.
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
-        :return: A tuple of (response, thinking, answer)
+        :return: A dictionary containing 'content', 'thinking', 'tool_use', and 'answer'
         """
         # Clear or reset the agent's memory context
         self._flush_memory()
@@ -384,6 +389,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         # Initialize buffers for thinking and answer
         all_thinking = []
         all_answer = []
+        all_tool_use = []
         full_response = []
         iterations = 0
 
@@ -397,28 +403,22 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
             prompt_obj = Messages(system=system, messages=messages)
 
             # Process one iteration and get response and tool use flag
-            (
-                response,
-                iteration_thinking,
-                iteration_answer,
-                tool_used,
-                tool_result_messages,
-            ) = self._invoke_iteration(prompt_obj)
+            response = self._invoke_iteration(prompt_obj)
 
             # Add thoughts and answer to the buffers
-            all_thinking.extend(iteration_thinking)
-            all_answer.extend(iteration_answer)
-
+            all_thinking.extend(response["thinking"])
+            all_answer.extend(response["answer"])
+            all_tool_use.append(response["tool_used"])
             # Add to the full response if we got a valid response
             if response:
-                full_response.append(response)
+                full_response.append(response["content"])
 
             # Add tool result messages to the full response
-            if tool_result_messages:
-                full_response.extend(tool_result_messages)
+            if response["tool_results"]:
+                full_response.extend(response["tool_results"])
 
             # If no tool was used, we're done
-            if not tool_used:
+            if not response["tool_used"]:
                 break
 
             # Increment iteration counter
@@ -434,7 +434,12 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         # Get the final answer if any was extracted
         answer = all_answer[0] if all_answer else None
 
-        return "\n\n".join(full_response), all_thinking, answer
+        return {
+            "content": "\n\n".join(full_response),
+            "thinking": all_thinking,
+            "tool_use": all_tool_use,
+            "answer": answer,
+        }
 
     def _stream_iteration(self, prompt_obj: Messages) -> Iterator[str]:
         """
@@ -656,13 +661,17 @@ if __name__ == "__main__":
         else:
             return f"Invalid conversion: {from_unit} to {to_unit}"
 
-    # Create tools
-    weather_tool = get_weather
-    convert_tool = convert_temperature
-    print(f"Tool types: {type(weather_tool)}, {type(convert_tool)}")
+    # Create a prompt that requires multiple tool calls
+    prompt = "What's the current weather in Tokyo and then convert the temperature to Celsius?"
+
+    #################
+    # Non-streaming #
+    #################
+
+    logger.info("\nExample 1: Using BedrockAgent with multiple tools:")
 
     # Define a event handler class to avoid using globals
-    class EventHandler:
+    class AsyncEventHandler:
         """Event handler for managing agent event handlers with internal state."""
 
         def __init__(self):
@@ -676,7 +685,7 @@ if __name__ == "__main__":
             :param parameters: Parameters passed to the tool
             :param result: Result returned by the tool
             """
-            print(f"\n\n🔧 TOOL USED: {tool_name} with {parameters} -> {result}")
+            print(f"🔧 TOOL: {tool_name} with {parameters} -> {result}")
 
         def on_thinking(self, text):
             """Handle agent thinking events.
@@ -692,27 +701,17 @@ if __name__ == "__main__":
 
             :param text: Text chunk produced by the agent
             """
-            # Check if we need to add extra spacing after tool result
-            if self.last_output_was_tool_result:
-                # Add double newline after a tool result when text starts coming in
-                sys.stdout.write("\n")
-                # Reset the flag
-                self.last_output_was_tool_result = False
-
-            # Print text appropriately
-            sys.stdout.write(text)
-            sys.stdout.flush()
+            print(f"💬 ANSWER: {text}")
 
     # Create the event handler instance
-    event_handler = EventHandler()
+    event_handler = AsyncEventHandler()
 
     # Example 3: Using BedrockAgent with multiple tools
-    logger.info("\nExample 3: Using BedrockAgent with multiple tools:")
     agent = BedrockAgent(
         identifier="WeatherAssistant",
         model=Claude35Sonnet(),
         description="An assistant that can provide weather information and perform temperature conversions",
-        tools=[weather_tool, convert_tool],
+        tools=[get_weather, convert_temperature],
         memory=FleetingMemory(),
         log_agentic_response=False,  # Disable default logging since we're using callbacks
         system_message="Answer like a pirate",
@@ -722,6 +721,72 @@ if __name__ == "__main__":
             "on_answer": event_handler.on_answer,
         },
     )
+
+    response = agent.run(prompt, stream=False)
+
+    logger.critical(f"Answer: {response['answer']}")
+    # logger.info(f"Thinking: {response['thinking']}")
+    # logger.debug(f"Response: {response['content']}")
+
+    #############
+    # Streaming #
+    #############
+
+    logger.info("\nExample 2: Using BedrockAgent with streaming:")
+
+    # Create a new event handler for streaming
+    class StreamingEventHandler:
+        """Event handler for managing agent event handlers with internal state."""
+
+        def __init__(self):
+            """Initialize the event handler with default state."""
+            self.last_output_was_tool_result = False
+
+        def on_tool_use(self, tool_name, parameters, result):
+            """Handle tool use events.
+
+            :param tool_name: Name of the tool being called
+            :param parameters: Parameters passed to the tool
+            :param result: Result returned by the tool
+            """
+            print(f"🔧 TOOL: {tool_name} with {parameters} -> {result}")
+
+        def on_thinking(self, text):
+            """Handle agent thinking events.
+
+            :param text: Text chunk produced by the agent
+            """
+            print(f"🧠 THINKING: {text}")
+            # Set flag to indicate we just had a tool result
+            self.last_output_was_tool_result = True
+
+        def on_answer(self, text):
+            """Handle agent response text.
+
+            :param text: Text chunk produced by the agent
+            """
+            print(f"💬 ANSWER: {text}")
+
+    # Create the event handler instance
+    event_handler = StreamingEventHandler()
+
+    # Create a new agent with streaming enabled
+    agent = BedrockAgent(
+        identifier="WeatherAssistant",
+        model=Claude35Sonnet(),
+        description="An assistant that can provide weather information and perform temperature conversions",
+        tools=[get_weather, convert_temperature],
+        memory=FleetingMemory(),
+        log_agentic_response=False,  # Disable default logging since we're using callbacks
+        system_message="Answer like a pirate",
+        event_handlers={
+            "on_tool_use": event_handler.on_tool_use,
+            "on_thinking": event_handler.on_thinking,
+            "on_answer": event_handler.on_answer,
+        },
+    )
+
+    response = agent.run(prompt, stream=True)
 
     # Run the agent with a prompt that requires multiple tool calls
     prompt = "What's the current weather in Tokyo and then convert the temperature to Celsius?"
@@ -733,11 +798,3 @@ if __name__ == "__main__":
         # Chunks are already being handled by the on_answer callback
         # This loop just ensures we process all chunks
         pass
-
-    # Run the agent with streaming set to False
-    logger.info("\nExample 4: Using BedrockAgent with streaming set to False")
-
-    response, thinking, answer = agent.run(prompt, stream=False)
-    print(f"Answer: {answer}")
-    print(f"Thinking: {thinking}")
-    # print(f"Response: {response}")
