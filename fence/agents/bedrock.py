@@ -732,69 +732,69 @@ if __name__ == "__main__":
     # Streaming #
     #############
 
-    logger.info("\nExample 2: Using BedrockAgent with streaming:")
+    # logger.info("\nExample 2: Using BedrockAgent with streaming:")
 
-    # Create a new event handler for streaming
-    class StreamingEventHandler:
-        """Event handler for managing agent event handlers with internal state."""
+    # # Create a new event handler for streaming
+    # class StreamingEventHandler:
+    #     """Event handler for managing agent event handlers with internal state."""
 
-        def __init__(self):
-            """Initialize the event handler with default state."""
-            self.last_output_was_tool_result = False
+    #     def __init__(self):
+    #         """Initialize the event handler with default state."""
+    #         self.last_output_was_tool_result = False
 
-        def on_tool_use(self, tool_name, parameters, result):
-            """Handle tool use events.
+    #     def on_tool_use(self, tool_name, parameters, result):
+    #         """Handle tool use events.
 
-            :param tool_name: Name of the tool being called
-            :param parameters: Parameters passed to the tool
-            :param result: Result returned by the tool
-            """
-            print(f"🔧 TOOL: {tool_name} with {parameters} -> {result}")
+    #         :param tool_name: Name of the tool being called
+    #         :param parameters: Parameters passed to the tool
+    #         :param result: Result returned by the tool
+    #         """
+    #         print(f"🔧 TOOL: {tool_name} with {parameters} -> {result}")
 
-        def on_thinking(self, text):
-            """Handle agent thinking events.
+    #     def on_thinking(self, text):
+    #         """Handle agent thinking events.
 
-            :param text: Text chunk produced by the agent
-            """
-            print(f"🧠 THINKING: {text}")
-            # Set flag to indicate we just had a tool result
-            self.last_output_was_tool_result = True
+    #         :param text: Text chunk produced by the agent
+    #         """
+    #         print(f"🧠 THINKING: {text}")
+    #         # Set flag to indicate we just had a tool result
+    #         self.last_output_was_tool_result = True
 
-        def on_answer(self, text):
-            """Handle agent response text.
+    #     def on_answer(self, text):
+    #         """Handle agent response text.
 
-            :param text: Text chunk produced by the agent
-            """
-            print(f"💬 ANSWER: {text}")
+    #         :param text: Text chunk produced by the agent
+    #         """
+    #         print(f"💬 ANSWER: {text}")
 
-    # Create the event handler instance
-    event_handler = StreamingEventHandler()
+    # # Create the event handler instance
+    # event_handler = StreamingEventHandler()
 
-    # Create a new agent with streaming enabled
-    agent = BedrockAgent(
-        identifier="WeatherAssistant",
-        model=Claude35Sonnet(),
-        description="An assistant that can provide weather information and perform temperature conversions",
-        tools=[get_weather, convert_temperature],
-        memory=FleetingMemory(),
-        log_agentic_response=False,  # Disable default logging since we're using callbacks
-        system_message="Answer like a pirate",
-        event_handlers={
-            "on_tool_use": event_handler.on_tool_use,
-            "on_thinking": event_handler.on_thinking,
-            "on_answer": event_handler.on_answer,
-        },
-    )
+    # # Create a new agent with streaming enabled
+    # agent = BedrockAgent(
+    #     identifier="WeatherAssistant",
+    #     model=Claude35Sonnet(),
+    #     description="An assistant that can provide weather information and perform temperature conversions",
+    #     tools=[get_weather, convert_temperature],
+    #     memory=FleetingMemory(),
+    #     log_agentic_response=False,  # Disable default logging since we're using callbacks
+    #     system_message="Answer like a pirate",
+    #     event_handlers={
+    #         "on_tool_use": event_handler.on_tool_use,
+    #         "on_thinking": event_handler.on_thinking,
+    #         "on_answer": event_handler.on_answer,
+    #     },
+    # )
 
-    response = agent.run(prompt, stream=True)
+    # response = agent.run(prompt, stream=True)
 
-    # Run the agent with a prompt that requires multiple tool calls
-    prompt = "What's the current weather in Tokyo and then convert the temperature to Celsius?"
-    # prompt = "Hi, how are you?"
-    print(f"\nUser question: {prompt}")
+    # # Run the agent with a prompt that requires multiple tool calls
+    # prompt = "What's the current weather in Tokyo and then convert the temperature to Celsius?"
+    # # prompt = "Hi, how are you?"
+    # print(f"\nUser question: {prompt}")
 
-    # Use streaming mode
-    for chunk in agent.run(prompt, stream=True):
-        # Chunks are already being handled by the on_answer callback
-        # This loop just ensures we process all chunks
-        pass
+    # # Use streaming mode
+    # for chunk in agent.run(prompt, stream=True):
+    #     # Chunks are already being handled by the on_answer callback
+    #     # This loop just ensures we process all chunks
+    #     pass
