@@ -23,6 +23,7 @@ class AgentLogType(Enum):
     DELEGATE = "delegate"
     ANSWER = "answer"
     OBSERVATION = "observation"
+    TOOL_USE = "tool_use"
 
 
 class BaseAgent:
@@ -66,7 +67,7 @@ class BaseAgent:
         self.memory = memory or FleetingMemory()
 
         # Set system message
-        self._system_message = None
+        self._system_message = system_message
 
     @abstractmethod
     def run(self, prompt: str) -> str:
@@ -134,7 +135,8 @@ agent_description = """{self.description or self.__doc__}"""
             AgentLogType.DELEGATE: "\033[93m",  # Yellow
             AgentLogType.ANSWER: "\033[91m",  # Red
             AgentLogType.OBSERVATION: "\033[95m",  # Purple
-            "identifier": "\033[96m",  # Cyan
+            AgentLogType.TOOL_USE: "\033[38;5;208m",  # Cyan
+            "identifier": "\033[1m",  # Bold
             "reset": "\033[0m",  # Reset
         }
         emojis = {

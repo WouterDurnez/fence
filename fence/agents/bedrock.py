@@ -5,156 +5,17 @@ Bedrock agent class that uses native tool calling and streaming capabilities.
 import json
 import logging
 import re
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Generator, Iterator
 
 from fence.agents.base import AgentLogType, BaseAgent
 from fence.memory.base import BaseMemory, FleetingMemory
 from fence.models.base import LLM
 from fence.models.bedrock.base import BedrockTool, BedrockToolConfig
+from fence.streaming.base import StreamHandler
 from fence.templates.models import Messages
 from fence.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
-
-
-class StreamHandler:
-    """
-    Process text chunks with tagged sections and emit events for each section.
-    """
-
-    def __init__(self, event_callback: Callable[[str, str], None] | None = None):
-        """
-        Initialize the stream handler.
-
-        :param event_callback: Function to call for each event (tag content), defaults to print
-        """
-        self.buffer = ""
-        self.current_mode: str | None = None
-        self.event_callback = event_callback or self._default_event_callback
-        # Initialize collection for events in chronological order
-        self.events: list[dict[str, Any]] = []
-
-    def process_chunk(self, chunk: str) -> None:
-        """
-        Process a single text chunk.
-
-        :param chunk: Text chunk to process
-        """
-        self.buffer += chunk
-
-        # Continue processing until no more changes
-        processing = True
-        while processing:
-            processing = False
-
-            # If not in a mode, look for any opening tag <tag>
-            if self.current_mode is None:
-                # Check for a complete opening tag pattern: <tag>
-                opening_match = self._find_opening_tag(self.buffer)
-                if opening_match:
-                    tag_name, start_pos, end_pos = opening_match
-                    # Extract content after the tag
-                    self.buffer = self.buffer[end_pos:]
-                    self.current_mode = tag_name
-                    # Strip any leading whitespace when entering a new tag mode
-                    self.buffer = self.buffer.lstrip()
-                    processing = True
-                    continue
-
-            # If in a mode, look for corresponding closing tag
-            elif self.current_mode:
-                closing_tag = f"</{self.current_mode}>"
-                if closing_tag in self.buffer:
-                    # Found complete closing tag
-                    parts = self.buffer.split(closing_tag, 1)
-                    content = parts[0]
-
-                    # Emit the content before the closing tag
-                    if content:
-                        # Strip trailing whitespace from the last content chunk
-                        content = content.rstrip()
-                        if (
-                            content
-                        ):  # Only emit and store if content is not empty after stripping
-                            self._emit_content(content)
-                            self._store_event(content)
-
-                    # Reset for next section
-                    self.current_mode = None
-                    self.buffer = parts[1]
-                    processing = True
-                    continue
-
-                # Check for partial closing tag at the end
-                elif self._has_partial_closing_tag(self.buffer, self.current_mode):
-                    # Wait for more chunks
-                    break
-
-                # No complete or partial closing tag, emit buffer content and clear it
-                elif self.buffer:
-                    # Strip trailing whitespace from the last content chunk
-                    content = self.buffer.rstrip()
-                    if (
-                        content
-                    ):  # Only emit and store if content is not empty after stripping
-                        self._emit_content(content)
-                        self._store_event(content)
-                    self.buffer = ""
-                    break
-
-    def _emit_content(self, content: str) -> None:
-        """Emit content through the event callback.
-
-        :param content: Content to emit
-        """
-        if self.current_mode:
-            self.event_callback(self.current_mode, content)
-
-    def _store_event(self, content: str) -> None:
-        """Store content as an event with a type.
-
-        :param content: Content to store
-        """
-        if self.current_mode:
-            event = {
-                "type": self.current_mode,
-                "content": content,
-            }
-            self.events.append(event)
-
-    def _find_opening_tag(self, text: str) -> tuple[str, int, int] | None:
-        """
-        Find the first complete opening tag in the text.
-
-        :param text: Text to search for opening tags
-        :return: Tuple of (tag_name, start_pos, end_pos) or None if not found
-        """
-        # Match any opening tag pattern <tag>
-        match = re.search(r"<([a-zA-Z0-9_]+)>", text)
-        if match:
-            tag_name = match.group(1)
-            return (tag_name, match.start(), match.end())
-        return None
-
-    def _has_partial_closing_tag(self, text: str, tag_name: str) -> bool:
-        """
-        Check if text ends with a partial closing tag for the given tag name.
-
-        :param text: Text to check
-        :param tag_name: Name of the tag to check for
-        :return: True if text ends with a partial closing tag
-        """
-        closing_tag = f"</{tag_name}>"
-        return any(text.endswith(closing_tag[:i]) for i in range(1, len(closing_tag)))
-
-    def _default_event_callback(self, event_type: str, content: str) -> None:
-        """
-        Default callback for events.
-
-        :param event_type: Type of event (tag name)
-        :param content: Content to send with the event
-        """
-        print(f"EVENT [{event_type}]: {content}")
 
 
 class BedrockAgent(BaseAgent):
@@ -179,11 +40,11 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         memory: BaseMemory | None = None,
         environment: dict | None = None,
         prefill: str | None = None,
-        log_agentic_response: bool = True,
+        log_agentic_response: bool = True,  # TODO: Deprecate in favor of event handlers
         are_you_serious: bool = False,
         tools: list[BaseTool] | None = None,
         system_message: str | None = None,
-        event_handlers: dict[str, Callable] | None = None,
+        event_handlers: dict[str, Callable | list[Callable]] | None = None,
     ):
         """
         Initialize the BedrockAgent object.
@@ -278,17 +139,28 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         self.log(text, AgentLogType.ANSWER)
 
     def _safe_event_handler(self, event_name: str, *args, **kwargs) -> None:
-        """
-        Safely dispatch an event handler, handling cases where the event handler isn't assigned.
+        """Safely dispatch one or more event handlers, handling cases where the event handler isn't assigned.
 
         :param event_name: The name of the event to invoke
         :param args: Positional arguments to pass to the event handler
         :param kwargs: Keyword arguments to pass to the event handler
         """
-        event_handler = self.event_handlers.get(event_name)
-        if event_handler and callable(event_handler):
+        handlers = self.event_handlers.get(event_name)
+        if not handlers:
+            return
+
+        # Convert single handler to list for uniform processing
+        if not isinstance(handlers, list):
+            handlers = [handlers]
+
+        # Execute each handler safely
+        for handler in handlers:
+            if not callable(handler):
+                logger.warning(f"Event handler for {event_name} is not callable")
+                continue
+
             try:
-                event_handler(*args, **kwargs)
+                handler(*args, **kwargs)
             except Exception as e:
                 logger.warning(f"Error in {event_name} event handler: {e}")
                 # Continue execution even if event handler fails
@@ -413,16 +285,72 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         if not tool_data.get("toolName") or not tool_data.get("parameters"):
             return
 
-        # Process the tool call
-        result = self._process_tool_call(tool_data["toolName"], tool_data["parameters"])
-        # Store tool usage as an event
+        # Find the tool by name
+        tool = self._find_tool(tool_data["toolName"])
+        raw_result = None
+
+        if not tool:
+            raw_result = f"Error: Tool {tool_data['toolName']} not found"
+
+            # Call the observation callback with the error
+            self._safe_event_handler(
+                event_name="on_tool_use",
+                tool_name=tool_data["toolName"],
+                parameters=tool_data["parameters"],
+                result=raw_result,
+            )
+
+            # Add error to memory
+            self.memory.add_message(
+                role="user",
+                content=f"Tool '{tool_data['toolName']}' not found. Please try a different approach.",
+            )
+        else:
+            try:
+                # Execute the tool directly to get the raw result
+                raw_result = tool.run(
+                    environment=self.environment, **tool_data["parameters"]
+                )
+
+                # Call the observation callback with the raw result
+                self._safe_event_handler(
+                    event_name="on_tool_use",
+                    tool_name=tool_data["toolName"],
+                    parameters=tool_data["parameters"],
+                    result=raw_result,
+                )
+
+                # Add tool result to memory as user message
+                self.memory.add_message(
+                    role="user",
+                    content=f"[SYSTEM DIRECTIVE] The {tool_data['toolName']} returned: {raw_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+                )
+            except Exception as e:
+                error_msg = str(e)
+                raw_result = f"Error: {error_msg}"
+
+                # Log the error using the observation callback
+                self._safe_event_handler(
+                    event_name="on_tool_use",
+                    tool_name=tool_data["toolName"],
+                    parameters=tool_data["parameters"],
+                    result=raw_result,
+                )
+
+                # Add error to memory
+                self.memory.add_message(
+                    role="user",
+                    content=f"Your tool call resulted in an error: {error_msg}. Please try a different approach.",
+                )
+
+        # Store tool usage as an event with the raw result
         stream_handler.events.append(
             {
                 "type": "tool_usage",
                 "content": {
                     "name": tool_data["toolName"],
                     "parameters": tool_data["parameters"],
-                    "result": result,
+                    "result": raw_result,  # Store the raw result
                 },
             }
         )
@@ -451,48 +379,16 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
         return thoughts, answers
 
-    #######
-    # Run #
-    #######
+    ##########
+    # Invoke #
+    ##########
 
-    def run(
-        self, prompt: str, max_iterations: int = 10, stream: bool = False
-    ) -> dict[str, Any] | Iterator[str] | dict[str, list]:
-        """
-        Run the agent with the given prompt.
-
-        :param prompt: The initial prompt to feed to the LLM
-        :param max_iterations: Maximum number of model-tool-model iterations
-        :param stream: Whether to stream the response or return the full text
-        :return: If stream=False: A dictionary containing 'content', 'thinking', 'tool_use', and 'answer'
-                If stream=True: A dictionary containing 'events' in chronological order
-        """
-        # If streaming is requested, use the stream method directly
-        if stream:
-            # Create collection for all events
-            all_events = []
-
-            # Process the stream and collect data
-            for chunk in self.stream(prompt, max_iterations):
-                # Check if this is our data collection chunk
-                if isinstance(chunk, dict):
-                    # Collect the events
-                    all_events.extend(chunk["events"])
-
-            # Return the collected data
-            return {
-                "events": all_events,
-            }
-
-        response = self.invoke(prompt, max_iterations)
-        return response
-
-    def _invoke_iteration(self, prompt_obj: Messages) -> tuple[str, bool, list[str]]:
+    def _invoke_iteration(self, prompt_obj: Messages) -> dict[str, Any]:
         """
         Process a single iteration of the agent's conversation with the model using invoke.
 
         :param prompt_obj: Messages object containing the conversation history
-        :return: Tuple of (response_text, tool_used_flag, tool_result_messages)
+        :return: Dictionary with response data including content, thinking, answer, and tool data
         """
         # Get the full response from the model using invoke
         response = self.model.invoke(prompt=prompt_obj)
@@ -506,6 +402,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         tool_name = None
         tool_parameters = {}
         tool_results = []
+        tool_data = None
 
         # Process Bedrock response structure
         if isinstance(response, dict):
@@ -546,7 +443,6 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
         # Handle content
         if content:
-
             # Process the content to handle thinking/answer tags
             thinking, answer = self._process_content(content)
 
@@ -555,14 +451,93 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
         # Process tool call if found in the response
         if tool_used and tool_name and tool_parameters:
-            # Use the centralized _process_tool_call method
-            tool_result = self._process_tool_call(tool_name, tool_parameters)
-            tool_results.append(tool_result)
+            # Find the tool and execute it
+            tool = self._find_tool(tool_name)
+            if tool:
+                try:
+                    # Execute the tool directly to get the raw result
+                    tool_result = tool.run(
+                        environment=self.environment, **tool_parameters
+                    )
+
+                    # Create formatted result message for logs
+                    formatted_result = (
+                        f"[Tool Result] {tool_name}({tool_parameters}) -> {tool_result}"
+                    )
+                    tool_results.append(formatted_result)
+
+                    # Store structured tool data
+                    tool_data = {
+                        "name": tool_name,
+                        "parameters": tool_parameters,
+                        "result": tool_result,
+                    }
+
+                    # Call the observation callback
+                    self._safe_event_handler(
+                        event_name="on_tool_use",
+                        tool_name=tool_name,
+                        parameters=tool_parameters,
+                        result=tool_result,
+                    )
+
+                    # Add tool result to memory
+                    self.memory.add_message(
+                        role="user",
+                        content=f"[SYSTEM DIRECTIVE] The {tool_name} returned: {tool_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+                    )
+                except Exception as e:
+                    error_msg = str(e)
+                    formatted_result = f"[Tool Error: {tool_name}] {error_msg}"
+                    tool_results.append(formatted_result)
+                    tool_data = {
+                        "name": tool_name,
+                        "parameters": tool_parameters,
+                        "result": f"Error: {error_msg}",
+                    }
+
+                    # Log the error
+                    self._safe_event_handler(
+                        event_name="on_tool_use",
+                        tool_name=tool_name,
+                        parameters=tool_parameters,
+                        result=f"Error: {error_msg}",
+                    )
+
+                    # Add error to memory
+                    self.memory.add_message(
+                        role="user",
+                        content=f"Your tool call resulted in an error: {error_msg}. Please try a different approach.",
+                    )
+            else:
+                # Tool not found
+                formatted_result = f"[Tool Error: {tool_name}] Tool not found"
+                tool_results.append(formatted_result)
+                tool_data = {
+                    "name": tool_name,
+                    "parameters": tool_parameters,
+                    "result": "Error: Tool not found",
+                }
+
+                # Log the error
+                self._safe_event_handler(
+                    event_name="on_tool_use",
+                    tool_name=tool_name,
+                    result="Error: Tool not found",
+                )
+
+                # Add error to memory
+                self.memory.add_message(
+                    role="user",
+                    content=f"Tool '{tool_name}' not found. Please try a different approach.",
+                )
+
             return {
                 "content": content,
                 "thinking": thinking,
                 "answer": answer,
                 "tool_used": True,
+                "tool_data": tool_data,
                 "tool_results": tool_results,
             }
 
@@ -570,7 +545,8 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
             "content": content,
             "thinking": thinking,
             "answer": answer,
-            "tool_used": tool_used,
+            "tool_used": False,
+            "tool_data": None,
             "tool_results": tool_results,
         }
 
@@ -610,7 +586,11 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
             # Add thoughts and answer to the buffers
             all_thinking.extend(response["thinking"])
             all_answer.extend(response["answer"])
-            all_tool_use.append(response["tool_used"])
+
+            # Add structured tool data if a tool was used
+            if response["tool_used"] and response["tool_data"]:
+                all_tool_use.append(response["tool_data"])
+
             # Add to the full response if we got a valid response
             if response:
                 full_response.append(response["content"])
@@ -643,9 +623,13 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
             "answer": answer,
         }
 
+    ###########
+    # Helpers #
+    ###########
+
     def _handle_text_delta(
         self, delta: dict, stream_handler: StreamHandler, answer_content: str | None
-    ) -> str | None:
+    ) -> Generator[str, None, str | None]:
         """Handle a text delta from the stream.
 
         :param delta: The delta to process
@@ -715,7 +699,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
     def _handle_tool_stop(
         self,
-        chunk: dict,
+        _chunk: dict,
         is_collecting_tool_data: bool,
         current_tool_name: str | None,
         current_tool_data: dict,
@@ -724,7 +708,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
     ) -> tuple[bool, str | None, dict, str, bool]:
         """Handle the end of a tool call.
 
-        :param chunk: The chunk containing the tool stop
+        :param _chunk: The chunk containing the tool stop (unused)
         :param is_collecting_tool_data: Whether we're currently collecting tool data
         :param current_tool_name: Current tool name
         :param current_tool_data: Current tool data
@@ -768,14 +752,14 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         iteration_response: str,
         tool_used: bool,
         answer_content: str | None,
-    ) -> tuple[str, str | None]:
+    ) -> Generator[str, None, tuple[str, str | None]]:
         """Handle the end of a message.
 
         :param chunk: The chunk containing the message stop
         :param iteration_response: Current iteration response
         :param tool_used: Whether a tool was used
         :param answer_content: Current answer content
-        :return: Tuple of (iteration_response, answer_content)
+        :return: Generator yielding answer content, finally returning (iteration_response, answer_content)
         """
         # Message is complete, add the final response to memory if it wasn't a tool call
         if iteration_response and not tool_used:
@@ -791,6 +775,67 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
             answer_content = None
 
         return iteration_response, answer_content
+
+    def _unpack_event_stream(self, events: list[dict]) -> dict[str, Any]:
+        """Unpack the event list into a dictionary with standardized format.
+
+        Transforms a list of events into a dictionary with keys:
+        - content: Full combined response text
+        - thinking: List of all thinking entries
+        - tool_use: List of dicts with tool name, parameters, and result
+        - answer: Final answer text (combined)
+
+        :param events: The events to unpack
+        :return: Dictionary with standardized output format
+        """
+        # Initialize result containers
+        thinking = []
+        answer_chunks = []
+        tool_use = []
+        full_content = []
+
+        # Process each event
+        for event in events:
+            event_type = event["type"]
+
+            if event_type == "thinking":
+                thinking.append(event["content"])
+                full_content.append(f"<thinking>{event['content']}</thinking>")
+
+            elif event_type == "answer":
+                answer_chunks.append(event["content"])
+                full_content.append(f"<answer>{event['content']}</answer>")
+
+            elif event_type == "tool_usage":
+                # Extract tool data and add to tool_use list as a dict
+                tool_data = event["content"]
+                tool_use.append(
+                    {
+                        "name": tool_data["name"],
+                        "parameters": tool_data["parameters"],
+                        "result": tool_data["result"],
+                    }
+                )
+
+                # Add formatted tool usage to full content
+                tool_message = f"[Tool Result] {tool_data['name']}({tool_data['parameters']}) -> {tool_data['result']}"
+                full_content.append(tool_message)
+
+        # Combine answer chunks into a single answer
+        answer = "".join(answer_chunks) if answer_chunks else None
+
+        # Return a dictionary with the same structure as invoke() method
+        return {
+            "content": "\n\n".join(full_content),
+            "thinking": thinking,
+            "tool_use": tool_use,
+            "answer": answer,
+            "events": events,
+        }
+
+    ##########
+    # Stream #
+    ##########
 
     def _stream_iteration(self, prompt_obj: Messages) -> Iterator[str]:
         """
@@ -991,6 +1036,36 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
             "events": all_events,
         }
 
+    def run(
+        self, prompt: str, max_iterations: int = 10, stream: bool = False
+    ) -> dict[str, Any] | Iterator[str] | dict[str, list]:
+        """
+        Run the agent with the given prompt.
+
+        :param prompt: The initial prompt to feed to the LLM
+        :param max_iterations: Maximum number of model-tool-model iterations
+        :param stream: Whether to stream the response or return the full text
+        :return: If stream=False: A dictionary containing 'content', 'thinking', 'tool_use', and 'answer'
+                If stream=True: A dictionary containing 'events' in chronological order
+        """
+        # If streaming is requested, use the stream method directly
+        if stream:
+            # Create collection for all events
+            all_events = []
+
+            # Process the stream and collect data
+            for chunk in self.stream(prompt, max_iterations):
+                # Check if this is our data collection chunk
+                if isinstance(chunk, dict):
+                    # Collect the events
+                    all_events.extend(chunk["events"])
+
+            # Return the unpacked events in the same format as invoke()
+            return self._unpack_event_stream(all_events)
+
+        response = self.invoke(prompt, max_iterations)
+        return response
+
 
 if __name__ == "__main__":
     import json
@@ -1062,40 +1137,22 @@ if __name__ == "__main__":
     logger.info("\nExample 1: Using BedrockAgent with multiple tools:")
 
     # Define a event handler class to avoid using globals
-    class AsyncEventHandler:
+    class DummyEventHandler:
         """Event handler for managing agent event handlers with internal state."""
 
-        def __init__(self):
-            """Initialize the event handler with default state."""
-            self.last_output_was_tool_result = False
-
         def on_tool_use(self, tool_name, parameters, result):
-            """Handle tool use events.
-
-            :param tool_name: Name of the tool being called
-            :param parameters: Parameters passed to the tool
-            :param result: Result returned by the tool
-            """
+            """Handle tool use events."""
             print(f"🔧 TOOL: {tool_name} with {parameters} -> {result}")
 
         def on_thinking(self, text):
-            """Handle agent thinking events.
-
-            :param text: Text chunk produced by the agent
-            """
+            """Handle agent thinking events."""
             print(f"🧠 THINKING: {text}")
-            # Set flag to indicate we just had a tool result
-            self.last_output_was_tool_result = True
 
         def on_answer(self, text):
-            """Handle agent response text.
-
-            :param text: Text chunk produced by the agent
-            """
             print(f"💬 ANSWER: {text}")
 
     # Create the event handler instance
-    event_handler = AsyncEventHandler()
+    event_handler = DummyEventHandler()
 
     # Example 3: Using BedrockAgent with multiple tools
     agent = BedrockAgent(
@@ -1115,51 +1172,15 @@ if __name__ == "__main__":
 
     response = agent.run(prompt, stream=False)
 
-    logger.critical(f"Answer: {response['answer']}")
-    logger.info(f"Thinking: {response['thinking']}")
-    logger.debug(f"Response: {response['content']}")
+    from pprint import pprint
+
+    pprint(response)
 
     #############
     # Streaming #
     #############
 
     logger.info("\nExample 2: Using BedrockAgent with streaming:")
-
-    # Create a new event handler for streaming
-    class StreamingEventHandler:
-        """Event handler for managing agent event handlers with internal state."""
-
-        def __init__(self):
-            """Initialize the event handler with default state."""
-            self.last_output_was_tool_result = False
-
-        def on_tool_use(self, tool_name, parameters, result):
-            """Handle tool use events.
-
-            :param tool_name: Name of the tool being called
-            :param parameters: Parameters passed to the tool
-            :param result: Result returned by the tool
-            """
-            print(f"🔧 TOOL: {tool_name} with {parameters} -> {result}")
-
-        def on_thinking(self, text):
-            """Handle agent thinking events.
-
-            :param text: Text chunk produced by the agent
-            """
-            print(f"🧠 THINKING: {text}")
-            # Set flag to indicate we just had a tool result
-            self.last_output_was_tool_result = True
-
-        def on_answer(self, text):
-            """Handle agent response text.
-
-            :param text: Text chunk produced by the agent
-            """
-            print(f"💬 ANSWER: {text}")
-
-    # Create the event handler instance
-    event_handler = StreamingEventHandler()
 
     # Create a new agent with streaming enabled
     agent = BedrockAgent(
@@ -1182,4 +1203,6 @@ if __name__ == "__main__":
 
     # Access the collected data
     print("\nFinal Collected Data:")
-    print(f"Events: {collected_data['events']}")
+    from pprint import pprint
+
+    pprint(collected_data)
