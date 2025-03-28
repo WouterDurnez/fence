@@ -39,6 +39,7 @@ class BaseAgent:
         prefill: str | None = None,
         log_agentic_response: bool = True,
         system_message: str | None = None,
+        are_you_serious: bool = False,
     ):
         """
         Initialize the Agent object.
@@ -60,6 +61,7 @@ class BaseAgent:
 
         # Set the log configuration
         self.log_agentic_response = log_agentic_response
+        self.are_you_serious = are_you_serious
 
         # Memory setup
         self.memory = memory or FleetingMemory()

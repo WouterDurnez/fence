@@ -41,6 +41,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         environment: dict | None = None,
         prefill: str | None = None,
         log_agentic_response: bool = True,
+        are_you_serious: bool = False,
         tools: list[BaseTool] | None = None,
         system_message: str | None = None,
         event_handlers: dict[str, Callable | list[Callable]] | None = None,
@@ -74,6 +75,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
             environment=environment,
             prefill=prefill,
             log_agentic_response=log_agentic_response,
+            are_you_serious=are_you_serious,
         )
 
         # Set up the system message
@@ -89,16 +91,8 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
         self.tools = tools or []
 
-        # Set up event handlers with defaults
-        self.event_handlers = {
-            "on_tool_use": self._default_on_tool_use,
-            "on_thinking": self._default_on_thinking,
-            "on_answer": self._default_on_answer,
-        }
-
         # Update with user-provided event handlers
-        if event_handlers:
-            self.event_handlers.update(event_handlers)
+        self._set_event_handlers(event_handlers)
 
         # Register tools with the model if supported
         self._register_tools()
@@ -137,6 +131,39 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         """
         if self.log_agentic_response:
             self.log(text, AgentLogType.ANSWER)
+
+    def _set_event_handlers(
+        self, event_handlers: dict[str, Callable | list[Callable]] | None = None
+    ) -> None:
+        """Set up the event handlers. If `log_agentic_response` is True, include default handlers.
+
+        :param event_handlers: A dictionary of event handlers for different agent events
+        """
+        # Start with empty set of handlers
+        self.event_handlers = {}
+
+        # Add default handlers if logging is enabled
+        if self.log_agentic_response:
+            self.event_handlers = {
+                "on_tool_use": [self._default_on_tool_use],
+                "on_thinking": [self._default_on_thinking],
+                "on_answer": [self._default_on_answer],
+            }
+
+        # Process and merge user-provided handlers if any
+        if event_handlers:
+            for event_name, handler in event_handlers.items():
+                if event_name in self.event_handlers:
+                    # Convert handler to list if it's not already
+                    handlers_to_add = (
+                        [handler] if not isinstance(handler, list) else handler
+                    )
+                    self.event_handlers[event_name].extend(handlers_to_add)
+                else:
+                    # For new event types, just use the provided handler(s)
+                    self.event_handlers[event_name] = (
+                        handler if isinstance(handler, list) else [handler]
+                    )
 
     def _safe_event_handler(self, event_name: str, *args, **kwargs) -> None:
         """Safely dispatch one or more event handlers, handling cases where the event handler isn't assigned.
@@ -1162,7 +1189,7 @@ if __name__ == "__main__":
         description="An assistant that can provide weather information and perform temperature conversions",
         tools=[get_weather, convert_temperature],
         memory=FleetingMemory(),
-        log_agentic_response=False,  # Disable default logging since we're using callbacks
+        log_agentic_response=True,  # Disable default logging since we're using callbacks
         system_message="Answer like a pirate",
         event_handlers={
             "on_tool_use": event_handler.on_tool_use,
@@ -1190,13 +1217,13 @@ if __name__ == "__main__":
         description="An assistant that can provide weather information and perform temperature conversions",
         tools=[get_weather, convert_temperature],
         memory=FleetingMemory(),
-        log_agentic_response=False,  # Disable default logging since we're using callbacks
+        log_agentic_response=True,  # Disable default logging since we're using callbacks
         system_message="Answer like a pirate",
-        event_handlers={
-            "on_tool_use": event_handler.on_tool_use,
-            "on_thinking": event_handler.on_thinking,
-            "on_answer": event_handler.on_answer,
-        },
+        # event_handlers={
+        #     "on_tool_use": event_handler.on_tool_use,
+        #     "on_thinking": event_handler.on_thinking,
+        #     "on_answer": event_handler.on_answer,
+        # },
     )
 
     # Use streaming mode
