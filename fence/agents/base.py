@@ -38,7 +38,6 @@ class BaseAgent:
         environment: dict | None = None,
         prefill: str | None = None,
         log_agentic_response: bool = True,
-        are_you_serious: bool = False,
         system_message: str | None = None,
     ):
         """
@@ -61,7 +60,6 @@ class BaseAgent:
 
         # Set the log configuration
         self.log_agentic_response = log_agentic_response
-        self.are_you_serious = are_you_serious
 
         # Memory setup
         self.memory = memory or FleetingMemory()

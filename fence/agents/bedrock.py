@@ -40,8 +40,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         memory: BaseMemory | None = None,
         environment: dict | None = None,
         prefill: str | None = None,
-        log_agentic_response: bool = True,  # TODO: Deprecate in favor of event handlers
-        are_you_serious: bool = False,
+        log_agentic_response: bool = True,
         tools: list[BaseTool] | None = None,
         system_message: str | None = None,
         event_handlers: dict[str, Callable | list[Callable]] | None = None,
@@ -56,7 +55,6 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         :param environment: A dictionary of environment variables to pass to tools
         :param prefill: A string to prefill the memory with
         :param log_agentic_response: A flag to determine if the agent's responses should be logged
-        :param are_you_serious: A flag to determine if the log message should be printed in a frivolous manner
         :param tools: A list of tools to make available to the agent
         :param system_message: A system message to set for the agent
         :param event_handlers: A dictionary of event handlers for different agent events:
@@ -76,7 +74,6 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
             environment=environment,
             prefill=prefill,
             log_agentic_response=log_agentic_response,
-            are_you_serious=are_you_serious,
         )
 
         # Set up the system message
@@ -119,24 +116,27 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         :param parameters: The parameters passed to the tool
         :param result: The result returned by the tool
         """
-        self.log(
-            f"Using tool [{tool_name}] with parameters: {parameters} -> {result}",
-            AgentLogType.TOOL_USE,
-        )
+        if self.log_agentic_response:
+            self.log(
+                f"Using tool [{tool_name}] with parameters: {parameters} -> {result}",
+                AgentLogType.TOOL_USE,
+            )
 
     def _default_on_thinking(self, text: str) -> None:
         """Default callback for agent thinking.
 
         :param text: The text chunk produced by the agent
         """
-        self.log(text, AgentLogType.THINKING)
+        if self.log_agentic_response:
+            self.log(text, AgentLogType.THOUGHT)
 
     def _default_on_answer(self, text: str) -> None:
         """Default callback for agent answers.
 
         :param text: The text chunk produced by the agent
         """
-        self.log(text, AgentLogType.ANSWER)
+        if self.log_agentic_response:
+            self.log(text, AgentLogType.ANSWER)
 
     def _safe_event_handler(self, event_name: str, *args, **kwargs) -> None:
         """Safely dispatch one or more event handlers, handling cases where the event handler isn't assigned.
@@ -1071,6 +1071,7 @@ if __name__ == "__main__":
     import json
 
     from fence.models.bedrock.claude import Claude35Sonnet
+    from fence.models.bedrock.nova import NovaPro
     from fence.tools.base import BaseTool, tool
     from fence.utils.logger import setup_logging
 
@@ -1185,7 +1186,7 @@ if __name__ == "__main__":
     # Create a new agent with streaming enabled
     agent = BedrockAgent(
         identifier="WeatherAssistant",
-        model=Claude35Sonnet(),
+        model=NovaPro(region="us-east-1"),
         description="An assistant that can provide weather information and perform temperature conversions",
         tools=[get_weather, convert_temperature],
         memory=FleetingMemory(),
