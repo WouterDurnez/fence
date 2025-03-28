@@ -655,7 +655,11 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
             # Add thoughts and answer to the buffers
             all_thinking.extend(response["thinking"])
-            all_answer.extend(response["answer"])
+            if response["answer"] is not None:
+                if isinstance(response["answer"], list):
+                    all_answer.extend(response["answer"])
+                else:
+                    all_answer.append(response["answer"])
 
             # Add structured tool data if a tool was used
             if response["tool_used"] and response["tool_data"]:
