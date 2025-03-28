@@ -5,7 +5,9 @@ Bedrock agent class that uses native tool calling and streaming capabilities.
 import json
 import logging
 import re
-from typing import Any, Callable, Generator, Iterator
+from typing import Any, Callable, Generator, Iterator, List, Union
+
+from pydantic import BaseModel, field_validator
 
 from fence.agents.base import AgentLogType, BaseAgent
 from fence.memory.base import BaseMemory, FleetingMemory
@@ -16,6 +18,38 @@ from fence.templates.models import Messages
 from fence.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
+
+
+HandlerType = Union[Callable, List[Callable]]
+
+
+class EventHandlers(BaseModel):
+    """Event handlers for the BedrockAgent.
+
+    :param on_tool_use: Called when the agent uses a tool
+    :param on_thinking: Called when the agent is thinking
+    :param on_answer: Called when the agent provides text answer chunks
+    """
+
+    on_tool_use: HandlerType | None = None
+    on_thinking: HandlerType | None = None
+    on_answer: HandlerType | None = None
+
+    @field_validator("*", mode="before")
+    def validate_handlers(cls, value):
+        """Validate that handlers are callables or lists of callables."""
+        if value is None:
+            return None
+
+        if isinstance(value, list):
+            for handler in value:
+                if not callable(handler):
+                    raise ValueError(f"Handler {handler} is not callable")
+            return value
+        elif callable(value):
+            return value
+        else:
+            raise ValueError(f"Handler {value} is not callable")
 
 
 class BedrockAgent(BaseAgent):
@@ -44,7 +78,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         are_you_serious: bool = False,
         tools: list[BaseTool] | None = None,
         system_message: str | None = None,
-        event_handlers: dict[str, Callable | list[Callable]] | None = None,
+        event_handlers: EventHandlers | dict[str, HandlerType] | None = None,
     ):
         """
         Initialize the BedrockAgent object.
@@ -56,12 +90,10 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         :param environment: A dictionary of environment variables to pass to tools
         :param prefill: A string to prefill the memory with
         :param log_agentic_response: A flag to determine if the agent's responses should be logged
+        :param are_you_serious: A flag to determine if the log message should be printed in a frivolous manner
         :param tools: A list of tools to make available to the agent
         :param system_message: A system message to set for the agent
-        :param event_handlers: A dictionary of event handlers for different agent events:
-                         - 'on_tool_use': Called when the agent uses a tool
-                         - 'on_thinking': Called when the agent is thinking
-                         - 'on_answer': Called when the agent provides text answer chunks
+        :param event_handlers: Event handlers for different agent events (on_tool_use, on_thinking, on_answer)
         """
 
         # We will need the full response to be set to True
@@ -89,6 +121,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         # Set the system message in memory
         self.memory.set_system_message(self._system_message)
 
+        # Set the tools
         self.tools = tools or []
 
         # Update with user-provided event handlers
@@ -133,12 +166,20 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
             self.log(text, AgentLogType.ANSWER)
 
     def _set_event_handlers(
-        self, event_handlers: dict[str, Callable | list[Callable]] | None = None
+        self, event_handlers: EventHandlers | dict[str, HandlerType] | None = None
     ) -> None:
         """Set up the event handlers. If `log_agentic_response` is True, include default handlers.
 
-        :param event_handlers: A dictionary of event handlers for different agent events
+        :param event_handlers: Event handlers config for different agent events
         """
+
+        # If we have event handlers that are passed as a dictionary, validate them
+        if event_handlers is not None and not isinstance(event_handlers, EventHandlers):
+            try:
+                event_handlers = EventHandlers(**event_handlers)
+            except Exception as e:
+                raise ValueError(f"Invalid event handlers: {e}")
+
         # Start with empty set of handlers
         self.event_handlers = {}
 
@@ -152,7 +193,9 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
         # Process and merge user-provided handlers if any
         if event_handlers:
-            for event_name, handler in event_handlers.items():
+            # Convert to dict for processing
+            handlers_dict = event_handlers.model_dump(exclude_none=True)
+            for event_name, handler in handlers_dict.items():
                 if event_name in self.event_handlers:
                     # Convert handler to list if it's not already
                     handlers_to_add = (
@@ -1219,18 +1262,10 @@ if __name__ == "__main__":
         memory=FleetingMemory(),
         log_agentic_response=True,  # Disable default logging since we're using callbacks
         system_message="Answer like a pirate",
-        # event_handlers={
-        #     "on_tool_use": event_handler.on_tool_use,
-        #     "on_thinking": event_handler.on_thinking,
-        #     "on_answer": event_handler.on_answer,
-        # },
     )
 
     # Use streaming mode
     collected_data = agent.run(prompt, stream=True)
 
-    # Access the collected data
-    print("\nFinal Collected Data:")
-    from pprint import pprint
-
-    pprint(collected_data)
+    # Access the answer
+    print(f"Answer: {collected_data['answer']}")
