@@ -17,6 +17,137 @@ from fence.tools.base import BaseTool
 logger = logging.getLogger(__name__)
 
 
+class StreamHandler:
+    """
+    Process text chunks with tagged sections and emit events for each section.
+    """
+
+    def __init__(self, event_callback=None):
+        """
+        Initialize the stream handler.
+
+        :param event_callback: Function to call for each event (tag content), defaults to print
+        """
+        self.buffer = ""
+        self.current_mode = None
+        self.event_callback = event_callback or self._default_event_callback
+        # Initialize collections for different types of content
+        self.thoughts = []
+        self.answers = []
+        self.tool_usages = []
+
+    def process_chunk(self, chunk):
+        """
+        Process a single text chunk.
+
+        :param chunk: Text chunk to process
+        """
+        self.buffer += chunk
+
+        # Continue processing until no more changes
+        processing = True
+        while processing:
+            processing = False
+
+            # If not in a mode, look for any opening tag <tag>
+            if self.current_mode is None:
+                # Check for a complete opening tag pattern: <tag>
+                opening_match = self._find_opening_tag(self.buffer)
+                if opening_match:
+                    tag_name, start_pos, end_pos = opening_match
+                    # Extract content after the tag
+                    self.buffer = self.buffer[end_pos:]
+                    self.current_mode = tag_name
+                    # Strip any leading whitespace when entering a new tag mode
+                    self.buffer = self.buffer.lstrip()
+                    processing = True
+                    continue
+
+            # If in a mode, look for corresponding closing tag
+            elif self.current_mode:
+                closing_tag = f"</{self.current_mode}>"
+                if closing_tag in self.buffer:
+                    # Found complete closing tag
+                    parts = self.buffer.split(closing_tag, 1)
+                    content = parts[0]
+
+                    # Emit the content before the closing tag
+                    if content:
+                        # Strip trailing whitespace from the last content chunk
+                        content = content.rstrip()
+                        self.event_callback(self.current_mode, content)
+                        # Store content in appropriate collection
+                        if self.current_mode == "thinking":
+                            self.thoughts.append(content)
+                        elif self.current_mode == "answer":
+                            self.answers.append(content)
+
+                    # Reset for next section
+                    self.current_mode = None
+                    self.buffer = parts[1]
+                    processing = True
+                    continue
+
+                # Check for partial closing tag at the end
+                elif self._has_partial_closing_tag(self.buffer, self.current_mode):
+                    # Wait for more chunks
+                    break
+
+                # No complete or partial closing tag, emit buffer content and clear it
+                elif self.buffer:
+                    # Strip trailing whitespace from the last content chunk
+                    content = self.buffer.rstrip()
+                    self.event_callback(self.current_mode, content)
+                    # Store content in appropriate collection
+                    if self.current_mode == "thinking":
+                        self.thoughts.append(content)
+                    elif self.current_mode == "answer":
+                        self.answers.append(content)
+                    self.buffer = ""
+                    break
+
+    def _find_opening_tag(self, text):
+        """
+        Find the first complete opening tag in the text.
+
+        :param text: Text to search for opening tags
+        :return: Tuple of (tag_name, start_pos, end_pos) or None if not found
+        """
+        import re
+
+        # Match any opening tag pattern <tag>
+        match = re.search(r"<([a-zA-Z0-9_]+)>", text)
+        if match:
+            tag_name = match.group(1)
+            return (tag_name, match.start(), match.end())
+        return None
+
+    def _has_partial_closing_tag(self, text, tag_name):
+        """
+        Check if text ends with a partial closing tag for the given tag name.
+
+        :param text: Text to check
+        :param tag_name: Name of the tag to check for
+        :return: True if text ends with a partial closing tag
+        """
+        closing_tag = f"</{tag_name}>"
+
+        # Check for various partial closing tags
+        for i in range(1, len(closing_tag)):
+            if text.endswith(closing_tag[:i]):
+                return True
+        return False
+
+    def _default_event_callback(self, event_type, content):
+        """
+        Default callback for events.
+
+        :param event_type: Type of event (tag name)
+        :param content: Content to send with the event
+        """
+        print(f"EVENT [{event_type}]: {content}")
+
+
 class BedrockAgent(BaseAgent):
     """
     Bedrock agent that uses native tool calling and streaming capabilities.
@@ -269,18 +400,38 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
 
     def run(
         self, prompt: str, max_iterations: int = 10, stream: bool = False
-    ) -> dict[str, Any] | Iterator[str]:
+    ) -> dict[str, Any] | Iterator[str] | dict[str, list]:
         """
         Run the agent with the given prompt.
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
         :param stream: Whether to stream the response or return the full text
-        :return: A dictionary containing 'content', 'thinking', 'tool_use', and 'answer' or an iterator of response chunks if stream=True
+        :return: If stream=False: A dictionary containing 'content', 'thinking', 'tool_use', and 'answer'
+                If stream=True: A dictionary containing 'thoughts', 'answers', and 'tool_usages'
         """
         # If streaming is requested, use the stream method directly
         if stream:
-            return self.stream(prompt, max_iterations)
+            # Create collections for all data
+            all_thoughts = []
+            all_answers = []
+            all_tool_usages = []
+
+            # Process the stream and collect data
+            for chunk in self.stream(prompt, max_iterations):
+                # Check if this is our data collection chunk
+                if isinstance(chunk, dict):
+                    # Collect the data
+                    all_thoughts.extend(chunk["thoughts"])
+                    all_answers.extend(chunk["answers"])
+                    all_tool_usages.extend(chunk["tool_usages"])
+
+            # Return the collected data
+            return {
+                "thoughts": all_thoughts,
+                "answers": all_answers,
+                "tool_usages": all_tool_usages,
+            }
 
         response = self.invoke(prompt, max_iterations)
         return response
@@ -458,6 +609,31 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         current_tool_name = None
         current_tool_buffer = ""
 
+        # Create a stream handler for processing tagged content
+        def handle_tagged_content(tag_name: str, content: str) -> None:
+            """Handle content from tagged sections.
+
+            :param tag_name: Name of the tag (thinking, answer, etc)
+            :param content: Content within the tag
+            """
+            nonlocal iteration_response
+
+            # Add to iteration response
+            iteration_response += f"<{tag_name}>{content}</{tag_name}>"
+
+            # Call appropriate event handler
+            if tag_name == "thinking":
+                self._safe_event_handler(event_name="on_thinking", text=content)
+            elif tag_name == "answer":
+                self._safe_event_handler(event_name="on_answer", text=content)
+                # Store the content to be yielded later
+                nonlocal answer_content
+                answer_content = content
+
+        # Initialize answer_content to be used in the generator
+        answer_content = None
+        stream_handler = StreamHandler(event_callback=handle_tagged_content)
+
         # Stream and process the response
         for chunk in self.model.stream(prompt=prompt_obj):
             # Handle different chunk types
@@ -467,11 +643,11 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
                 # Handle text deltas
                 if "text" in delta:
                     text = delta["text"]
-                    iteration_response += text
-
-                    # Call the answer callback
-                    self._safe_event_handler(event_name="on_answer", text=text)
-                    yield text
+                    stream_handler.process_chunk(text)
+                    # If we have answer content, yield it and reset
+                    if answer_content is not None:
+                        yield answer_content
+                        answer_content = None
 
                 # Handle tool use input collection
                 elif (
@@ -523,8 +699,16 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
                     tool_used = True
 
                     # Process the tool call but don't yield the message
-                    self._process_tool_call(
+                    result = self._process_tool_call(
                         current_tool_name, current_tool_data["parameters"]
+                    )
+                    # Store tool usage
+                    stream_handler.tool_usages.append(
+                        {
+                            "name": current_tool_name,
+                            "parameters": current_tool_data["parameters"],
+                            "result": result,
+                        }
                     )
 
                     # Reset tool collection state
@@ -545,10 +729,22 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
                 if "metadata" in chunk:
                     logger.info(f"Response metadata: {chunk['metadata']}")
 
+                # Yield any remaining answer content
+                if answer_content is not None:
+                    yield answer_content
+                    answer_content = None
+
         # Return tool_used as a hidden value for the stream method
         if tool_used:
             # This is a special marker that will not be displayed but will be detected by the stream method
             yield "[[TOOL_USED]]"
+
+        # Return the collected data
+        yield {
+            "thoughts": stream_handler.thoughts,
+            "answers": stream_handler.answers,
+            "tool_usages": stream_handler.tool_usages,
+        }
 
     def stream(self, prompt: str, max_iterations: int = 10) -> Iterator[str]:
         """
@@ -565,6 +761,9 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         self.memory.add_message(role="user", content=prompt)
 
         iterations = 0
+        all_thoughts = []
+        all_answers = []
+        all_tool_usages = []
 
         while iterations < max_iterations:
             iterations += 1
@@ -586,6 +785,15 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
                     # Don't yield this special marker
                     continue
 
+                # Check if this is our data collection chunk
+                if isinstance(chunk, dict):
+                    # Collect the data
+                    all_thoughts.extend(chunk["thoughts"])
+                    all_answers.extend(chunk["answers"])
+                    all_tool_usages.extend(chunk["tool_usages"])
+                    # Don't yield the data collection chunk
+                    continue
+
                 # Yield all other chunks normally
                 yield chunk
 
@@ -599,6 +807,13 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
                     f"Reached maximum iterations ({max_iterations}). Stopping."
                 )
                 break
+
+        # Yield the final collected data
+        yield {
+            "thoughts": all_thoughts,
+            "answers": all_answers,
+            "tool_usages": all_tool_usages,
+        }
 
 
 if __name__ == "__main__":
@@ -725,76 +940,72 @@ if __name__ == "__main__":
     response = agent.run(prompt, stream=False)
 
     logger.critical(f"Answer: {response['answer']}")
-    # logger.info(f"Thinking: {response['thinking']}")
-    # logger.debug(f"Response: {response['content']}")
+    logger.info(f"Thinking: {response['thinking']}")
+    logger.debug(f"Response: {response['content']}")
 
     #############
     # Streaming #
     #############
 
-    # logger.info("\nExample 2: Using BedrockAgent with streaming:")
+    logger.info("\nExample 2: Using BedrockAgent with streaming:")
 
-    # # Create a new event handler for streaming
-    # class StreamingEventHandler:
-    #     """Event handler for managing agent event handlers with internal state."""
+    # Create a new event handler for streaming
+    class StreamingEventHandler:
+        """Event handler for managing agent event handlers with internal state."""
 
-    #     def __init__(self):
-    #         """Initialize the event handler with default state."""
-    #         self.last_output_was_tool_result = False
+        def __init__(self):
+            """Initialize the event handler with default state."""
+            self.last_output_was_tool_result = False
 
-    #     def on_tool_use(self, tool_name, parameters, result):
-    #         """Handle tool use events.
+        def on_tool_use(self, tool_name, parameters, result):
+            """Handle tool use events.
 
-    #         :param tool_name: Name of the tool being called
-    #         :param parameters: Parameters passed to the tool
-    #         :param result: Result returned by the tool
-    #         """
-    #         print(f"🔧 TOOL: {tool_name} with {parameters} -> {result}")
+            :param tool_name: Name of the tool being called
+            :param parameters: Parameters passed to the tool
+            :param result: Result returned by the tool
+            """
+            print(f"🔧 TOOL: {tool_name} with {parameters} -> {result}")
 
-    #     def on_thinking(self, text):
-    #         """Handle agent thinking events.
+        def on_thinking(self, text):
+            """Handle agent thinking events.
 
-    #         :param text: Text chunk produced by the agent
-    #         """
-    #         print(f"🧠 THINKING: {text}")
-    #         # Set flag to indicate we just had a tool result
-    #         self.last_output_was_tool_result = True
+            :param text: Text chunk produced by the agent
+            """
+            print(f"🧠 THINKING: {text}")
+            # Set flag to indicate we just had a tool result
+            self.last_output_was_tool_result = True
 
-    #     def on_answer(self, text):
-    #         """Handle agent response text.
+        def on_answer(self, text):
+            """Handle agent response text.
 
-    #         :param text: Text chunk produced by the agent
-    #         """
-    #         print(f"💬 ANSWER: {text}")
+            :param text: Text chunk produced by the agent
+            """
+            print(f"💬 ANSWER: {text}")
 
-    # # Create the event handler instance
-    # event_handler = StreamingEventHandler()
+    # Create the event handler instance
+    event_handler = StreamingEventHandler()
 
-    # # Create a new agent with streaming enabled
-    # agent = BedrockAgent(
-    #     identifier="WeatherAssistant",
-    #     model=Claude35Sonnet(),
-    #     description="An assistant that can provide weather information and perform temperature conversions",
-    #     tools=[get_weather, convert_temperature],
-    #     memory=FleetingMemory(),
-    #     log_agentic_response=False,  # Disable default logging since we're using callbacks
-    #     system_message="Answer like a pirate",
-    #     event_handlers={
-    #         "on_tool_use": event_handler.on_tool_use,
-    #         "on_thinking": event_handler.on_thinking,
-    #         "on_answer": event_handler.on_answer,
-    #     },
-    # )
+    # Create a new agent with streaming enabled
+    agent = BedrockAgent(
+        identifier="WeatherAssistant",
+        model=Claude35Sonnet(),
+        description="An assistant that can provide weather information and perform temperature conversions",
+        tools=[get_weather, convert_temperature],
+        memory=FleetingMemory(),
+        log_agentic_response=False,  # Disable default logging since we're using callbacks
+        system_message="Answer like a pirate",
+        event_handlers={
+            "on_tool_use": event_handler.on_tool_use,
+            "on_thinking": event_handler.on_thinking,
+            "on_answer": event_handler.on_answer,
+        },
+    )
 
-    # response = agent.run(prompt, stream=True)
+    # Use streaming mode
+    collected_data = agent.run(prompt, stream=True)
 
-    # # Run the agent with a prompt that requires multiple tool calls
-    # prompt = "What's the current weather in Tokyo and then convert the temperature to Celsius?"
-    # # prompt = "Hi, how are you?"
-    # print(f"\nUser question: {prompt}")
-
-    # # Use streaming mode
-    # for chunk in agent.run(prompt, stream=True):
-    #     # Chunks are already being handled by the on_answer callback
-    #     # This loop just ensures we process all chunks
-    #     pass
+    # Access the collected data
+    print("\nFinal Collected Data:")
+    print(f"Thoughts: {collected_data['thoughts']}")
+    print(f"Answers: {collected_data['answers']}")
+    print(f"Tool Usages: {collected_data['tool_usages']}")
