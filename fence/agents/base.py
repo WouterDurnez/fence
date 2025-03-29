@@ -3,7 +3,7 @@ Base Agent class
 """
 
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from enum import Enum
 
 from fence.links import logger as link_logger
@@ -26,7 +26,12 @@ class AgentLogType(Enum):
     TOOL_USE = "tool_use"
 
 
-class BaseAgent:
+####################
+# Base Agent class #
+####################
+
+
+class BaseAgent(ABC):
     """Base Agent class"""
 
     def __init__(
@@ -145,6 +150,7 @@ agent_description = """{self.description or self.__doc__}"""
             AgentLogType.DELEGATE: "🤝",
             AgentLogType.ANSWER: "🎯",
             AgentLogType.OBSERVATION: "🔍",
+            AgentLogType.TOOL_USE: "🔧",
         }
 
         tag = f"[{type.value}]"
