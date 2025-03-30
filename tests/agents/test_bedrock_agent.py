@@ -16,7 +16,7 @@ import pytest
 from pydantic import ValidationError
 
 from fence.agents.base import AgentLogType
-from fence.agents.bedrock import BedrockAgent, EventHandlers
+from fence.agents.bedrock import BedrockAgent, EventHandler
 from fence.memory.base import FleetingMemory
 from fence.models.base import LLM
 from fence.models.bedrock.base import BedrockTool
@@ -225,11 +225,16 @@ class TestBedrockAgent:
         """Test that the agent initializes correctly."""
         assert agent.identifier == "test_agent"
         assert agent.description == "A test agent"
-        expected_system_prefix = (
-            "You are a helpful assistant that can provide weather information"
-        )
-        assert expected_system_prefix in agent.memory.get_system_message()
+
+        # Check that system message contains the base system message
+        assert "You are a helpful assistant" in agent.memory.get_system_message()
+        assert "<thinking> tags" in agent.memory.get_system_message()
+        assert "<answer> tags" in agent.memory.get_system_message()
+
+        # Check that user-provided system message is included
         assert "You are a test assistant." in agent.memory.get_system_message()
+
+        # Check tools and event handlers
         assert hasattr(agent, "tools")
         assert len(agent.tools) == 0
         assert "on_tool_use" in agent.event_handlers
@@ -632,18 +637,32 @@ class TestBedrockAgent:
     def test_event_handlers_validation(self):
         """Test that EventHandlers validates callable handlers correctly."""
 
-        # Valid handler (callable)
-        def valid_handler(a, b, c):
-            return a + b + c
+        # Valid handler for tool_use (needs 3 params)
+        def valid_tool_use_handler(tool_name, parameters, result):
+            return tool_name
+
+        # Valid handler for thinking/answer (needs 1 param)
+        def valid_thinking_handler(text):
+            return text
+
+        # Invalid handler (insufficient params for tool_use)
+        def invalid_tool_use_handler(tool_name):
+            return tool_name
+
+        # Invalid handler (insufficient params for thinking)
+        def invalid_thinking_handler():
+            return "thinking"
 
         # Valid event handlers
-        event_handlers = EventHandlers(on_tool_use=valid_handler)
-        assert event_handlers.on_tool_use == valid_handler
+        event_handlers = EventHandler(on_tool_use=valid_tool_use_handler)
+        assert event_handlers.on_tool_use == valid_tool_use_handler
 
         # Valid list of handlers
-        event_handlers = EventHandlers(on_thinking=[valid_handler, valid_handler])
+        event_handlers = EventHandler(
+            on_thinking=[valid_thinking_handler, valid_thinking_handler]
+        )
         assert len(event_handlers.on_thinking) == 2
-        assert event_handlers.on_thinking[0] == valid_handler
+        assert event_handlers.on_thinking[0] == valid_thinking_handler
 
         # Test as_dict method
         handlers_dict = event_handlers.model_dump(exclude_none=True)
@@ -653,11 +672,19 @@ class TestBedrockAgent:
 
         # Invalid handler (not callable)
         with pytest.raises(ValidationError):
-            EventHandlers(on_tool_use="not_callable")
+            EventHandler(on_tool_use="not_callable")
 
         # Invalid handler in list
         with pytest.raises(ValidationError):
-            EventHandlers(on_thinking=[valid_handler, "not_callable"])
+            EventHandler(on_thinking=[valid_thinking_handler, "not_callable"])
+
+        # Invalid handler (insufficient params for tool_use)
+        with pytest.raises(ValidationError):
+            EventHandler(on_tool_use=invalid_tool_use_handler)
+
+        # Invalid handler (insufficient params for thinking)
+        with pytest.raises(ValidationError):
+            EventHandler(on_thinking=invalid_thinking_handler)
 
     def test_custom_event_handlers(self, agent):
         """Test that custom event handlers are properly set and called."""
@@ -684,7 +711,7 @@ class TestBedrockAgent:
             assert text == "answer"
 
         # Create EventHandlers instance
-        event_handlers = EventHandlers(
+        event_handlers = EventHandler(
             on_tool_use=on_tool_use, on_thinking=on_thinking, on_answer=on_answer
         )
 
@@ -797,7 +824,7 @@ class TestBedrockAgent:
             model=mock_llm,
             memory=memory,
             log_agentic_response=False,
-            event_handlers=EventHandlers(on_tool_use=on_tool_use),
+            event_handlers=EventHandler(on_tool_use=on_tool_use),
         )
 
         # Verify handler was set correctly
@@ -826,7 +853,7 @@ class TestBedrockAgent:
         agent = BedrockAgent(
             model=mock_llm,
             memory=FleetingMemory(),
-            event_handlers=EventHandlers(
+            event_handlers=EventHandler(
                 on_tool_use=track_tool_use,
                 on_thinking=track_thinking,
                 on_answer=track_answer,

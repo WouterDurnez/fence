@@ -267,7 +267,9 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         :return: completion text or full response object if full_response is True
         """
         try:
+
             # Call the Bedrock API
+            logger.debug(f"Invoking Bedrock model with params: {invoke_params}")
             response = self.client.converse(**invoke_params)
 
             # Extract and log metrics regardless of full_response setting

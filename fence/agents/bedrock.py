@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 HandlerType = Union[Callable, List[Callable]]
 
 
-class EventHandlers(BaseModel):
-    """Event handlers for the BedrockAgent.
+class EventHandler(BaseModel):
+    """Event handler for the BedrockAgent.
 
     :param on_tool_use: Called when the agent uses a tool
     :param on_thinking: Called when the agent is thinking
@@ -36,17 +36,43 @@ class EventHandlers(BaseModel):
     on_answer: HandlerType | None = None
 
     @field_validator("*", mode="before")
-    def validate_handlers(cls, value):
-        """Validate that handlers are callables or lists of callables."""
+    def validate_handlers(cls, value, info):
+        """Validate that handler functions are callables or lists of callables."""
         if value is None:
             return None
+
+        field_name = info.field_name
+
+        def validate_callable_signature(handler, field_name):
+            import inspect
+
+            # Check parameter count requirements by handler type
+            sig = inspect.signature(handler)
+            param_count = len(
+                [
+                    p
+                    for p in sig.parameters.values()
+                    if p.default == inspect.Parameter.empty
+                ]
+            )
+
+            if field_name == "on_tool_use" and param_count < 3:
+                raise ValueError(
+                    "on_tool_use handler must accept at least 3 parameters: tool_name, parameters, result"
+                )
+            elif field_name in ("on_thinking", "on_answer") and param_count < 1:
+                raise ValueError(
+                    f"{field_name} handler must accept at least 1 parameter: text"
+                )
 
         if isinstance(value, list):
             for handler in value:
                 if not callable(handler):
                     raise ValueError(f"Handler {handler} is not callable")
+                validate_callable_signature(handler, field_name)
             return value
         elif callable(value):
+            validate_callable_signature(value, field_name)
             return value
         else:
             raise ValueError(f"Handler {value} is not callable")
@@ -58,9 +84,7 @@ class BedrockAgent(BaseAgent):
     """
 
     _BASE_SYSTEM_MESSAGE = """
-You are a helpful assistant that can provide weather information and perform temperature conversions. Always start by planning your response in <thinking>...</thinking> tags. Return your final response in <answer>...</answer> tags.
-
-IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowledge or thank users for tool results. After a tool returns a result, immediately continue to the next logical step without any transition phrases like "Certainly", "Now", or "Thank you". You are allowed to think, using <thinking>...</thinking> tags. If the next step is to use another tool, immediately call that tool. If all tools have been used, immediately provide your final answer in the requested format without any introduction.
+You are a helpful assistant. You can think in <thinking> tags, and provide an answer in <answer> tags.
 """
 
     _THINKING_PATTERN = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
@@ -78,7 +102,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         are_you_serious: bool = False,
         tools: list[BaseTool] | None = None,
         system_message: str | None = None,
-        event_handlers: EventHandlers | dict[str, HandlerType] | None = None,
+        event_handlers: EventHandler | dict[str, HandlerType] | None = None,
     ):
         """
         Initialize the BedrockAgent object.
@@ -166,7 +190,7 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
             self.log(text, AgentLogType.ANSWER)
 
     def _set_event_handlers(
-        self, event_handlers: EventHandlers | dict[str, HandlerType] | None = None
+        self, event_handlers: EventHandler | dict[str, HandlerType] | None = None
     ) -> None:
         """Set up the event handlers. If `log_agentic_response` is True, include default handlers.
 
@@ -174,9 +198,9 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         """
 
         # If we have event handlers that are passed as a dictionary, validate them
-        if event_handlers is not None and not isinstance(event_handlers, EventHandlers):
+        if event_handlers is not None and not isinstance(event_handlers, EventHandler):
             try:
-                event_handlers = EventHandlers(**event_handlers)
+                event_handlers = EventHandler(**event_handlers)
             except Exception as e:
                 raise ValueError(f"Invalid event handlers: {e}")
 
@@ -243,14 +267,17 @@ IMPORTANT INSTRUCTION: You must be extremely direct and concise. Never acknowled
         """
         Register tools with the Bedrock model if supported.
         """
-        if not self.tools or not self.model:
-            return
 
         # Check if the model has the toolConfig attribute
         if not hasattr(self.model, "toolConfig"):
             logger.warning(
                 f"Model {self.model.__class__.__name__} does not support tool registration"
             )
+            return
+
+        # If no tools are provided, clear the toolConfig
+        if not self.tools:
+            self.model.toolConfig = None
             return
 
         # Convert BaseTool objects to BedrockTool format and collect them efficiently
@@ -1145,7 +1172,6 @@ if __name__ == "__main__":
     import json
 
     from fence.models.bedrock.claude import Claude35Sonnet
-    from fence.models.bedrock.nova import NovaPro
     from fence.tools.base import BaseTool, tool
     from fence.utils.logger import setup_logging
 
@@ -1203,13 +1229,14 @@ if __name__ == "__main__":
             return f"Invalid conversion: {from_unit} to {to_unit}"
 
     # Create a prompt that requires multiple tool calls
-    prompt = "What's the current weather in Tokyo and then convert the temperature to Celsius?"
+    prompt = "What's the value of the USD in EUR, today?"
 
     #################
     # Non-streaming #
     #################
 
     logger.info("\nExample 1: Using BedrockAgent with multiple tools:")
+    setup_logging(log_level="DEBUG", are_you_serious=False)
 
     # Define a event handler class to avoid using globals
     class DummyEventHandler:
@@ -1234,10 +1261,10 @@ if __name__ == "__main__":
         identifier="WeatherAssistant",
         model=Claude35Sonnet(),
         description="An assistant that can provide weather information and perform temperature conversions",
-        tools=[get_weather, convert_temperature],
+        # tools=[get_weather, convert_temperature],
         memory=FleetingMemory(),
         log_agentic_response=True,  # Disable default logging since we're using callbacks
-        system_message="Answer like a pirate",
+        system_message="Be very courteous.",
         event_handlers={
             "on_tool_use": event_handler.on_tool_use,
             "on_thinking": event_handler.on_thinking,
@@ -1255,21 +1282,70 @@ if __name__ == "__main__":
     # Streaming #
     #############
 
-    logger.info("\nExample 2: Using BedrockAgent with streaming:")
+    # logger.info("\nExample 2: Using BedrockAgent with streaming:")
 
-    # Create a new agent with streaming enabled
-    agent = BedrockAgent(
-        identifier="WeatherAssistant",
-        model=NovaPro(region="us-east-1"),
-        description="An assistant that can provide weather information and perform temperature conversions",
-        tools=[get_weather, convert_temperature],
-        memory=FleetingMemory(),
-        log_agentic_response=True,  # Disable default logging since we're using callbacks
-        system_message="Answer like a pirate",
+    # # Create a new agent with streaming enabled
+    # agent = BedrockAgent(
+    #     identifier="WeatherAssistant",
+    #     model=NovaPro(region="us-east-1"),
+    #     description="An assistant that can provide weather information and perform temperature conversions",
+    #     tools=[get_weather, convert_temperature],
+    #     memory=FleetingMemory(),
+    #     log_agentic_response=True,  # Disable default logging since we're using callbacks
+    #     system_message="Answer like a pirate",
+    # )
+
+    # # Use streaming mode
+    # collected_data = agent.run(prompt, stream=True)
+
+    # # Access the answer
+    # print(f"Answer: {collected_data['answer']}")
+
+    #########################
+    # Prompt model directly #
+    #########################
+
+    # Create a custom event handler
+    import random
+
+    from fence.agents.bedrock import EventHandler
+
+    def on_tool_use(tool_name, parameters, result):
+        """Handle tool use events."""
+        print(
+            f"SENDING TOOL USE TO SLACK: CALLED A TOOL: {tool_name} with {parameters} -> {result}"
+        )
+
+    def on_thinking(text):
+        """Handle agent thinking events."""
+        synonyms_for_thinking = [
+            "thinking",
+            "pondering",
+            "considering",
+            "evaluating",
+            "analyzing",
+            "reflecting",
+            "considering",
+            "evaluating",
+            "analyzing",
+            "reflecting",
+            "considering",
+            "evaluating",
+            "analyzing",
+            "reflecting",
+        ]
+        print(f"SENDING THINKING TO SLACK: *{random.choice(synonyms_for_thinking)}*")
+
+    def on_answer(text):
+        """Handle agent answer events."""
+        print(f"SENDING ANSWER TO SLACK: {text}")
+
+    event_handler = EventHandler(
+        on_tool_use=on_tool_use, on_thinking=on_thinking, on_answer=on_answer
     )
 
-    # Use streaming mode
-    collected_data = agent.run(prompt, stream=True)
+    # Create the agent
+    agent = BedrockAgent(model=Claude35Sonnet(), event_handlers=event_handler)
 
-    # Access the answer
-    print(f"Answer: {collected_data['answer']}")
+    # Run the agent
+    agent.run("What is the weather in New York, in Celsius?")
