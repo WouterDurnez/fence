@@ -8,6 +8,7 @@ This module contains tests for the BedrockAgent implementation, including:
 4. Response handling with various formats
 5. Stream and invoke methodologies
 6. Event handlers and callbacks
+7. Delegate functionality
 """
 
 from unittest.mock import Mock, patch
@@ -15,7 +16,7 @@ from unittest.mock import Mock, patch
 import pytest
 from pydantic import ValidationError
 
-from fence.agents.base import AgentLogType
+from fence.agents.base import AgentLogType, BaseAgent
 from fence.agents.bedrock import BedrockAgent, EventHandler
 from fence.memory.base import FleetingMemory
 from fence.models.base import LLM
@@ -171,6 +172,29 @@ class MockTool(BaseTool):
         }
 
 
+class MockDelegate(BaseAgent):
+    """Mock delegate agent for testing."""
+
+    def __init__(self, identifier="test_delegate", **kwargs):
+        """
+        Initialize the mock delegate.
+
+        :param identifier: The identifier for the delegate
+        :param kwargs: Additional parameters to pass to the parent class
+        """
+        super().__init__(identifier=identifier, **kwargs)
+        self.run_called = False
+        self.run_args = None
+        # Return value for run method
+        self.return_value = "Delegate result"
+
+    def run(self, prompt, max_iterations=None):
+        """Mock implementation of run method."""
+        self.run_called = True
+        self.run_args = prompt
+        return self.return_value
+
+
 class TestBedrockAgent:
     """Test suite for the BedrockAgent class."""
 
@@ -187,6 +211,11 @@ class TestBedrockAgent:
     def mock_tool(self):
         """Create a mock tool for testing."""
         return MockTool()
+
+    @pytest.fixture
+    def mock_delegate(self):
+        """Create a mock delegate for testing."""
+        return MockDelegate()
 
     @pytest.fixture
     def memory(self):
@@ -215,6 +244,18 @@ class TestBedrockAgent:
             memory=memory,
             system_message="You are a test assistant with tools.",
             tools=[mock_tool],
+        )
+
+    @pytest.fixture
+    def agent_with_delegates(self, mock_llm, memory, mock_delegate):
+        """Create a BedrockAgent instance with delegates."""
+        return BedrockAgent(
+            identifier="test_agent_with_delegates",
+            model=mock_llm,
+            description="A test agent with delegates",
+            memory=memory,
+            system_message="You are a test assistant with delegates.",
+            delegates=[mock_delegate],
         )
 
     # -------------------------------------------------------------------------
@@ -271,6 +312,20 @@ class TestBedrockAgent:
             mock_log.assert_called_once()
             assert mock_log.call_args[0][0] == "answer text"
             assert mock_log.call_args[0][1] == AgentLogType.ANSWER
+
+        # Test on_delegate before execution (result is None)
+        with patch.object(agent, "log") as mock_log:
+            agent._default_on_delegate("test_delegate", "test query", None)
+            mock_log.assert_called_once()
+            assert "Initiating delegation to test_delegate" in mock_log.call_args[0][0]
+            assert mock_log.call_args[0][1] == AgentLogType.DELEGATE
+
+        # Test on_delegate after execution (result is not None)
+        with patch.object(agent, "log") as mock_log:
+            agent._default_on_delegate("test_delegate", "test query", "delegate result")
+            mock_log.assert_called_once()
+            assert "Delegation to test_delegate concluded" in mock_log.call_args[0][0]
+            assert mock_log.call_args[0][1] == AgentLogType.DELEGATE
 
     def test_register_tools(self, agent, mock_tool):
         """Test tool registration."""
@@ -591,6 +646,9 @@ class TestBedrockAgent:
                         "result": "Sunny, 75°F",
                     },
                     "tool_results": ["[Tool Result] get_weather({}) -> Sunny, 75°F"],
+                    "delegate_used": False,  # Add support for delegate functionality
+                    "delegate_data": [],  # Add empty delegate data
+                    "events": [],  # Add empty events list
                 },
                 {
                     "content": "Final answer after tool call.",
@@ -599,6 +657,9 @@ class TestBedrockAgent:
                     "tool_used": False,
                     "tool_data": None,
                     "tool_results": [],
+                    "delegate_used": False,  # Add support for delegate functionality
+                    "delegate_data": [],  # Add empty delegate data
+                    "events": [],  # Add empty events list
                 },
             ]
 
@@ -611,6 +672,7 @@ class TestBedrockAgent:
             # Check the response structure
             assert "content" in response
             assert "tool_use" in response
+            assert "delegate_use" in response  # Check for delegate_use key
 
             # The content should include both responses
             assert "Final answer after tool call." in response["content"]
@@ -905,6 +967,299 @@ class TestBedrockAgent:
 
             assert len(answer_events) == 1
             assert answer_events[0]["text"] == "final answer"
+
+    def test_initialization_with_delegates(self, agent_with_delegates, mock_delegate):
+        """Test that the agent initializes correctly with delegates."""
+        # Check that the delegate is properly set up in the agent
+        assert len(agent_with_delegates.delegates) == 1
+        assert any(
+            d.identifier == "test_delegate" for d in agent_with_delegates.delegates
+        )
+        assert mock_delegate in agent_with_delegates.delegates
+
+        # Check that the system message includes delegation instructions
+        system_message = agent_with_delegates.memory.get_system_message()
+        assert "delegate" in system_message.lower()
+        assert "test_delegate" in system_message
+
+    def test_setup_delegates(self, agent, mock_delegate):
+        """Test the _setup_delegates method."""
+        # Test with a valid delegate
+        delegates = agent._setup_delegates([mock_delegate])
+        assert len(delegates) == 1
+        assert delegates[0].identifier == "test_delegate"
+
+        # Test with an invalid delegate (no identifier)
+        # Note: In the current implementation, BaseAgent initializes with a class name as identifier if None is provided
+        invalid_delegate = MockDelegate(identifier=None)
+        delegates = agent._setup_delegates([invalid_delegate])
+        # The delegate is still added but with class name as identifier
+        assert len(delegates) == 1
+        assert delegates[0].identifier == "MockDelegate"
+
+        # Test with mixed valid and invalid delegates
+        delegates = agent._setup_delegates([mock_delegate, invalid_delegate])
+        assert len(delegates) == 2
+        assert any(d.identifier == "test_delegate" for d in delegates)
+        assert any(d.identifier == "MockDelegate" for d in delegates)
+
+    def test_add_delegate(self, agent, mock_delegate):
+        """Test adding a delegate."""
+        # Verify no delegates initially
+        assert len(agent.delegates) == 0
+
+        # Add a delegate
+        agent.add_delegate(mock_delegate)
+
+        # Verify delegate was added
+        assert len(agent.delegates) == 1
+        assert agent.delegates[0].identifier == "test_delegate"
+        assert agent.delegates[0] == mock_delegate
+
+        # Verify system message was updated with delegate info
+        system_message = agent.memory.get_system_message()
+        assert "delegate" in system_message.lower()
+        assert "test_delegate" in system_message
+
+        # Test adding a delegate without identifier
+        # Note: In the current implementation, BaseAgent initializes with a class name as identifier if None is provided
+        invalid_delegate = MockDelegate(identifier=None)
+        agent.add_delegate(invalid_delegate)
+
+        # Both delegates should be present
+        assert len(agent.delegates) == 2
+        assert any(d.identifier == "MockDelegate" for d in agent.delegates)
+
+    def test_remove_delegate(self, agent_with_delegates):
+        """Test removing a delegate."""
+        # Verify delegate exists initially
+        assert len(agent_with_delegates.delegates) == 1
+        assert agent_with_delegates.delegates[0].identifier == "test_delegate"
+
+        # Remove the delegate
+        result = agent_with_delegates.remove_delegate("test_delegate")
+
+        # Verify delegate was removed
+        assert result is True
+        assert len(agent_with_delegates.delegates) == 0
+
+        # Verify system message was updated to no longer have delegate info
+        system_message = agent_with_delegates.memory.get_system_message()
+        assert "test_delegate" not in system_message
+
+        # Attempt to remove non-existent delegate
+        result = agent_with_delegates.remove_delegate("non_existent")
+        assert result is False
+
+    def test_parse_delegate_tag(self, agent):
+        """Test parsing delegate tag content."""
+        # Valid delegate tag format
+        agent_name, query = agent._parse_delegate_tag("test_delegate: Test query")
+        assert agent_name == "test_delegate"
+        assert query == "Test query"
+
+        # Invalid format (no colon)
+        agent_name, query = agent._parse_delegate_tag("Invalid delegate tag content")
+        assert agent_name is None
+        assert query == "Invalid delegate tag content"
+
+        # Extra colons in the query part
+        agent_name, query = agent._parse_delegate_tag(
+            "test_delegate: Query with: colons"
+        )
+        assert agent_name == "test_delegate"
+        assert query == "Query with: colons"
+
+        # Whitespace handling
+        agent_name, query = agent._parse_delegate_tag(
+            "  test_delegate  :  Query with whitespace  "
+        )
+        assert agent_name == "test_delegate"
+        assert query == "Query with whitespace"
+
+    def test_execute_delegate(self, agent_with_delegates, mock_delegate):
+        """Test executing a delegate."""
+        # Execute an existing delegate
+        result = agent_with_delegates._execute_delegate("test_delegate", "Test query")
+
+        # Verify the delegate was called correctly
+        assert mock_delegate.run_called
+        assert mock_delegate.run_args == "Test query"
+        assert result == "Delegate result"
+
+        # Check that a memory message was added for the delegate result
+        messages = agent_with_delegates.memory.get_messages()
+        assert any("Delegated to test_delegate" in msg.content for msg in messages)
+
+        # Test with non-existent delegate
+        result = agent_with_delegates._execute_delegate("non_existent", "Test query")
+        assert "not found" in result
+
+        # Test with delegate that raises an exception
+        mock_delegate.run = Mock(side_effect=Exception("Test error"))
+        result = agent_with_delegates._execute_delegate("test_delegate", "Test query")
+        assert "Error" in result
+
+        # Test the dictionary result handling
+        mock_delegate.run = Mock(
+            return_value={"answer": "Answer from dict", "metadata": "Extra info"}
+        )
+        result = agent_with_delegates._execute_delegate("test_delegate", "Test query")
+        assert result == "Answer from dict"
+
+    def test_custom_delegate_handler(self, agent):
+        """Test custom delegate event handler."""
+        delegate_events = []
+
+        def on_delegate(delegate_name, query, result):
+            nonlocal delegate_events
+            delegate_events.append((delegate_name, query, result))
+
+        # Set custom event handler
+        agent._set_event_handlers({"on_delegate": on_delegate})
+
+        # Test handler for initiation (result=None)
+        agent._safe_event_handler(
+            "on_delegate",
+            delegate_name="test_delegate",
+            query="Test query",
+            result=None,
+        )
+        assert len(delegate_events) == 1
+        assert delegate_events[0] == ("test_delegate", "Test query", None)
+
+        # Test handler for completion
+        agent._safe_event_handler(
+            "on_delegate",
+            delegate_name="test_delegate",
+            query="Test query",
+            result="Delegate result",
+        )
+        assert len(delegate_events) == 2
+        assert delegate_events[1] == ("test_delegate", "Test query", "Delegate result")
+
+    def test_process_content_with_delegates(self, agent_with_delegates, mock_delegate):
+        """Test processing content with delegate tags."""
+        # Reset delegate tracking
+        mock_delegate.run_called = False
+        mock_delegate.run_args = None
+
+        # Test content with thinking, answer, and delegate tags
+        content = "<thinking>I need to delegate this task</thinking> <delegate>test_delegate: Test query</delegate> <answer>Final answer after delegation</answer>"
+
+        # Process the content
+        thinking, answer, delegates = agent_with_delegates._process_content(content)
+
+        # Verify thinking and answer were extracted
+        assert len(thinking) == 1
+        assert thinking[0] == "I need to delegate this task"
+        assert len(answer) == 1
+        assert answer[0] == "Final answer after delegation"
+
+        # Verify delegate was executed
+        assert len(delegates) == 1
+        assert delegates[0][0] == "test_delegate"  # agent_name
+        assert delegates[0][1] == "Test query"  # query
+        assert delegates[0][2] == "Delegate result"  # result
+
+        # Verify delegate run was called
+        assert mock_delegate.run_called
+        assert mock_delegate.run_args == "Test query"
+
+        # Test with non-existent delegate
+        content = "<delegate>non_existent: Test query</delegate>"
+        _, _, delegates = agent_with_delegates._process_content(content)
+        assert len(delegates) == 1
+        assert "not found" in delegates[0][2]  # Error message in result
+
+        # Test with invalid delegate tag format (without colon)
+        # In actual implementation, this is handled by returning None for agent_name,
+        # which prevents delegate execution
+        content = "<delegate>Invalid delegate tag content</delegate>"
+        _, _, delegates = agent_with_delegates._process_content(content)
+        assert len(delegates) == 0  # No delegates are executed
+
+        # Test with empty content
+        thinking, answer, delegates = agent_with_delegates._process_content(
+            "No tags here"
+        )
+        assert len(thinking) == 0
+        assert len(answer) == 0
+        assert len(delegates) == 0
+
+    def test_invoke_with_delegation(self, agent_with_delegates, mock_delegate):
+        """Test invoking the agent with delegation."""
+        # Set up mock for _invoke_iteration to simulate delegation
+        with patch.object(
+            agent_with_delegates, "_invoke_iteration"
+        ) as mock_invoke_iter:
+            # Set up mock to return a response with delegation first, then a final response without delegation
+            # This ensures we break out of the loop after one iteration
+            mock_invoke_iter.side_effect = [
+                {
+                    "content": "<thinking>I'll delegate this</thinking> <delegate>test_delegate: Test query</delegate> <answer>Answer after delegation</answer>",
+                    "thinking": ["I'll delegate this"],
+                    "answer": ["Answer after delegation"],
+                    "tool_used": False,
+                    "tool_data": None,
+                    "tool_results": [],
+                    "delegate_used": True,
+                    "delegate_data": [
+                        ("test_delegate", "Test query", "Delegate result")
+                    ],
+                    "events": [
+                        {"type": "thinking", "content": "I'll delegate this"},
+                        {
+                            "type": "delegate_usage",
+                            "content": {
+                                "agent_name": "test_delegate",
+                                "query": "Test query",
+                                "result": "Delegate result",
+                            },
+                        },
+                        {"type": "answer", "content": "Answer after delegation"},
+                    ],
+                },
+                {
+                    "content": "Final answer without delegation",
+                    "thinking": [],
+                    "answer": ["Final answer without delegation"],
+                    "tool_used": False,
+                    "tool_data": None,
+                    "tool_results": [],
+                    "delegate_used": False,
+                    "delegate_data": [],
+                    "events": [],
+                },
+            ]
+
+            # Call invoke with max_iterations=2 to ensure we don't loop indefinitely
+            response = agent_with_delegates.invoke(
+                "Can you help with this?", max_iterations=2
+            )
+
+            # Verify our invoke iteration was called at most twice
+            assert mock_invoke_iter.call_count <= 2
+
+            # Verify the response contains delegation data
+            assert "delegate_use" in response
+            assert len(response["delegate_use"]) == 1
+            assert response["delegate_use"][0][0] == "test_delegate"
+            assert response["delegate_use"][0][1] == "Test query"
+            assert response["delegate_use"][0][2] == "Delegate result"
+
+            # Verify the response contains the full content
+            assert "delegate" in response["content"]
+            assert "Delegate result" in response["content"]
+
+            # Verify events were properly collected
+            assert "events" in response
+            # Check for the delegate_usage event
+            delegate_events = [
+                e for e in response["events"] if e["type"] == "delegate_usage"
+            ]
+            assert len(delegate_events) == 1
+            assert delegate_events[0]["content"]["agent_name"] == "test_delegate"
 
 
 if __name__ == "__main__":

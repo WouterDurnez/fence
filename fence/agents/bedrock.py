@@ -29,11 +29,13 @@ class EventHandler(BaseModel):
     :param on_tool_use: Called when the agent uses a tool
     :param on_thinking: Called when the agent is thinking
     :param on_answer: Called when the agent provides text answer chunks
+    :param on_delegate: Called when the agent delegates to another agent
     """
 
     on_tool_use: HandlerType | None = None
     on_thinking: HandlerType | None = None
     on_answer: HandlerType | None = None
+    on_delegate: HandlerType | None = None
 
     @field_validator("*", mode="before")
     def validate_handlers(cls, value, info):
@@ -84,11 +86,12 @@ class BedrockAgent(BaseAgent):
     """
 
     _BASE_SYSTEM_MESSAGE = """
-You are a helpful assistant. You can think in <thinking> tags, and provide an answer in <answer> tags.
+You are a helpful assistant. You can think in <thinking> tags, and provide an answer in <answer> tags. Try to always plan your next steps in <thinking> tags.
 """
 
     _THINKING_PATTERN = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
     _ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
+    _DELEGATE_PATTERN = re.compile(r"<delegate>(.*?)</delegate>", re.DOTALL)
 
     def __init__(
         self,
@@ -101,6 +104,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         log_agentic_response: bool = True,
         are_you_serious: bool = False,
         tools: list[BaseTool] | None = None,
+        delegates: list[BaseAgent] | None = None,
         system_message: str | None = None,
         event_handlers: EventHandler | dict[str, HandlerType] | None = None,
     ):
@@ -116,8 +120,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         :param log_agentic_response: A flag to determine if the agent's responses should be logged
         :param are_you_serious: A flag to determine if the log message should be printed in a frivolous manner
         :param tools: A list of tools to make available to the agent
+        :param delegates: A list of delegate agents available to the agent
         :param system_message: A system message to set for the agent
-        :param event_handlers: Event handlers for different agent events (on_tool_use, on_thinking, on_answer)
+        :param event_handlers: Event handlers for different agent events (on_tool_use, on_thinking, on_answer, on_delegate)
         """
 
         # We will need the full response to be set to True
@@ -135,24 +140,144 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         )
 
         # Set up the system message
-        if system_message:
-            # Combine with the default system message
-            self._system_message = f"{self._BASE_SYSTEM_MESSAGE}\n\n{system_message}"
-        else:
-            # Use just the default system message
-            self._system_message = self._BASE_SYSTEM_MESSAGE
+        self._system_message = self._BASE_SYSTEM_MESSAGE
 
-        # Set the system message in memory
-        self.memory.set_system_message(self._system_message)
+        # Store the user-provided system message for later rebuilds
+        self._user_system_message = system_message
 
         # Set the tools
         self.tools = tools or []
 
+        # Set the delegates as a list
+        self.delegates = self._setup_delegates(delegates or [])
+
         # Update with user-provided event handlers
         self._set_event_handlers(event_handlers)
 
+        # Add delegation options to system message if delegates are available
+        self._system_message = self._build_system_message(system_message)
+
+        # Set the system message in memory
+        self.memory.set_system_message(self._system_message)
+
         # Register tools with the model if supported
         self._register_tools()
+
+    def _build_system_message(self, user_system_message: str | None = None) -> str:
+        """Build the system message with delegation options based on available delegates.
+
+        :param user_system_message: Optional user-provided system message to append
+        :return: Complete system message including delegation options
+        """
+        system_message = self._BASE_SYSTEM_MESSAGE
+
+        # Add delegation instructions if delegates are available
+        if self.delegates:
+            delegate_info = "\nYou can also delegate to the following agents using <delegate>agent_name:query</delegate> tags:"
+
+            # Add information about each delegate
+            for delegate in self.delegates:
+                delegate_name = delegate.identifier
+                delegate_desc = delegate.description or "No description available"
+                delegate_info += f"\n- {delegate_name}: {delegate_desc}"
+
+            system_message += delegate_info
+
+        # Use the provided user_system_message or fall back to stored one
+        effective_user_message = (
+            user_system_message
+            if user_system_message is not None
+            else self._user_system_message
+        )
+
+        # Append user system message if available
+        if effective_user_message:
+            system_message += f"\n\n{effective_user_message}"
+
+        return system_message
+
+    def _setup_delegates(self, delegates: list[BaseAgent]) -> list[BaseAgent]:
+        """Set up delegate agents with environment variables.
+
+        :param delegates: List of delegate agents
+        :return: List of properly set up delegate agents
+        """
+        valid_delegates = []
+        for delegate in delegates:
+            identifier = delegate.identifier
+            if not identifier:
+                logger.warning(
+                    f"Delegate without identifier will be skipped: {delegate}"
+                )
+                continue
+
+            valid_delegates.append(delegate)
+            # Pass environment variables to delegate
+            delegate.environment.update(self.environment)
+
+        return valid_delegates
+
+    def update_delegates(self, delegates: list[BaseAgent]) -> None:
+        """Update the agent's delegates and refresh the system message.
+
+        :param delegates: New list of delegate agents to use
+        """
+        self.delegates = self._setup_delegates(delegates)
+
+        # Rebuild and update the system message with new delegate information
+        self._system_message = self._build_system_message()
+        self.memory.set_system_message(self._system_message)
+
+        delegate_names = [delegate.identifier for delegate in self.delegates]
+        logger.info(f"Updated delegates: {delegate_names}")
+
+    def add_delegate(self, delegate: BaseAgent) -> None:
+        """Add a single delegate to the agent and update the system message.
+
+        :param delegate: Delegate agent to add
+        """
+        if not delegate.identifier:
+            logger.warning("Cannot add delegate without identifier")
+            return
+
+        # Skip if delegate with same identifier already exists
+        if any(d.identifier == delegate.identifier for d in self.delegates):
+            logger.warning(
+                f"Delegate with identifier {delegate.identifier} already exists"
+            )
+            return
+
+        # Pass environment variables to delegate
+        delegate.environment.update(self.environment)
+
+        # Add the delegate to our collection
+        self.delegates.append(delegate)
+
+        # Rebuild and update the system message
+        self._system_message = self._build_system_message()
+        self.memory.set_system_message(self._system_message)
+
+        logger.info(f"Added delegate: {delegate.identifier}")
+
+    def remove_delegate(self, identifier: str) -> bool:
+        """Remove a delegate by identifier and update the system message.
+
+        :param identifier: Identifier of the delegate to remove
+        :return: True if delegate was removed, False if not found
+        """
+        for i, delegate in enumerate(self.delegates):
+            if delegate.identifier == identifier:
+                self.delegates.pop(i)
+
+                # Rebuild and update the system message
+                self._system_message = self._build_system_message()
+                self.memory.set_system_message(self._system_message)
+
+                logger.info(f"Removed delegate: {identifier}")
+                return True
+
+        logger.warning(f"Delegate not found: {identifier}")
+        return False
 
     #############
     # Callbacks #
@@ -172,6 +297,29 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 f"Using tool [{tool_name}] with parameters: {parameters} -> {result}",
                 AgentLogType.TOOL_USE,
             )
+
+    def _default_on_delegate(
+        self, delegate_name: str, query: str, result: str | None
+    ) -> None:
+        """Default callback for delegate use.
+
+        :param delegate_name: The name of the delegate agent
+        :param query: The query passed to the delegate
+        :param result: The result returned by the delegate (None if before execution)
+        """
+        if self.log_agentic_response:
+            if result is None:
+                # Delegation initiation
+                self.log(
+                    f'Initiating delegation to {delegate_name} with query: "{query}"',
+                    AgentLogType.DELEGATE,
+                )
+            else:
+                # Delegation completion - include delegate name but focus on result
+                self.log(
+                    f"Delegation to {delegate_name} concluded: {result}",
+                    AgentLogType.DELEGATE,
+                )
 
     def _default_on_thinking(self, text: str) -> None:
         """Default callback for agent thinking.
@@ -213,6 +361,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 "on_tool_use": [self._default_on_tool_use],
                 "on_thinking": [self._default_on_thinking],
                 "on_answer": [self._default_on_answer],
+                "on_delegate": [self._default_on_delegate],
             }
 
         # Process and merge user-provided handlers if any
@@ -235,6 +384,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
     def _safe_event_handler(self, event_name: str, *args, **kwargs) -> None:
         """Safely dispatch one or more event handlers, handling cases where the event handler isn't assigned.
 
+        For delegation events, this method can handle both the initiation phase (when result=None)
+        and the completion phase (when result contains the actual response).
+
         :param event_name: The name of the event to invoke
         :param args: Positional arguments to pass to the event handler
         :param kwargs: Keyword arguments to pass to the event handler
@@ -246,6 +398,49 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         # Convert single handler to list for uniform processing
         if not isinstance(handlers, list):
             handlers = [handlers]
+
+        # Store event in chronological order for tracking
+        if hasattr(self, "_current_iteration_events"):
+            # For thinking events
+            if event_name == "on_thinking" and "text" in kwargs:
+                self._current_iteration_events.append(
+                    {"type": "thinking", "content": kwargs["text"]}
+                )
+            # For answer events
+            elif event_name == "on_answer" and "text" in kwargs:
+                self._current_iteration_events.append(
+                    {"type": "answer", "content": kwargs["text"]}
+                )
+            # For delegate events
+            elif (
+                event_name == "on_delegate"
+                and "delegate_name" in kwargs
+                and "query" in kwargs
+            ):
+                delegate_event = {
+                    "type": "delegate_usage",
+                    "content": {
+                        "agent_name": kwargs["delegate_name"],
+                        "query": kwargs["query"],
+                    },
+                }
+                # Include result if available (completion phase)
+                if "result" in kwargs and kwargs["result"] is not None:
+                    delegate_event["content"]["result"] = kwargs["result"]
+                self._current_iteration_events.append(delegate_event)
+            # For tool events
+            elif event_name == "on_tool_use" and "tool_name" in kwargs:
+                tool_event = {
+                    "type": "tool_usage",
+                    "content": {
+                        "name": kwargs["tool_name"],
+                        "parameters": kwargs.get("parameters", {}),
+                    },
+                }
+                # Include result if available
+                if "result" in kwargs:
+                    tool_event["content"]["result"] = kwargs["result"]
+                self._current_iteration_events.append(tool_event)
 
         # Execute each handler safely
         for handler in handlers:
@@ -452,29 +647,159 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             }
         )
 
-    def _process_content(self, content: str) -> tuple[list[str], list[str]]:
+    def _execute_delegate(self, delegate_name: str, query: str) -> str:
+        """Execute a delegate agent with the given query.
+
+        :param delegate_name: Name of the delegate agent to call
+        :param query: Query to pass to the delegate
+        :return: The result from the delegate agent
         """
-        Process the content to extract thinking and answer parts.
+        # Find the delegate by name
+        delegate = next(
+            (d for d in self.delegates if d.identifier == delegate_name), None
+        )
+
+        if not delegate:
+            error_msg = f"Delegate agent '{delegate_name}' not found"
+            logger.warning(error_msg)
+            return error_msg
+
+        try:
+            # Call the delegation event handler BEFORE executing the delegate
+            self._safe_event_handler(
+                event_name="on_delegate",
+                delegate_name=delegate_name,
+                query=query,
+                result=None,  # Result not available yet
+            )
+
+            # Call the delegate agent
+            delegate_result = delegate.run(query)
+
+            # Extract just the answer if it's a dict with multiple fields
+            if isinstance(delegate_result, dict) and "answer" in delegate_result:
+                result = delegate_result["answer"]
+            else:
+                result = str(delegate_result)
+
+            # Update the event handler with the result
+            self._safe_event_handler(
+                event_name="on_delegate",
+                delegate_name=delegate_name,
+                query=query,
+                result=result,
+            )
+
+            # Add delegate result to memory as user message
+            self.memory.add_message(
+                role="user",
+                content=f"[SYSTEM DIRECTIVE] Delegated to {delegate_name} with query: {query}. Result: {result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool or delegate, or (2) If all necessary operations have been completed, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+            )
+
+            return result
+        except Exception as e:
+            error_msg = f"Error executing delegate '{delegate_name}': {str(e)}"
+            logger.warning(error_msg)
+
+            # Call the observation callback with the error
+            self._safe_event_handler(
+                event_name="on_delegate",
+                delegate_name=delegate_name,
+                query=query,
+                result=f"Error: {str(e)}",
+            )
+
+            # Add error to memory
+            self.memory.add_message(
+                role="user",
+                content=f"Delegation to '{delegate_name}' failed with error: {str(e)}. Please try a different approach.",
+            )
+
+            return error_msg
+
+    def _parse_delegate_tag(self, delegate_content: str) -> tuple[str, str]:
+        """Parse the delegate tag content to extract agent name and query.
+
+        :param delegate_content: Content of the delegate tag
+        :return: Tuple of (agent_name, query)
+        """
+        # Expected format is "agent_name:query"
+        parts = delegate_content.split(":", 1)
+        if len(parts) != 2:
+            return None, delegate_content
+
+        agent_name = parts[0].strip()
+        query = parts[1].strip()
+        return agent_name, query
+
+    def _process_content(
+        self, content: str
+    ) -> tuple[list[str], list[str], list[tuple[str, str, str]]]:
+        """
+        Process the content to extract thinking, answer, and delegate parts in the order they appear.
 
         :param content: The content to process
-        :return: A tuple of (thinking, answer)
+        :return: A tuple of (thinking, answer, delegates)
         """
+        # Initialize return values
+        thoughts = []
+        answers = []
+        delegates = []
 
-        # Find all thinking and answer tags
-        thoughts = [match.strip() for match in self._THINKING_PATTERN.findall(content)]
-        answers = [match.strip() for match in self._ANSWER_PATTERN.findall(content)]
+        # Process all tags in chronological order
+        remaining_content = content
+        while remaining_content:
+            # Find positions of the next tag of each type
+            thinking_match = self._THINKING_PATTERN.search(remaining_content)
+            answer_match = self._ANSWER_PATTERN.search(remaining_content)
+            delegate_match = self._DELEGATE_PATTERN.search(remaining_content)
 
-        # Trigger callbacks for thinking and answer
-        for thought in thoughts:
-            self._safe_event_handler(event_name="on_thinking", text=thought)
-        for answer in answers:
-            self._safe_event_handler(event_name="on_answer", text=answer)
+            thinking_pos = thinking_match.start() if thinking_match else float("inf")
+            answer_pos = answer_match.start() if answer_match else float("inf")
+            delegate_pos = delegate_match.start() if delegate_match else float("inf")
+
+            # Find the earliest tag
+            next_tag_type = None
+            if thinking_pos < answer_pos and thinking_pos < delegate_pos:
+                next_tag_type = "thinking"
+                match = thinking_match
+            elif answer_pos < thinking_pos and answer_pos < delegate_pos:
+                next_tag_type = "answer"
+                match = answer_match
+            elif delegate_pos < thinking_pos and delegate_pos < answer_pos:
+                next_tag_type = "delegate"
+                match = delegate_match
+            else:
+                # No more tags found
+                break
+
+            # Process the found tag
+            if next_tag_type == "thinking":
+                thought = match.group(1).strip()
+                thoughts.append(thought)
+                # Trigger callback for thinking
+                self._safe_event_handler(event_name="on_thinking", text=thought)
+            elif next_tag_type == "answer":
+                answer = match.group(1).strip()
+                answers.append(answer)
+                # Trigger callback for answer
+                self._safe_event_handler(event_name="on_answer", text=answer)
+            elif next_tag_type == "delegate":
+                delegate_content = match.group(1).strip()
+                agent_name, query = self._parse_delegate_tag(delegate_content)
+                if agent_name:
+                    # Execute the delegate and get result
+                    result = self._execute_delegate(agent_name, query)
+                    delegates.append((agent_name, query, result))
+
+            # Move past the processed tag
+            remaining_content = remaining_content[match.end() :]
 
         # If no matches are found, return empty lists
-        if not thoughts and not answers:
-            return [], []
+        if not thoughts and not answers and not delegates:
+            return [], [], []
 
-        return thoughts, answers
+        return thoughts, answers, delegates
 
     ##########
     # Invoke #
@@ -493,17 +818,24 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         # Debug log the response structure
         logger.debug(f"Response structure: {response}")
 
-        # Extract content depending on response structure
+        # Initialize return values
         content = ""
+        thinking = []
+        answer = []
         tool_used = False
         tool_name = None
         tool_parameters = {}
         tool_results = []
         tool_data = None
+        delegate_used = False
+        delegate_data = []
+
+        # Initialize the chronological event list for this iteration
+        # This will be populated by _safe_event_handler
+        self._current_iteration_events = []
 
         # Process Bedrock response structure
         if isinstance(response, dict):
-
             # Get the message from the response
             if "output" in response and "message" in response["output"]:
                 message = response["output"]["message"]
@@ -540,8 +872,14 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         # Handle content
         if content:
-            # Process the content to handle thinking/answer tags
-            thinking, answer = self._process_content(content)
+            # Process the content to handle thinking/answer/delegate tags
+            # The _process_content method will call event handlers which populate _current_iteration_events
+            thinking, answer, delegates = self._process_content(content)
+
+            # Check if delegation occurred
+            if delegates:
+                delegate_used = True
+                delegate_data = delegates
 
             # Add assistant's response to memory
             self.memory.add_message(role="assistant", content=content)
@@ -570,7 +908,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                         "result": tool_result,
                     }
 
-                    # Call the observation callback
+                    # Call the observation callback which will add to _current_iteration_events
                     self._safe_event_handler(
                         event_name="on_tool_use",
                         tool_name=tool_name,
@@ -593,7 +931,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                         "result": f"Error: {error_msg}",
                     }
 
-                    # Log the error
+                    # Log the error which will add to _current_iteration_events
                     self._safe_event_handler(
                         event_name="on_tool_use",
                         tool_name=tool_name,
@@ -616,7 +954,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                     "result": "Error: Tool not found",
                 }
 
-                # Log the error
+                # Log the error which will add to _current_iteration_events
                 self._safe_event_handler(
                     event_name="on_tool_use",
                     tool_name=tool_name,
@@ -629,6 +967,10 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                     content=f"Tool '{tool_name}' not found. Please try a different approach.",
                 )
 
+            # Store the events list before returning
+            iteration_events = self._current_iteration_events
+            delattr(self, "_current_iteration_events")
+
             return {
                 "content": content,
                 "thinking": thinking,
@@ -636,7 +978,14 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 "tool_used": True,
                 "tool_data": tool_data,
                 "tool_results": tool_results,
+                "delegate_used": delegate_used,
+                "delegate_data": delegate_data,
+                "events": iteration_events,
             }
+
+        # Store the events list before returning
+        iteration_events = self._current_iteration_events
+        delattr(self, "_current_iteration_events")
 
         return {
             "content": content,
@@ -645,6 +994,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             "tool_used": False,
             "tool_data": None,
             "tool_results": tool_results,
+            "delegate_used": delegate_used,
+            "delegate_data": delegate_data,
+            "events": iteration_events,
         }
 
     def invoke(self, prompt: str, max_iterations: int = 10) -> dict[str, Any]:
@@ -653,7 +1005,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
-        :return: A dictionary containing 'content', 'thinking', 'tool_use', and 'answer'
+        :return: A dictionary containing 'content', 'thinking', 'tool_use', 'delegate_use', 'answer', and 'events'
         """
         # Clear or reset the agent's memory context
         self._flush_memory()
@@ -665,7 +1017,10 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         all_thinking = []
         all_answer = []
         all_tool_use = []
+        all_delegate_use = []
         full_response = []
+        # Initialize a list to store all events in chronological order
+        all_events = []
         iterations = 0
 
         while iterations < max_iterations:
@@ -692,6 +1047,14 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             if response["tool_used"] and response["tool_data"]:
                 all_tool_use.append(response["tool_data"])
 
+            # Add structured delegate data if delegation occurred
+            if response["delegate_used"] and response["delegate_data"]:
+                all_delegate_use.extend(response["delegate_data"])
+
+            # Collect events from this iteration in chronological order
+            if "events" in response:
+                all_events.extend(response["events"])
+
             # Add to the full response if we got a valid response
             if response:
                 full_response.append(response["content"])
@@ -700,8 +1063,21 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             if response["tool_results"]:
                 full_response.extend(response["tool_results"])
 
-            # If no tool was used, we're done
-            if not response["tool_used"]:
+            # Add delegate results to the full response
+            if response["delegate_used"] and response["delegate_data"]:
+                for agent_name, query, result in response["delegate_data"]:
+                    full_response.append(
+                        f"[Delegate Result] {agent_name}({query}) -> {result}"
+                    )
+
+            # If no tool was used and no delegation occurred, we're done
+            # IMPORTANT: This check needs to ensure we don't exit early during delegation chains
+            if not response["tool_used"] and not response["delegate_used"]:
+                # Check if we have an answer before breaking
+                if not all_answer:
+                    # If we've delegated but don't yet have an answer, continue for at least one more iteration
+                    if all_delegate_use and iterations < max_iterations:
+                        continue
                 break
 
             # Increment iteration counter
@@ -721,7 +1097,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             "content": "\n\n".join(full_response),
             "thinking": all_thinking,
             "tool_use": all_tool_use,
+            "delegate_use": all_delegate_use,
             "answer": answer,
+            "events": all_events,
         }
 
     ###########
@@ -884,6 +1262,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         - content: Full combined response text
         - thinking: List of all thinking entries
         - tool_use: List of dicts with tool name, parameters, and result
+        - delegate_use: List of tuples with agent name, query, and result
         - answer: Final answer text (combined)
 
         :param events: The events to unpack
@@ -893,6 +1272,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         thinking = []
         answer_chunks = []
         tool_use = []
+        delegate_use = []
         full_content = []
 
         # Process each event
@@ -922,6 +1302,21 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 tool_message = f"[Tool Result] {tool_data['name']}({tool_data['parameters']}) -> {tool_data['result']}"
                 full_content.append(tool_message)
 
+            elif event_type == "delegate_usage":
+                # Extract delegate data and add to delegate_use list
+                delegate_data = event["content"]
+                delegate_use.append(
+                    (
+                        delegate_data["agent_name"],
+                        delegate_data["query"],
+                        delegate_data["result"],
+                    )
+                )
+
+                # Add formatted delegate usage to full content
+                delegate_message = f"[Delegate Result] {delegate_data['agent_name']}({delegate_data['query']}) -> {delegate_data['result']}"
+                full_content.append(delegate_message)
+
         # Combine answer chunks into a single answer
         answer = "".join(answer_chunks) if answer_chunks else None
 
@@ -930,6 +1325,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             "content": "\n\n".join(full_content),
             "thinking": thinking,
             "tool_use": tool_use,
+            "delegate_use": delegate_use,
             "answer": answer,
             "events": events,
         }
@@ -948,6 +1344,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         # Track the response for this iteration
         iteration_response = ""
         tool_used = False
+        delegate_used = False
 
         # State tracking for tool use - initialize only what's needed
         current_tool_data = {}
@@ -959,10 +1356,10 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         def handle_tagged_content(tag_name: str, content: str) -> None:
             """Handle content from tagged sections.
 
-            :param tag_name: Name of the tag (thinking, answer, etc)
+            :param tag_name: Name of the tag (thinking, answer, delegate, etc)
             :param content: Content within the tag
             """
-            nonlocal iteration_response
+            nonlocal iteration_response, delegate_used
 
             # Add to iteration response
             iteration_response += f"<{tag_name}>{content}</{tag_name}>"
@@ -975,6 +1372,22 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 # Store the content to be yielded later
                 nonlocal answer_content
                 answer_content = content
+            elif tag_name == "delegate":
+                delegate_used = True
+                agent_name, query = self._parse_delegate_tag(content)
+                if agent_name:
+                    result = self._execute_delegate(agent_name, query)
+                    # Store the delegate event
+                    stream_handler.events.append(
+                        {
+                            "type": "delegate_usage",
+                            "content": {
+                                "agent_name": agent_name,
+                                "query": query,
+                                "result": result,
+                            },
+                        }
+                    )
 
         # Initialize answer_content to be used in the generator
         answer_content = None
@@ -1050,7 +1463,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             # Handle message end
             elif "messageStop" in chunk:
                 # Message is complete, add the final response to memory if it wasn't a tool call
-                if iteration_response and not tool_used:
+                if iteration_response and not tool_used and not delegate_used:
                     self.memory.add_message(
                         role="assistant", content=iteration_response
                     )
@@ -1064,10 +1477,13 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                     yield answer_content
                     answer_content = None
 
-        # Return tool_used as a hidden value for the stream method
+        # Return tool_used or delegate_used as a hidden value for the stream method
         if tool_used:
             # This is a special marker that will not be displayed but will be detected by the stream method
             yield "[[TOOL_USED]]"
+        elif delegate_used:
+            # This is a special marker for delegation
+            yield "[[DELEGATE_USED]]"
 
         # Return the collected data
         yield {
@@ -1090,6 +1506,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         iterations = 0
         all_events = []
+        # Track delegation and answer tracking
+        has_answer = False
+        has_delegated = False
 
         while iterations < max_iterations:
             iterations += 1
@@ -1101,8 +1520,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             # Prep messages for the model
             prompt_obj = Messages(system=system, messages=messages)
 
-            # Stream and process the response, tracking if a tool was used
+            # Stream and process the response, tracking if a tool or delegate was used
             tool_used = False
+            delegate_used = False
 
             for chunk in self._stream_iteration(prompt_obj):
                 # Check if this is our special marker for tool usage
@@ -1110,19 +1530,35 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                     tool_used = True
                     # Don't yield this special marker
                     continue
+                # Check if this is our special marker for delegate usage
+                elif chunk == "[[DELEGATE_USED]]":
+                    delegate_used = True
+                    has_delegated = True
+                    # Don't yield this special marker
+                    continue
 
                 # Check if this is our data collection chunk
                 if isinstance(chunk, dict):
                     # Collect the events
                     all_events.extend(chunk["events"])
+
+                    # Check if any of the events are answer events
+                    for event in chunk.get("events", []):
+                        if event["type"] == "answer" and event["content"]:
+                            has_answer = True
+
                     # Don't yield the data collection chunk
                     continue
 
                 # Yield all other chunks normally
                 yield chunk
 
-            # If no tool was used in this iteration, we're done
-            if not tool_used:
+            # If no tool was used and no delegation occurred, we're done
+            # IMPORTANT: This check needs to ensure we don't exit early during delegation chains
+            if not tool_used and not delegate_used:
+                # If we've delegated but don't yet have an answer, continue for at least one more iteration
+                if has_delegated and not has_answer and iterations < max_iterations:
+                    continue
                 break
 
             # If we've hit max iterations, exit
@@ -1146,7 +1582,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
         :param stream: Whether to stream the response or return the full text
-        :return: If stream=False: A dictionary containing 'content', 'thinking', 'tool_use', and 'answer'
+        :return: If stream=False: A dictionary containing 'content', 'thinking', 'tool_use', 'delegate_use', 'answer', and 'events'
                 If stream=True: A dictionary containing 'events' in chronological order
         """
         # If streaming is requested, use the stream method directly
@@ -1166,6 +1602,22 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         response = self.invoke(prompt, max_iterations)
         return response
+
+    def update_user_system_message(self, new_system_message: str | None) -> None:
+        """Update the user-provided portion of the system message.
+
+        :param new_system_message: New system message text, or None to clear it
+        """
+        self._user_system_message = new_system_message
+
+        # Rebuild system message with the new user component
+        self._system_message = self._build_system_message()
+        self.memory.set_system_message(self._system_message)
+
+        if new_system_message:
+            logger.info("Updated user system message")
+        else:
+            logger.info("Cleared user system message")
 
 
 if __name__ == "__main__":
@@ -1235,53 +1687,53 @@ if __name__ == "__main__":
     # Non-streaming #
     #################
 
-    logger.info("\nExample 1: Using BedrockAgent with multiple tools:")
-    setup_logging(log_level="DEBUG", are_you_serious=False)
+    # # Example 1: Using BedrockAgent with multiple tools
+    # logger.info("\nExample 1: Using BedrockAgent with multiple tools:")
+    # setup_logging(log_level="DEBUG", are_you_serious=False)
 
-    # Define a event handler class to avoid using globals
-    class DummyEventHandler:
-        """Event handler for managing agent event handlers with internal state."""
+    # # Define a event handler class to avoid using globals
+    # class DummyEventHandler:
+    #     """Event handler for managing agent event handlers with internal state."""
 
-        def on_tool_use(self, tool_name, parameters, result):
-            """Handle tool use events."""
-            print(f"🔧 TOOL: {tool_name} with {parameters} -> {result}")
+    #     def on_tool_use(self, tool_name, parameters, result):
+    #         """Handle tool use events."""
+    #         print(f"🔧 TOOL: {tool_name} with {parameters} -> {result}")
 
-        def on_thinking(self, text):
-            """Handle agent thinking events."""
-            print(f"🧠 THINKING: {text}")
+    #     def on_thinking(self, text):
+    #         """Handle agent thinking events."""
+    #         print(f"🧠 THINKING: {text}")
 
-        def on_answer(self, text):
-            print(f"💬 ANSWER: {text}")
+    #     def on_answer(self, text):
+    #         print(f"💬 ANSWER: {text}")
 
-    # Create the event handler instance
-    event_handler = DummyEventHandler()
+    # # Create the event handler instance
+    # event_handler = DummyEventHandler()
 
-    # Example 3: Using BedrockAgent with multiple tools
-    agent = BedrockAgent(
-        identifier="WeatherAssistant",
-        model=Claude35Sonnet(),
-        description="An assistant that can provide weather information and perform temperature conversions",
-        # tools=[get_weather, convert_temperature],
-        memory=FleetingMemory(),
-        log_agentic_response=True,  # Disable default logging since we're using callbacks
-        system_message="Be very courteous.",
-        event_handlers={
-            "on_tool_use": event_handler.on_tool_use,
-            "on_thinking": event_handler.on_thinking,
-            "on_answer": event_handler.on_answer,
-        },
-    )
+    # agent = BedrockAgent(
+    #     identifier="WeatherAssistant",
+    #     model=Claude35Sonnet(),
+    #     description="An assistant that can provide weather information and perform temperature conversions",
+    #     tools=[get_weather, convert_temperature],
+    #     memory=FleetingMemory(),
+    #     log_agentic_response=True,
+    #     system_message="Be very courteous.",
+    #     event_handlers={
+    #         "on_tool_use": event_handler.on_tool_use,
+    #         "on_thinking": event_handler.on_thinking,
+    #         "on_answer": event_handler.on_answer,
+    #     },
+    # )
 
-    response = agent.run(prompt, stream=False)
+    # response = agent.run(prompt, stream=False)
 
-    from pprint import pprint
-
-    pprint(response)
+    # from pprint import pprint
+    # pprint(response)
 
     #############
     # Streaming #
     #############
 
+    # # Example 2: Using BedrockAgent with streaming
     # logger.info("\nExample 2: Using BedrockAgent with streaming:")
 
     # # Create a new agent with streaming enabled
@@ -1291,7 +1743,7 @@ if __name__ == "__main__":
     #     description="An assistant that can provide weather information and perform temperature conversions",
     #     tools=[get_weather, convert_temperature],
     #     memory=FleetingMemory(),
-    #     log_agentic_response=True,  # Disable default logging since we're using callbacks
+    #     log_agentic_response=True,
     #     system_message="Answer like a pirate",
     # )
 
@@ -1305,47 +1757,89 @@ if __name__ == "__main__":
     # Prompt model directly #
     #########################
 
-    # Create a custom event handler
-    import random
+    # # Example 3: Custom event handler
+    # import random
+    # from fence.agents.bedrock import EventHandler
 
-    from fence.agents.bedrock import EventHandler
+    # def on_tool_use(tool_name, parameters, result):
+    #     """Handle tool use events."""
+    #     print(
+    #         f"SENDING TOOL USE TO SLACK: CALLED A TOOL: {tool_name} with {parameters} -> {result}"
+    #     )
 
-    def on_tool_use(tool_name, parameters, result):
-        """Handle tool use events."""
-        print(
-            f"SENDING TOOL USE TO SLACK: CALLED A TOOL: {tool_name} with {parameters} -> {result}"
-        )
+    # def on_thinking(text):
+    #     """Handle agent thinking events."""
+    #     synonyms_for_thinking = [
+    #         "thinking",
+    #         "pondering",
+    #         "considering",
+    #         "evaluating",
+    #         "analyzing",
+    #         "reflecting",
+    #     ]
+    #     print(f"SENDING THINKING TO SLACK: *{random.choice(synonyms_for_thinking)}*")
 
-    def on_thinking(text):
-        """Handle agent thinking events."""
-        synonyms_for_thinking = [
-            "thinking",
-            "pondering",
-            "considering",
-            "evaluating",
-            "analyzing",
-            "reflecting",
-            "considering",
-            "evaluating",
-            "analyzing",
-            "reflecting",
-            "considering",
-            "evaluating",
-            "analyzing",
-            "reflecting",
-        ]
-        print(f"SENDING THINKING TO SLACK: *{random.choice(synonyms_for_thinking)}*")
+    # def on_answer(text):
+    #     """Handle agent answer events."""
+    #     print(f"SENDING ANSWER TO SLACK: {text}")
 
-    def on_answer(text):
-        """Handle agent answer events."""
-        print(f"SENDING ANSWER TO SLACK: {text}")
+    # event_handler = EventHandler(
+    #     on_tool_use=on_tool_use, on_thinking=on_thinking, on_answer=on_answer
+    # )
 
-    event_handler = EventHandler(
-        on_tool_use=on_tool_use, on_thinking=on_thinking, on_answer=on_answer
+    # # Create the agent
+    # agent = BedrockAgent(model=Claude35Sonnet(), event_handlers=event_handler)
+
+    # # Run the agent
+    # agent.run("What is the weather in New York, in Celsius?")
+
+    #########################
+    # Agent Delegation Demo #
+    #########################
+
+    logger.info("\nExample 4: Using BedrockAgent with dynamic delegation:")
+    setup_logging(log_level="INFO", are_you_serious=False)
+
+    # Define event handler for delegation events
+
+    # Create a parent agent initially without delegates
+    parent_agent = BedrockAgent(
+        identifier="ParentAgent",
+        model=Claude35Sonnet(),
+        description="A parent agent that can delegate tasks to specialist agents",
+        memory=FleetingMemory(),
+        log_agentic_response=True,
+        system_message="You are a helpful assistant that loves to collaborate with specialists.",
     )
 
-    # Create the agent
-    agent = BedrockAgent(model=Claude35Sonnet(), event_handlers=event_handler)
+    # Create specialist weather agent with tools
+    weather_specialist = BedrockAgent(
+        identifier="WeatherSpecialist",
+        model=Claude35Sonnet(),
+        description="A specialist agent for weather information and temperature conversions",
+        tools=[get_weather, convert_temperature],
+        memory=FleetingMemory(),
+        log_agentic_response=True,
+        system_message="You are a weather expert. Provide precise and accurate weather information.",
+    )
 
-    # Run the agent
-    agent.run("What is the weather in New York, in Celsius?")
+    # Create math specialist agent
+    math_specialist = BedrockAgent(
+        identifier="MathSpecialist",
+        model=Claude35Sonnet(),
+        description="A specialist agent for complex mathematical calculations",
+        memory=FleetingMemory(),
+        log_agentic_response=True,
+        system_message="You are a math expert. Solve math problems with careful step-by-step work.",
+    )
+
+    # Add delegates
+    parent_agent.add_delegate(weather_specialist)
+    parent_agent.add_delegate(math_specialist)
+
+    # Run with a different query that could use either delegate
+    print("\nRunning agent with math and weather query:")
+    result = parent_agent.run(
+        "If it's 75°F in New York and 68°F in London, what's the square root of the average temperature in Celsius?"
+    )
+    print(f"Answer: {result['answer']}")
