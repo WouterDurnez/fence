@@ -20,7 +20,7 @@ link_logger.setLevel("INFO")
 class AgentLogType(Enum):
     THOUGHT = "thought"
     ACTION = "action"
-    DELEGATE = "delegate"
+    DELEGATION = "delegation"
     ANSWER = "answer"
     OBSERVATION = "observation"
     TOOL_USE = "tool_use"
@@ -137,7 +137,7 @@ agent_description = """{self.description or self.__doc__}"""
         colors = {
             AgentLogType.THOUGHT: "\033[94m",  # Blue
             AgentLogType.ACTION: "\033[92m",  # Green
-            AgentLogType.DELEGATE: "\033[93m",  # Yellow
+            AgentLogType.DELEGATION: "\033[93m",  # Yellow
             AgentLogType.ANSWER: "\033[91m",  # Red
             AgentLogType.OBSERVATION: "\033[95m",  # Purple
             AgentLogType.TOOL_USE: "\033[38;5;208m",  # Cyan
@@ -147,7 +147,7 @@ agent_description = """{self.description or self.__doc__}"""
         emojis = {
             AgentLogType.THOUGHT: "💭",
             AgentLogType.ACTION: "🛠️",
-            AgentLogType.DELEGATE: "🤝",
+            AgentLogType.DELEGATION: "🤝",
             AgentLogType.ANSWER: "🎯",
             AgentLogType.OBSERVATION: "🔍",
             AgentLogType.TOOL_USE: "🔧",

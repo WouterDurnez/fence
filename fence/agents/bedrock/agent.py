@@ -10,6 +10,16 @@ from typing import Any, Callable, Generator, Iterator, List, Union
 from pydantic import BaseModel, field_validator
 
 from fence.agents.base import AgentLogType, BaseAgent
+from fence.agents.bedrock.models import (
+    AgentEvent,
+    AgentResponse,
+    AnswerEvent,
+    DelegateData,
+    DelegateEvent,
+    ThinkingEvent,
+    ToolUseData,
+    ToolUseEvent,
+)
 from fence.memory.base import BaseMemory, FleetingMemory
 from fence.models.base import LLM
 from fence.models.bedrock.base import BedrockTool, BedrockToolConfig
@@ -48,7 +58,6 @@ class EventHandler(BaseModel):
         def validate_callable_signature(handler, field_name):
             import inspect
 
-            # Check parameter count requirements by handler type
             sig = inspect.signature(handler)
             param_count = len(
                 [
@@ -58,13 +67,17 @@ class EventHandler(BaseModel):
                 ]
             )
 
-            if field_name == "on_tool_use" and param_count < 3:
+            param_requirements = {
+                "on_tool_use": 3,
+                "on_thinking": 1,
+                "on_answer": 1,
+                "on_delegate": 3,
+            }
+
+            min_params = param_requirements.get(field_name, 0)
+            if param_count < min_params:
                 raise ValueError(
-                    "on_tool_use handler must accept at least 3 parameters: tool_name, parameters, result"
-                )
-            elif field_name in ("on_thinking", "on_answer") and param_count < 1:
-                raise ValueError(
-                    f"{field_name} handler must accept at least 1 parameter: text"
+                    f"{field_name} handler must accept at least {min_params} parameters"
                 )
 
         if isinstance(value, list):
@@ -108,8 +121,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         system_message: str | None = None,
         event_handlers: EventHandler | dict[str, HandlerType] | None = None,
     ):
-        """
-        Initialize the BedrockAgent object.
+        """Initialize the BedrockAgent object.
 
         :param identifier: An identifier for the agent
         :param model: A Bedrock LLM model object
@@ -122,11 +134,11 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         :param tools: A list of tools to make available to the agent
         :param delegates: A list of delegate agents available to the agent
         :param system_message: A system message to set for the agent
-        :param event_handlers: Event handlers for different agent events (on_tool_use, on_thinking, on_answer, on_delegate)
+        :param event_handlers: Event handlers for different agent events
         """
-
-        # We will need the full response to be set to True
-        model.full_response = True
+        # Set full_response to True for proper response handling
+        if model:
+            model.full_response = True
 
         super().__init__(
             identifier=identifier,
@@ -139,34 +151,24 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             are_you_serious=are_you_serious,
         )
 
-        # Set up the system message
-        self._system_message = self._BASE_SYSTEM_MESSAGE
-
-        # Store the user-provided system message for later rebuilds
+        # Store core configuration
         self._user_system_message = system_message
-
-        # Set the tools
         self.tools = tools or []
+        self.delegates = delegates or []
 
-        # Set the delegates as a list
-        self.delegates = self._setup_delegates(delegates or [])
-
-        # Update with user-provided event handlers
+        # Set up event handlers
         self._set_event_handlers(event_handlers)
 
-        # Add delegation options to system message if delegates are available
-        self._system_message = self._build_system_message(system_message)
-
-        # Set the system message in memory
+        # Build and set the system message
+        self._system_message = self._build_system_message()
         self.memory.set_system_message(self._system_message)
 
         # Register tools with the model if supported
         self._register_tools()
 
-    def _build_system_message(self, user_system_message: str | None = None) -> str:
+    def _build_system_message(self) -> str:
         """Build the system message with delegation options based on available delegates.
 
-        :param user_system_message: Optional user-provided system message to append
         :return: Complete system message including delegation options
         """
         system_message = self._BASE_SYSTEM_MESSAGE
@@ -183,39 +185,11 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
             system_message += delegate_info
 
-        # Use the provided user_system_message or fall back to stored one
-        effective_user_message = (
-            user_system_message
-            if user_system_message is not None
-            else self._user_system_message
-        )
-
         # Append user system message if available
-        if effective_user_message:
-            system_message += f"\n\n{effective_user_message}"
+        if self._user_system_message:
+            system_message += f"\n\n{self._user_system_message}"
 
         return system_message
-
-    def _setup_delegates(self, delegates: list[BaseAgent]) -> list[BaseAgent]:
-        """Set up delegate agents with environment variables.
-
-        :param delegates: List of delegate agents
-        :return: List of properly set up delegate agents
-        """
-        valid_delegates = []
-        for delegate in delegates:
-            identifier = delegate.identifier
-            if not identifier:
-                logger.warning(
-                    f"Delegate without identifier will be skipped: {delegate}"
-                )
-                continue
-
-            valid_delegates.append(delegate)
-            # Pass environment variables to delegate
-            delegate.environment.update(self.environment)
-
-        return valid_delegates
 
     def update_delegates(self, delegates: list[BaseAgent]) -> None:
         """Update the agent's delegates and refresh the system message.
@@ -228,8 +202,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         self._system_message = self._build_system_message()
         self.memory.set_system_message(self._system_message)
 
-        delegate_names = [delegate.identifier for delegate in self.delegates]
-        logger.info(f"Updated delegates: {delegate_names}")
+        logger.info(f"Updated delegates: {[d.identifier for d in self.delegates]}")
 
     def add_delegate(self, delegate: BaseAgent) -> None:
         """Add a single delegate to the agent and update the system message.
@@ -249,11 +222,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         # Pass environment variables to delegate
         delegate.environment.update(self.environment)
-
-        # Add the delegate to our collection
         self.delegates.append(delegate)
 
-        # Rebuild and update the system message
+        # Update system message
         self._system_message = self._build_system_message()
         self.memory.set_system_message(self._system_message)
 
@@ -269,7 +240,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             if delegate.identifier == identifier:
                 self.delegates.pop(i)
 
-                # Rebuild and update the system message
+                # Update system message
                 self._system_message = self._build_system_message()
                 self.memory.set_system_message(self._system_message)
 
@@ -299,27 +270,32 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             )
 
     def _default_on_delegate(
-        self, delegate_name: str, query: str, result: str | None
+        self,
+        delegate_name: str,
+        query: str,
+        answer: str | None,
+        events: list[AgentEvent] | None = None,
     ) -> None:
         """Default callback for delegate use.
 
         :param delegate_name: The name of the delegate agent
         :param query: The query passed to the delegate
-        :param result: The result returned by the delegate (None if before execution)
+        :param answer: The answer returned by the delegate (None if before execution)
+        :param events: List of events from the delegate agent (only available on completion)
         """
-        if self.log_agentic_response:
-            if result is None:
-                # Delegation initiation
-                self.log(
-                    f'Initiating delegation to {delegate_name} with query: "{query}"',
-                    AgentLogType.DELEGATE,
-                )
-            else:
-                # Delegation completion - include delegate name but focus on result
-                self.log(
-                    f"Delegation to {delegate_name} concluded: {result}",
-                    AgentLogType.DELEGATE,
-                )
+        if not self.log_agentic_response:
+            return
+
+        if answer is None:
+            self.log(
+                f'Initiating delegation to {delegate_name} with query: "{query}"',
+                AgentLogType.DELEGATION,
+            )
+        else:
+            self.log(
+                f"Delegation to {delegate_name} concluded: {answer}",
+                AgentLogType.DELEGATION,
+            )
 
     def _default_on_thinking(self, text: str) -> None:
         """Default callback for agent thinking.
@@ -344,18 +320,15 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         :param event_handlers: Event handlers config for different agent events
         """
-
-        # If we have event handlers that are passed as a dictionary, validate them
+        # Convert dict to EventHandler if needed
         if event_handlers is not None and not isinstance(event_handlers, EventHandler):
             try:
                 event_handlers = EventHandler(**event_handlers)
             except Exception as e:
                 raise ValueError(f"Invalid event handlers: {e}")
 
-        # Start with empty set of handlers
+        # Initialize handlers with defaults if logging enabled
         self.event_handlers = {}
-
-        # Add default handlers if logging is enabled
         if self.log_agentic_response:
             self.event_handlers = {
                 "on_tool_use": [self._default_on_tool_use],
@@ -364,28 +337,21 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 "on_delegate": [self._default_on_delegate],
             }
 
-        # Process and merge user-provided handlers if any
+        # Merge user-provided handlers
         if event_handlers:
-            # Convert to dict for processing
             handlers_dict = event_handlers.model_dump(exclude_none=True)
             for event_name, handler in handlers_dict.items():
+                handlers_to_add = (
+                    [handler] if not isinstance(handler, list) else handler
+                )
+
                 if event_name in self.event_handlers:
-                    # Convert handler to list if it's not already
-                    handlers_to_add = (
-                        [handler] if not isinstance(handler, list) else handler
-                    )
                     self.event_handlers[event_name].extend(handlers_to_add)
                 else:
-                    # For new event types, just use the provided handler(s)
-                    self.event_handlers[event_name] = (
-                        handler if isinstance(handler, list) else [handler]
-                    )
+                    self.event_handlers[event_name] = handlers_to_add
 
     def _safe_event_handler(self, event_name: str, *args, **kwargs) -> None:
-        """Safely dispatch one or more event handlers, handling cases where the event handler isn't assigned.
-
-        For delegation events, this method can handle both the initiation phase (when result=None)
-        and the completion phase (when result contains the actual response).
+        """Safely dispatch event handlers, handling cases where the handler isn't assigned.
 
         :param event_name: The name of the event to invoke
         :param args: Positional arguments to pass to the event handler
@@ -396,51 +362,12 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             return
 
         # Convert single handler to list for uniform processing
-        if not isinstance(handlers, list):
-            handlers = [handlers]
+        handlers = [handlers] if not isinstance(handlers, list) else handlers
 
-        # Store event in chronological order for tracking
-        if hasattr(self, "_current_iteration_events"):
-            # For thinking events
-            if event_name == "on_thinking" and "text" in kwargs:
-                self._current_iteration_events.append(
-                    {"type": "thinking", "content": kwargs["text"]}
-                )
-            # For answer events
-            elif event_name == "on_answer" and "text" in kwargs:
-                self._current_iteration_events.append(
-                    {"type": "answer", "content": kwargs["text"]}
-                )
-            # For delegate events
-            elif (
-                event_name == "on_delegate"
-                and "delegate_name" in kwargs
-                and "query" in kwargs
-            ):
-                delegate_event = {
-                    "type": "delegate_usage",
-                    "content": {
-                        "agent_name": kwargs["delegate_name"],
-                        "query": kwargs["query"],
-                    },
-                }
-                # Include result if available (completion phase)
-                if "result" in kwargs and kwargs["result"] is not None:
-                    delegate_event["content"]["result"] = kwargs["result"]
-                self._current_iteration_events.append(delegate_event)
-            # For tool events
-            elif event_name == "on_tool_use" and "tool_name" in kwargs:
-                tool_event = {
-                    "type": "tool_usage",
-                    "content": {
-                        "name": kwargs["tool_name"],
-                        "parameters": kwargs.get("parameters", {}),
-                    },
-                }
-                # Include result if available
-                if "result" in kwargs:
-                    tool_event["content"]["result"] = kwargs["result"]
-                self._current_iteration_events.append(tool_event)
+        # Create and store event in chronological order for tracking
+        event = self._create_event(event_name, **kwargs)
+        if event:
+            self._record_event(event)
 
         # Execute each handler safely
         for handler in handlers:
@@ -452,30 +379,80 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 handler(*args, **kwargs)
             except Exception as e:
                 logger.warning(f"Error in {event_name} event handler: {e}")
-                # Continue execution even if event handler fails
+
+    def _create_event(self, event_name: str, **kwargs) -> AgentEvent | None:
+        """Create an AgentEvent from the event name and kwargs.
+
+        :param event_name: Name of the event
+        :param kwargs: Event data parameters
+        :return: Created AgentEvent or None if event should not be recorded
+        """
+        # For thinking events
+        if event_name == "on_thinking" and "text" in kwargs:
+            return ThinkingEvent(content=kwargs["text"])
+
+        # For answer events
+        elif event_name == "on_answer" and "text" in kwargs:
+            return AnswerEvent(content=kwargs["text"])
+
+        # For delegate events - only record on completion
+        elif (
+            event_name == "on_delegate"
+            and "delegate_name" in kwargs
+            and "query" in kwargs
+        ):
+            # Only create event if we have an answer (completion phase)
+            if "answer" in kwargs and kwargs["answer"] is not None:
+                return DelegateEvent(
+                    content=DelegateData(
+                        agent_name=kwargs["delegate_name"],
+                        query=kwargs["query"],
+                        answer=kwargs["answer"],
+                        events=kwargs.get("events", []),
+                    )
+                )
+
+        # For tool events
+        elif event_name == "on_tool_use" and "tool_name" in kwargs:
+            return ToolUseEvent(
+                content=ToolUseData(
+                    name=kwargs["tool_name"],
+                    parameters=kwargs.get("parameters", {}),
+                    result=kwargs.get("result"),
+                )
+            )
+
+        return None
+
+    def _record_event(self, event: AgentEvent) -> None:
+        """Record an AgentEvent in chronological order.
+
+        :param event: The AgentEvent to record
+        """
+        if not hasattr(self, "_current_iteration_events"):
+            return
+
+        self._current_iteration_events.append(event.model_dump())
 
     ###########
     # Helpers #
     ###########
 
     def _register_tools(self):
-        """
-        Register tools with the Bedrock model if supported.
-        """
-
-        # Check if the model has the toolConfig attribute
+        """Register tools with the Bedrock model if supported."""
+        # Check if model supports tool registration
         if not hasattr(self.model, "toolConfig"):
             logger.warning(
                 f"Model {self.model.__class__.__name__} does not support tool registration"
             )
             return
 
-        # If no tools are provided, clear the toolConfig
+        # If no tools, clear the toolConfig
         if not self.tools:
             self.model.toolConfig = None
             return
 
-        # Convert BaseTool objects to BedrockTool format and collect them efficiently
+        # Convert BaseTool objects to BedrockTool format
         bedrock_tools = [
             BedrockTool(**tool.model_dump_bedrock_converse()) for tool in self.tools
         ]
@@ -484,9 +461,19 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         self.model.toolConfig = BedrockToolConfig(tools=bedrock_tools)
         logger.info(f"Registered {len(bedrock_tools)} tools with Bedrock model")
 
-    def _process_tool_call(self, tool_name: str, tool_parameters: dict) -> str:
+    def _find_tool(self, tool_name: str) -> BaseTool | None:
+        """Find a tool by name.
+
+        :param tool_name: Name of the tool to find
+        :return: The tool if found, None otherwise
         """
-        Process a single tool call.
+        for tool in self.tools:
+            if tool.get_tool_name() == tool_name:
+                return tool
+        return None
+
+    def _process_tool_call(self, tool_name: str, tool_parameters: dict) -> str:
+        """Process a single tool call.
 
         :param tool_name: Name of the tool to call
         :param tool_parameters: Parameters to pass to the tool
@@ -501,17 +488,6 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         except Exception as e:
             return self._handle_tool_error(tool_name, str(e))
 
-    def _find_tool(self, tool_name: str) -> BaseTool | None:
-        """Find a tool by name.
-
-        :param tool_name: Name of the tool to find
-        :return: The tool if found, None otherwise
-        """
-        for tool in self.tools:
-            if tool.get_tool_name() == tool_name:
-                return tool
-        return None
-
     def _execute_tool(self, tool: BaseTool, parameters: dict) -> str:
         """Execute a tool with the given parameters.
 
@@ -519,28 +495,24 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         :param parameters: Parameters to pass to the tool
         :return: The formatted tool result message
         """
+        tool_name = tool.get_tool_name()
         tool_result = tool.run(environment=self.environment, **parameters)
 
-        # Call the observation callback
+        # Call the tool use callback
         self._safe_event_handler(
             event_name="on_tool_use",
-            tool_name=tool.get_tool_name(),
+            tool_name=tool_name,
             parameters=parameters,
             result=tool_result,
         )
 
-        # Create tool message for logs
-        tool_result_message = (
-            f"[Tool Result] {tool.get_tool_name()}({parameters}) -> {tool_result}"
-        )
-
-        # Add tool result to memory as user message
+        # Add tool result to memory
         self.memory.add_message(
             role="user",
-            content=f"[SYSTEM DIRECTIVE] The {tool.get_tool_name()} returned: {tool_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+            content=f"[SYSTEM DIRECTIVE] The {tool_name} returned: {tool_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
         )
 
-        return tool_result_message
+        return f"[Tool Result] {tool_name}({parameters}) -> {tool_result}"
 
     def _handle_tool_error(self, tool_name: str, error: str) -> str:
         """Handle a tool execution error.
@@ -551,7 +523,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         """
         error_msg = f"[Tool Error: {tool_name}] {error}"
 
-        # Log the error using the observation callback
+        # Log the error
         self._safe_event_handler(
             event_name="on_tool_use",
             tool_name=tool_name,
@@ -577,55 +549,56 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         if not tool_data.get("toolName") or not tool_data.get("parameters"):
             return
 
+        tool_name = tool_data["toolName"]
+        tool_params = tool_data["parameters"]
+
         # Find the tool by name
-        tool = self._find_tool(tool_data["toolName"])
+        tool = self._find_tool(tool_name)
         raw_result = None
 
         if not tool:
-            raw_result = f"Error: Tool {tool_data['toolName']} not found"
+            raw_result = f"Error: Tool {tool_name} not found"
 
-            # Call the observation callback with the error
+            # Report error
             self._safe_event_handler(
                 event_name="on_tool_use",
-                tool_name=tool_data["toolName"],
-                parameters=tool_data["parameters"],
+                tool_name=tool_name,
+                parameters=tool_params,
                 result=raw_result,
             )
 
             # Add error to memory
             self.memory.add_message(
                 role="user",
-                content=f"Tool '{tool_data['toolName']}' not found. Please try a different approach.",
+                content=f"Tool '{tool_name}' not found. Please try a different approach.",
             )
         else:
             try:
-                # Execute the tool directly to get the raw result
-                raw_result = tool.run(
-                    environment=self.environment, **tool_data["parameters"]
-                )
+                # Execute the tool directly
+                raw_result = tool.run(environment=self.environment, **tool_params)
 
-                # Call the observation callback with the raw result
+                # Report success
                 self._safe_event_handler(
                     event_name="on_tool_use",
-                    tool_name=tool_data["toolName"],
-                    parameters=tool_data["parameters"],
+                    tool_name=tool_name,
+                    parameters=tool_params,
                     result=raw_result,
                 )
 
-                # Add tool result to memory as user message
+                # Add result to memory
                 self.memory.add_message(
                     role="user",
-                    content=f"[SYSTEM DIRECTIVE] The {tool_data['toolName']} returned: {raw_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+                    content=f"[SYSTEM DIRECTIVE] The {tool_name} returned: {raw_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
                 )
             except Exception as e:
                 error_msg = str(e)
                 raw_result = f"Error: {error_msg}"
 
-                # Log the error using the observation callback
+                # Report error
                 self._safe_event_handler(
                     event_name="on_tool_use",
-                    tool_name=tool_data["toolName"],
-                    parameters=tool_data["parameters"],
+                    tool_name=tool_name,
+                    parameters=tool_params,
                     result=raw_result,
                 )
 
@@ -635,17 +608,30 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                     content=f"Your tool call resulted in an error: {error_msg}. Please try a different approach.",
                 )
 
-        # Store tool usage as an event with the raw result
+        # Store tool usage as an event
         stream_handler.events.append(
             {
-                "type": "tool_usage",
+                "type": "tool_use",
                 "content": {
-                    "name": tool_data["toolName"],
-                    "parameters": tool_data["parameters"],
-                    "result": raw_result,  # Store the raw result
+                    "name": tool_name,
+                    "parameters": tool_params,
+                    "result": raw_result,
                 },
             }
         )
+
+    def _parse_delegate_tag(self, delegate_content: str) -> tuple[str, str]:
+        """Parse the delegate tag content to extract agent name and query.
+
+        :param delegate_content: Content of the delegate tag
+        :return: Tuple of (agent_name, query)
+        """
+        # Expected format is "agent_name:query"
+        parts = delegate_content.split(":", 1)
+        if len(parts) != 2:
+            return None, delegate_content
+
+        return parts[0].strip(), parts[1].strip()
 
     def _execute_delegate(self, delegate_name: str, query: str) -> str:
         """Execute a delegate agent with the given query.
@@ -665,48 +651,48 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             return error_msg
 
         try:
-            # Call the delegation event handler BEFORE executing the delegate
+            # Notify before execution
             self._safe_event_handler(
                 event_name="on_delegate",
                 delegate_name=delegate_name,
                 query=query,
-                result=None,  # Result not available yet
+                answer=None,
             )
 
-            # Call the delegate agent
+            # Execute delegate
             delegate_result = delegate.run(query)
 
-            # Extract just the answer if it's a dict with multiple fields
-            if isinstance(delegate_result, dict) and "answer" in delegate_result:
-                result = delegate_result["answer"]
-            else:
-                result = str(delegate_result)
+            # Extract answer and events
+            answer = delegate_result.answer
+            delegate_events = delegate_result.events
 
-            # Update the event handler with the result
+            # Notify after execution with result
             self._safe_event_handler(
                 event_name="on_delegate",
                 delegate_name=delegate_name,
                 query=query,
-                result=result,
+                answer=answer,
+                events=delegate_events,
             )
 
-            # Add delegate result to memory as user message
+            # Add result to memory
             self.memory.add_message(
                 role="user",
-                content=f"[SYSTEM DIRECTIVE] Delegated to {delegate_name} with query: {query}. Result: {result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool or delegate, or (2) If all necessary operations have been completed, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+                content=f"[SYSTEM DIRECTIVE] Delegated to {delegate_name} with query: {query}. Result: {answer}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool or delegate, or (2) If all necessary operations have been completed, provide your final answer. Think back to the original user prompt and use that to guide your response.",
             )
 
-            return result
+            return answer
         except Exception as e:
             error_msg = f"Error executing delegate '{delegate_name}': {str(e)}"
             logger.warning(error_msg)
 
-            # Call the observation callback with the error
+            # Report error
             self._safe_event_handler(
                 event_name="on_delegate",
                 delegate_name=delegate_name,
                 query=query,
-                result=f"Error: {str(e)}",
+                answer=f"Error: {str(e)}",
+                events=[],
             )
 
             # Add error to memory
@@ -717,36 +703,19 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
             return error_msg
 
-    def _parse_delegate_tag(self, delegate_content: str) -> tuple[str, str]:
-        """Parse the delegate tag content to extract agent name and query.
-
-        :param delegate_content: Content of the delegate tag
-        :return: Tuple of (agent_name, query)
-        """
-        # Expected format is "agent_name:query"
-        parts = delegate_content.split(":", 1)
-        if len(parts) != 2:
-            return None, delegate_content
-
-        agent_name = parts[0].strip()
-        query = parts[1].strip()
-        return agent_name, query
-
     def _process_content(
         self, content: str
     ) -> tuple[list[str], list[str], list[tuple[str, str, str]]]:
-        """
-        Process the content to extract thinking, answer, and delegate parts in the order they appear.
+        """Process the content to extract thinking, answer, and delegate parts in chronological order.
 
         :param content: The content to process
         :return: A tuple of (thinking, answer, delegates)
         """
-        # Initialize return values
         thoughts = []
         answers = []
         delegates = []
 
-        # Process all tags in chronological order
+        # Process all tags in order of appearance
         remaining_content = content
         while remaining_content:
             # Find positions of the next tag of each type
@@ -754,11 +723,12 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             answer_match = self._ANSWER_PATTERN.search(remaining_content)
             delegate_match = self._DELEGATE_PATTERN.search(remaining_content)
 
+            # Find earliest tag position or use infinity if not found
             thinking_pos = thinking_match.start() if thinking_match else float("inf")
             answer_pos = answer_match.start() if answer_match else float("inf")
             delegate_pos = delegate_match.start() if delegate_match else float("inf")
 
-            # Find the earliest tag
+            # Find earliest tag type
             next_tag_type = None
             if thinking_pos < answer_pos and thinking_pos < delegate_pos:
                 next_tag_type = "thinking"
@@ -777,27 +747,23 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             if next_tag_type == "thinking":
                 thought = match.group(1).strip()
                 thoughts.append(thought)
-                # Trigger callback for thinking
                 self._safe_event_handler(event_name="on_thinking", text=thought)
+
             elif next_tag_type == "answer":
                 answer = match.group(1).strip()
                 answers.append(answer)
-                # Trigger callback for answer
                 self._safe_event_handler(event_name="on_answer", text=answer)
+
             elif next_tag_type == "delegate":
                 delegate_content = match.group(1).strip()
                 agent_name, query = self._parse_delegate_tag(delegate_content)
+
                 if agent_name:
-                    # Execute the delegate and get result
                     result = self._execute_delegate(agent_name, query)
                     delegates.append((agent_name, query, result))
 
             # Move past the processed tag
             remaining_content = remaining_content[match.end() :]
-
-        # If no matches are found, return empty lists
-        if not thoughts and not answers and not delegates:
-            return [], [], []
 
         return thoughts, answers, delegates
 
@@ -806,16 +772,13 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
     ##########
 
     def _invoke_iteration(self, prompt_obj: Messages) -> dict[str, Any]:
-        """
-        Process a single iteration of the agent's conversation with the model using invoke.
+        """Process a single iteration of the agent's conversation with the model.
 
         :param prompt_obj: Messages object containing the conversation history
         :return: Dictionary with response data including content, thinking, answer, and tool data
         """
-        # Get the full response from the model using invoke
+        # Get response from the model
         response = self.model.invoke(prompt=prompt_obj)
-
-        # Debug log the response structure
         logger.debug(f"Response structure: {response}")
 
         # Initialize return values
@@ -830,21 +793,20 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         delegate_used = False
         delegate_data = []
 
-        # Initialize the chronological event list for this iteration
-        # This will be populated by _safe_event_handler
+        # Initialize event list for this iteration
         self._current_iteration_events = []
 
         # Process Bedrock response structure
         if isinstance(response, dict):
-            # Get the message from the response
+            # Extract message content
             if "output" in response and "message" in response["output"]:
                 message = response["output"]["message"]
 
-                # Check if content is an array of items
+                # Process content blocks
                 if "content" in message and isinstance(message["content"], list):
                     for item in message["content"]:
                         if isinstance(item, dict):
-                            # Extract text content from text blocks
+                            # Extract text content
                             if "text" in item:
                                 content += item["text"]
 
@@ -854,26 +816,20 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                                 tool_info = item["toolUse"]
                                 tool_name = tool_info.get("name")
 
-                                # Extract parameters from input
+                                # Extract parameters
                                 if "input" in tool_info and isinstance(
                                     tool_info["input"], dict
                                 ):
                                     tool_parameters = tool_info["input"]
 
-                # Check stopReason for tool_use to confirm tool usage
+                # Check if tool use was the stop reason
                 if "stopReason" in response and response["stopReason"] == "tool_use":
                     tool_used = True
-            else:
-                # For logging purposes only
-                logger.warning("Couldn't find content in response structure")
         elif isinstance(response, str):
-            # Direct string response
             content = response
 
-        # Handle content
+        # Process content for thinking/answer/delegate tags
         if content:
-            # Process the content to handle thinking/answer/delegate tags
-            # The _process_content method will call event handlers which populate _current_iteration_events
             thinking, answer, delegates = self._process_content(content)
 
             # Check if delegation occurred
@@ -881,21 +837,20 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 delegate_used = True
                 delegate_data = delegates
 
-            # Add assistant's response to memory
+            # Add response to memory
             self.memory.add_message(role="assistant", content=content)
 
-        # Process tool call if found in the response
+        # Process tool call if found
         if tool_used and tool_name and tool_parameters:
-            # Find the tool and execute it
             tool = self._find_tool(tool_name)
             if tool:
                 try:
-                    # Execute the tool directly to get the raw result
+                    # Execute the tool
                     tool_result = tool.run(
                         environment=self.environment, **tool_parameters
                     )
 
-                    # Create formatted result message for logs
+                    # Create formatted result for logs
                     formatted_result = (
                         f"[Tool Result] {tool_name}({tool_parameters}) -> {tool_result}"
                     )
@@ -908,7 +863,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                         "result": tool_result,
                     }
 
-                    # Call the observation callback which will add to _current_iteration_events
+                    # Call callback and add to memory
                     self._safe_event_handler(
                         event_name="on_tool_use",
                         tool_name=tool_name,
@@ -916,7 +871,6 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                         result=tool_result,
                     )
 
-                    # Add tool result to memory
                     self.memory.add_message(
                         role="user",
                         content=f"[SYSTEM DIRECTIVE] The {tool_name} returned: {tool_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
@@ -925,13 +879,14 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                     error_msg = str(e)
                     formatted_result = f"[Tool Error: {tool_name}] {error_msg}"
                     tool_results.append(formatted_result)
+
                     tool_data = {
                         "name": tool_name,
                         "parameters": tool_parameters,
                         "result": f"Error: {error_msg}",
                     }
 
-                    # Log the error which will add to _current_iteration_events
+                    # Handle error
                     self._safe_event_handler(
                         event_name="on_tool_use",
                         tool_name=tool_name,
@@ -939,7 +894,6 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                         result=f"Error: {error_msg}",
                     )
 
-                    # Add error to memory
                     self.memory.add_message(
                         role="user",
                         content=f"Your tool call resulted in an error: {error_msg}. Please try a different approach.",
@@ -948,42 +902,26 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 # Tool not found
                 formatted_result = f"[Tool Error: {tool_name}] Tool not found"
                 tool_results.append(formatted_result)
+
                 tool_data = {
                     "name": tool_name,
                     "parameters": tool_parameters,
                     "result": "Error: Tool not found",
                 }
 
-                # Log the error which will add to _current_iteration_events
+                # Handle error
                 self._safe_event_handler(
                     event_name="on_tool_use",
                     tool_name=tool_name,
                     result="Error: Tool not found",
                 )
 
-                # Add error to memory
                 self.memory.add_message(
                     role="user",
                     content=f"Tool '{tool_name}' not found. Please try a different approach.",
                 )
 
-            # Store the events list before returning
-            iteration_events = self._current_iteration_events
-            delattr(self, "_current_iteration_events")
-
-            return {
-                "content": content,
-                "thinking": thinking,
-                "answer": answer,
-                "tool_used": True,
-                "tool_data": tool_data,
-                "tool_results": tool_results,
-                "delegate_used": delegate_used,
-                "delegate_data": delegate_data,
-                "events": iteration_events,
-            }
-
-        # Store the events list before returning
+        # Store events and clean up
         iteration_events = self._current_iteration_events
         delattr(self, "_current_iteration_events")
 
@@ -991,8 +929,8 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             "content": content,
             "thinking": thinking,
             "answer": answer,
-            "tool_used": False,
-            "tool_data": None,
+            "tool_used": tool_used,
+            "tool_data": tool_data,
             "tool_results": tool_results,
             "delegate_used": delegate_used,
             "delegate_data": delegate_data,
@@ -1000,105 +938,101 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         }
 
     def invoke(self, prompt: str, max_iterations: int = 10) -> dict[str, Any]:
-        """
-        Run the agent with the given prompt using the model's invoke method.
+        """Run the agent with the given prompt using the model's invoke method.
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
         :return: A dictionary containing 'content', 'thinking', 'tool_use', 'delegate_use', 'answer', and 'events'
         """
-        # Clear or reset the agent's memory context
+        # Reset memory and add prompt
         self._flush_memory()
-
-        # Add the user's prompt to memory
         self.memory.add_message(role="user", content=prompt)
 
-        # Initialize buffers for thinking and answer
+        # Initialize result containers
         all_thinking = []
         all_answer = []
         all_tool_use = []
         all_delegate_use = []
         full_response = []
-        # Initialize a list to store all events in chronological order
         all_events = []
         iterations = 0
 
         while iterations < max_iterations:
+            # Get messages for the model
+            prompt_obj = Messages(
+                system=self.memory.get_system_message(),
+                messages=self.memory.get_messages(),
+            )
 
-            # Get current messages and system
-            messages = self.memory.get_messages()
-            system = self.memory.get_system_message()
-
-            # Prep messages for the model
-            prompt_obj = Messages(system=system, messages=messages)
-
-            # Process one iteration and get response and tool use flag
+            # Process one iteration
             response = self._invoke_iteration(prompt_obj)
 
-            # Add thoughts and answer to the buffers
+            # Collect thinking
             all_thinking.extend(response["thinking"])
-            if response["answer"] is not None:
+
+            # Collect answers
+            if response["answer"]:
                 if isinstance(response["answer"], list):
                     all_answer.extend(response["answer"])
                 else:
                     all_answer.append(response["answer"])
 
-            # Add structured tool data if a tool was used
+            # Collect tool usage
             if response["tool_used"] and response["tool_data"]:
                 all_tool_use.append(response["tool_data"])
 
-            # Add structured delegate data if delegation occurred
+            # Collect delegate usage
             if response["delegate_used"] and response["delegate_data"]:
                 all_delegate_use.extend(response["delegate_data"])
 
-            # Collect events from this iteration in chronological order
+            # Collect events
             if "events" in response:
                 all_events.extend(response["events"])
 
-            # Add to the full response if we got a valid response
-            if response:
+            # Build full response
+            if response.get("content"):
                 full_response.append(response["content"])
 
-            # Add tool result messages to the full response
+            # Add tool results
             if response["tool_results"]:
                 full_response.extend(response["tool_results"])
 
-            # Add delegate results to the full response
+            # Add delegate results
             if response["delegate_used"] and response["delegate_data"]:
                 for agent_name, query, result in response["delegate_data"]:
                     full_response.append(
                         f"[Delegate Result] {agent_name}({query}) -> {result}"
                     )
 
-            # If no tool was used and no delegation occurred, we're done
-            # IMPORTANT: This check needs to ensure we don't exit early during delegation chains
+            # Check if we're done
             if not response["tool_used"] and not response["delegate_used"]:
-                # Check if we have an answer before breaking
-                if not all_answer:
-                    # If we've delegated but don't yet have an answer, continue for at least one more iteration
-                    if all_delegate_use and iterations < max_iterations:
-                        continue
+                # But continue if we've delegated and don't have an answer yet
+                if (
+                    all_delegate_use
+                    and not all_answer
+                    and iterations < max_iterations - 1
+                ):
+                    iterations += 1
+                    continue
                 break
 
             # Increment iteration counter
             iterations += 1
 
-            # If we've hit max iterations, exit
+            # Check if we've hit max iterations
             if iterations >= max_iterations:
                 logger.warning(
                     f"Reached maximum iterations ({max_iterations}). Stopping."
                 )
                 break
 
-        # Get the final answer if any was extracted
-        answer = all_answer[0] if all_answer else None
-
+        # Return results
         return {
             "content": "\n\n".join(full_response),
             "thinking": all_thinking,
             "tool_use": all_tool_use,
             "delegate_use": all_delegate_use,
-            "answer": answer,
+            "answer": all_answer[0] if all_answer else None,
             "events": all_events,
         }
 
@@ -1119,30 +1053,11 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         if "text" in delta:
             text = delta["text"]
             stream_handler.process_chunk(text)
-            # If we have answer content, yield it and reset
+            # Yield answer content if available
             if answer_content is not None:
                 yield answer_content
                 answer_content = None
         return answer_content
-
-    def _handle_tool_delta(
-        self, delta: dict, is_collecting_tool_data: bool, current_tool_buffer: str
-    ) -> tuple[bool, str]:
-        """Handle a tool delta from the stream.
-
-        :param delta: The delta to process
-        :param is_collecting_tool_data: Whether we're currently collecting tool data
-        :param current_tool_buffer: Current tool buffer
-        :return: Tuple of (is_collecting_tool_data, current_tool_buffer)
-        """
-        if (
-            "toolUse" in delta
-            and "input" in delta["toolUse"]
-            and is_collecting_tool_data
-        ):
-            # Accumulate the input string before trying to parse it
-            current_tool_buffer += delta["toolUse"].get("input", "")
-        return is_collecting_tool_data, current_tool_buffer
 
     def _handle_tool_start(self, chunk: dict) -> tuple[bool, str, dict, str]:
         """Handle the start of a tool call.
@@ -1150,13 +1065,11 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         :param chunk: The chunk containing the tool start
         :return: Tuple of (is_collecting_tool_data, current_tool_name, current_tool_data, current_tool_buffer)
         """
-        is_collecting_tool_data = True
         tool_info = chunk["contentBlockStart"]["start"]["toolUse"]
         current_tool_name = tool_info.get("name")
         current_tool_data = {"toolName": current_tool_name, "parameters": {}}
-        current_tool_buffer = ""
 
-        # Capture initial arguments if available in the start block
+        # Capture initial arguments if available
         if "arguments" in tool_info:
             try:
                 arguments = tool_info.get("arguments", {})
@@ -1169,33 +1082,26 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             except Exception as e:
                 logger.warning(f"Error parsing initial tool arguments: {e}")
 
-        return (
-            is_collecting_tool_data,
-            current_tool_name,
-            current_tool_data,
-            current_tool_buffer,
-        )
+        return True, current_tool_name, current_tool_data, ""
 
     def _handle_tool_stop(
         self,
         _chunk: dict,
-        is_collecting_tool_data: bool,
-        current_tool_name: str | None,
-        current_tool_data: dict,
         current_tool_buffer: str,
+        current_tool_data: dict,
+        current_tool_name: str,
         stream_handler: StreamHandler,
     ) -> tuple[bool, str | None, dict, str, bool]:
         """Handle the end of a tool call.
 
         :param _chunk: The chunk containing the tool stop (unused)
-        :param is_collecting_tool_data: Whether we're currently collecting tool data
-        :param current_tool_name: Current tool name
-        :param current_tool_data: Current tool data
         :param current_tool_buffer: Current tool buffer
-        :param stream_handler: The stream handler to use for storing tool usages
+        :param current_tool_data: Current tool data
+        :param current_tool_name: Current tool name
+        :param stream_handler: The stream handler for storing tool usages
         :return: Tuple of (is_collecting_tool_data, current_tool_name, current_tool_data, current_tool_buffer, tool_used)
         """
-        tool_used = False
+        # Parse any accumulated tool input
         if current_tool_buffer:
             try:
                 parsed_input = json.loads(current_tool_buffer)
@@ -1207,136 +1113,15 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 )
 
         # Execute the tool if we have valid data
-        if current_tool_name and current_tool_data:
-            tool_used = True
+        tool_used = bool(current_tool_name and current_tool_data)
+        if tool_used:
             self._process_tool_data(current_tool_data, stream_handler)
 
         # Reset tool collection state
-        is_collecting_tool_data = False
-        current_tool_name = None
-        current_tool_data = {}
-        current_tool_buffer = ""
-
-        return (
-            is_collecting_tool_data,
-            current_tool_name,
-            current_tool_data,
-            current_tool_buffer,
-            tool_used,
-        )
-
-    def _handle_message_stop(
-        self,
-        chunk: dict,
-        iteration_response: str,
-        tool_used: bool,
-        answer_content: str | None,
-    ) -> Generator[str, None, tuple[str, str | None]]:
-        """Handle the end of a message.
-
-        :param chunk: The chunk containing the message stop
-        :param iteration_response: Current iteration response
-        :param tool_used: Whether a tool was used
-        :param answer_content: Current answer content
-        :return: Generator yielding answer content, finally returning (iteration_response, answer_content)
-        """
-        # Message is complete, add the final response to memory if it wasn't a tool call
-        if iteration_response and not tool_used:
-            self.memory.add_message(role="assistant", content=iteration_response)
-
-        # Check if we need to report any metadata
-        if "metadata" in chunk:
-            logger.info(f"Response metadata: {chunk['metadata']}")
-
-        # Yield any remaining answer content
-        if answer_content is not None:
-            yield answer_content
-            answer_content = None
-
-        return iteration_response, answer_content
-
-    def _unpack_event_stream(self, events: list[dict]) -> dict[str, Any]:
-        """Unpack the event list into a dictionary with standardized format.
-
-        Transforms a list of events into a dictionary with keys:
-        - content: Full combined response text
-        - thinking: List of all thinking entries
-        - tool_use: List of dicts with tool name, parameters, and result
-        - delegate_use: List of tuples with agent name, query, and result
-        - answer: Final answer text (combined)
-
-        :param events: The events to unpack
-        :return: Dictionary with standardized output format
-        """
-        # Initialize result containers
-        thinking = []
-        answer_chunks = []
-        tool_use = []
-        delegate_use = []
-        full_content = []
-
-        # Process each event
-        for event in events:
-            event_type = event["type"]
-
-            if event_type == "thinking":
-                thinking.append(event["content"])
-                full_content.append(f"<thinking>{event['content']}</thinking>")
-
-            elif event_type == "answer":
-                answer_chunks.append(event["content"])
-                full_content.append(f"<answer>{event['content']}</answer>")
-
-            elif event_type == "tool_usage":
-                # Extract tool data and add to tool_use list as a dict
-                tool_data = event["content"]
-                tool_use.append(
-                    {
-                        "name": tool_data["name"],
-                        "parameters": tool_data["parameters"],
-                        "result": tool_data["result"],
-                    }
-                )
-
-                # Add formatted tool usage to full content
-                tool_message = f"[Tool Result] {tool_data['name']}({tool_data['parameters']}) -> {tool_data['result']}"
-                full_content.append(tool_message)
-
-            elif event_type == "delegate_usage":
-                # Extract delegate data and add to delegate_use list
-                delegate_data = event["content"]
-                delegate_use.append(
-                    (
-                        delegate_data["agent_name"],
-                        delegate_data["query"],
-                        delegate_data["result"],
-                    )
-                )
-
-                # Add formatted delegate usage to full content
-                delegate_message = f"[Delegate Result] {delegate_data['agent_name']}({delegate_data['query']}) -> {delegate_data['result']}"
-                full_content.append(delegate_message)
-
-        # Combine answer chunks into a single answer
-        answer = "".join(answer_chunks) if answer_chunks else None
-
-        # Return a dictionary with the same structure as invoke() method
-        return {
-            "content": "\n\n".join(full_content),
-            "thinking": thinking,
-            "tool_use": tool_use,
-            "delegate_use": delegate_use,
-            "answer": answer,
-            "events": events,
-        }
-
-    ##########
-    # Stream #
-    ##########
+        return False, None, {}, "", tool_used
 
     def _stream_iteration(self, prompt_obj: Messages) -> Iterator[str]:
-        """
-        Stream a single iteration of the agent's conversation with the model.
+        """Stream a single iteration of the agent's conversation with the model.
 
         :param prompt_obj: Messages object containing the conversation history
         :return: Iterator of response chunks
@@ -1345,8 +1130,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         iteration_response = ""
         tool_used = False
         delegate_used = False
+        answer_content = None
 
-        # State tracking for tool use - initialize only what's needed
+        # State tracking for tool use
         current_tool_data = {}
         is_collecting_tool_data = False
         current_tool_name = None
@@ -1359,18 +1145,16 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             :param tag_name: Name of the tag (thinking, answer, delegate, etc)
             :param content: Content within the tag
             """
-            nonlocal iteration_response, delegate_used
+            nonlocal iteration_response, delegate_used, answer_content
 
             # Add to iteration response
             iteration_response += f"<{tag_name}>{content}</{tag_name}>"
 
-            # Call appropriate event handler
+            # Handle different tag types
             if tag_name == "thinking":
                 self._safe_event_handler(event_name="on_thinking", text=content)
             elif tag_name == "answer":
                 self._safe_event_handler(event_name="on_answer", text=content)
-                # Store the content to be yielded later
-                nonlocal answer_content
                 answer_content = content
             elif tag_name == "delegate":
                 delegate_used = True
@@ -1380,7 +1164,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                     # Store the delegate event
                     stream_handler.events.append(
                         {
-                            "type": "delegate_usage",
+                            "type": "delegation",
                             "content": {
                                 "agent_name": agent_name,
                                 "query": query,
@@ -1389,13 +1173,11 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                         }
                     )
 
-        # Initialize answer_content to be used in the generator
-        answer_content = None
         stream_handler = StreamHandler(event_callback=handle_tagged_content)
 
         # Stream and process the response
         for chunk in self.model.stream(prompt=prompt_obj):
-            # Handle different chunk types
+            # Handle content deltas
             if "contentBlockDelta" in chunk:
                 delta = chunk["contentBlockDelta"]["delta"]
 
@@ -1403,7 +1185,6 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                 if "text" in delta:
                     text = delta["text"]
                     stream_handler.process_chunk(text)
-                    # If we have answer content, yield it and reset
                     if answer_content is not None:
                         yield answer_content
                         answer_content = None
@@ -1414,7 +1195,6 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                     and "input" in delta["toolUse"]
                     and is_collecting_tool_data
                 ):
-                    # Accumulate the input string before trying to parse it
                     current_tool_buffer += delta["toolUse"].get("input", "")
 
             # Handle tool call start
@@ -1428,47 +1208,31 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                     current_tool_buffer,
                 ) = self._handle_tool_start(chunk)
 
-            # Handle end of tool call collection
+            # Handle end of tool call
             elif "contentBlockStop" in chunk and is_collecting_tool_data:
-                # Tool data collection is complete, parse the accumulated input buffer
-                if current_tool_buffer:
-                    try:
-                        parsed_input = json.loads(current_tool_buffer)
-                        if isinstance(parsed_input, dict):
-                            current_tool_data["parameters"].update(parsed_input)
-                    except Exception as e:
-                        logger.warning(
-                            f"Error parsing tool input: {e}, input buffer: {current_tool_buffer}"
-                        )
-
-                # Execute the tool if we have valid data
-                if current_tool_name and current_tool_data:
-                    tool_used = True
-                    # Reset tool collection state
-                    (
-                        is_collecting_tool_data,
-                        current_tool_name,
-                        current_tool_data,
-                        current_tool_buffer,
-                        tool_used,
-                    ) = self._handle_tool_stop(
-                        chunk,
-                        is_collecting_tool_data,
-                        current_tool_name,
-                        current_tool_data,
-                        current_tool_buffer,
-                        stream_handler,
-                    )
+                (
+                    is_collecting_tool_data,
+                    current_tool_name,
+                    current_tool_data,
+                    current_tool_buffer,
+                    tool_used,
+                ) = self._handle_tool_stop(
+                    chunk,
+                    current_tool_buffer,
+                    current_tool_data,
+                    current_tool_name,
+                    stream_handler,
+                )
 
             # Handle message end
             elif "messageStop" in chunk:
-                # Message is complete, add the final response to memory if it wasn't a tool call
+                # Add response to memory if it wasn't a tool call or delegation
                 if iteration_response and not tool_used and not delegate_used:
                     self.memory.add_message(
                         role="assistant", content=iteration_response
                     )
 
-                # Check if we need to report any metadata
+                # Log metadata if available
                 if "metadata" in chunk:
                     logger.info(f"Response metadata: {chunk['metadata']}")
 
@@ -1477,112 +1241,93 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                     yield answer_content
                     answer_content = None
 
-        # Return tool_used or delegate_used as a hidden value for the stream method
+        # Return special markers to indicate tool or delegation usage
         if tool_used:
-            # This is a special marker that will not be displayed but will be detected by the stream method
             yield "[[TOOL_USED]]"
         elif delegate_used:
-            # This is a special marker for delegation
             yield "[[DELEGATE_USED]]"
 
-        # Return the collected data
-        yield {
-            "events": stream_handler.events,
-        }
+        # Return the collected events
+        yield {"events": stream_handler.events}
 
     def stream(self, prompt: str, max_iterations: int = 10) -> Iterator[str]:
-        """
-        Stream the agent's response with the given prompt.
+        """Stream the agent's response with the given prompt.
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
         :return: Iterator of response chunks
         """
-        # Clear or reset the agent's memory context
+        # Reset memory and add prompt
         self._flush_memory()
-
-        # Add the user's prompt to memory
         self.memory.add_message(role="user", content=prompt)
 
         iterations = 0
         all_events = []
-        # Track delegation and answer tracking
         has_answer = False
         has_delegated = False
 
         while iterations < max_iterations:
             iterations += 1
 
-            # Get current messages and system
-            messages = self.memory.get_messages()
-            system = self.memory.get_system_message()
+            # Get messages for the model
+            prompt_obj = Messages(
+                system=self.memory.get_system_message(),
+                messages=self.memory.get_messages(),
+            )
 
-            # Prep messages for the model
-            prompt_obj = Messages(system=system, messages=messages)
-
-            # Stream and process the response, tracking if a tool or delegate was used
-            tool_used = False
-            delegate_used = False
+            # Stream the response
+            tool_used = delegate_used = False
 
             for chunk in self._stream_iteration(prompt_obj):
-                # Check if this is our special marker for tool usage
+                # Check for special markers
                 if chunk == "[[TOOL_USED]]":
                     tool_used = True
-                    # Don't yield this special marker
                     continue
-                # Check if this is our special marker for delegate usage
                 elif chunk == "[[DELEGATE_USED]]":
-                    delegate_used = True
-                    has_delegated = True
-                    # Don't yield this special marker
+                    delegate_used = has_delegated = True
                     continue
 
-                # Check if this is our data collection chunk
+                # Handle event collection chunks
                 if isinstance(chunk, dict):
-                    # Collect the events
                     all_events.extend(chunk["events"])
 
-                    # Check if any of the events are answer events
+                    # Check for answer events
                     for event in chunk.get("events", []):
                         if event["type"] == "answer" and event["content"]:
                             has_answer = True
 
-                    # Don't yield the data collection chunk
                     continue
 
-                # Yield all other chunks normally
+                # Yield normal chunks
                 yield chunk
 
-            # If no tool was used and no delegation occurred, we're done
-            # IMPORTANT: This check needs to ensure we don't exit early during delegation chains
+            # Check if we should continue
             if not tool_used and not delegate_used:
-                # If we've delegated but don't yet have an answer, continue for at least one more iteration
+                # Continue if we've delegated but don't yet have an answer
                 if has_delegated and not has_answer and iterations < max_iterations:
                     continue
                 break
 
-            # If we've hit max iterations, exit
+            # Check max iterations
             if iterations >= max_iterations:
                 logger.warning(
                     f"Reached maximum iterations ({max_iterations}). Stopping."
                 )
                 break
 
-        # Yield the final collected data
-        yield {
-            "events": all_events,
-        }
+        # Yield final events collection
+        yield {"events": all_events}
 
     def run(
         self, prompt: str, max_iterations: int = 10, stream: bool = False
-    ) -> dict[str, Any] | Iterator[str] | dict[str, list]:
+    ) -> AgentResponse:
         """
         Run the agent with the given prompt.
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
         :param stream: Whether to stream the response or return the full text
-        :return: If stream=False: A dictionary containing 'content', 'thinking', 'tool_use', 'delegate_use', 'answer', and 'events'
+        :return: If stream=False: An AgentResponse object containing the answer and events
                 If stream=True: A dictionary containing 'events' in chronological order
         """
         # If streaming is requested, use the stream method directly
@@ -1601,7 +1346,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             return self._unpack_event_stream(all_events)
 
         response = self.invoke(prompt, max_iterations)
-        return response
+        return AgentResponse(
+            answer=response["answer"] or "No answer found", events=response["events"]
+        )
 
     def update_user_system_message(self, new_system_message: str | None) -> None:
         """Update the user-provided portion of the system message.
@@ -1610,20 +1357,18 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         """
         self._user_system_message = new_system_message
 
-        # Rebuild system message with the new user component
+        # Update system message
         self._system_message = self._build_system_message()
         self.memory.set_system_message(self._system_message)
 
-        if new_system_message:
-            logger.info("Updated user system message")
-        else:
-            logger.info("Cleared user system message")
+        logger.info(
+            f"{'Updated' if new_system_message else 'Cleared'} user system message"
+        )
 
 
 if __name__ == "__main__":
     import json
 
-    from fence.models.bedrock.claude import Claude35Sonnet
     from fence.tools.base import BaseTool, tool
     from fence.utils.logger import setup_logging
 
@@ -1800,12 +1545,15 @@ if __name__ == "__main__":
     logger.info("\nExample 4: Using BedrockAgent with dynamic delegation:")
     setup_logging(log_level="INFO", are_you_serious=False)
 
-    # Define event handler for delegation events
+    # Set NovaPro as the model
+    from fence.models.bedrock import NovaPro
+
+    model = NovaPro(region="us-east-1")
 
     # Create a parent agent initially without delegates
     parent_agent = BedrockAgent(
         identifier="ParentAgent",
-        model=Claude35Sonnet(),
+        model=model,
         description="A parent agent that can delegate tasks to specialist agents",
         memory=FleetingMemory(),
         log_agentic_response=True,
@@ -1815,7 +1563,7 @@ if __name__ == "__main__":
     # Create specialist weather agent with tools
     weather_specialist = BedrockAgent(
         identifier="WeatherSpecialist",
-        model=Claude35Sonnet(),
+        model=model,
         description="A specialist agent for weather information and temperature conversions",
         tools=[get_weather, convert_temperature],
         memory=FleetingMemory(),
@@ -1826,7 +1574,7 @@ if __name__ == "__main__":
     # Create math specialist agent
     math_specialist = BedrockAgent(
         identifier="MathSpecialist",
-        model=Claude35Sonnet(),
+        model=model,
         description="A specialist agent for complex mathematical calculations",
         memory=FleetingMemory(),
         log_agentic_response=True,
@@ -1842,4 +1590,8 @@ if __name__ == "__main__":
     result = parent_agent.run(
         "If it's 75°F in New York and 68°F in London, what's the square root of the average temperature in Celsius?"
     )
-    print(f"Answer: {result['answer']}")
+    print(f"Answer: {result.answer}")
+    from pprint import pprint
+
+    print("Events:")
+    pprint([e.model_dump() for e in result.events])
