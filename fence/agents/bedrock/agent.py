@@ -2,10 +2,9 @@
 Bedrock agent class that uses native tool calling and streaming capabilities.
 """
 
-import json
 import logging
 import re
-from typing import Any, Callable, Generator, Iterator, List, Union
+from typing import Any, Callable, List, Union
 
 from pydantic import BaseModel, field_validator
 
@@ -175,7 +174,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         # Add delegation instructions if delegates are available
         if self.delegates:
-            delegate_info = "\nYou can also delegate to the following agents using <delegate>agent_name:query</delegate> tags:"
+            delegate_info = "\nYou can also delegate to the following agents using <delegate>agent_name:query</delegate> tags. Be sure to include all the necessary information in the query tag, and that the query is in natural language. For example: <delegate>SomeSpecialistAgent:Can you do this specialized task?</delegate>. These are the delegate agents available to you:"
 
             # Add information about each delegate
             for delegate in self.delegates:
@@ -450,6 +449,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         # If no tools, clear the toolConfig
         if not self.tools:
             self.model.toolConfig = None
+            logger.debug(
+                f"Agent {self.identifier}: Cleared toolConfig (no tools available)"
+            )
             return
 
         # Convert BaseTool objects to BedrockTool format
@@ -459,6 +461,10 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         # Set the toolConfig on the model
         self.model.toolConfig = BedrockToolConfig(tools=bedrock_tools)
+        tool_names = [tool.get_tool_name() for tool in self.tools]
+        logger.debug(
+            f"Agent {self.identifier}: Registered {len(bedrock_tools)} tools with Bedrock model: {tool_names}"
+        )
         logger.info(f"Registered {len(bedrock_tools)} tools with Bedrock model")
 
     def _find_tool(self, tool_name: str) -> BaseTool | None:
@@ -651,6 +657,11 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             return error_msg
 
         try:
+            # Ensure the delegate registers its tools before execution
+            if hasattr(delegate, "_register_tools"):
+                delegate._register_tools()
+                logger.debug(f"Re-registered tools for delegate {delegate_name}")
+
             # Notify before execution
             self._safe_event_handler(
                 event_name="on_delegate",
@@ -778,6 +789,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         :return: Dictionary with response data including content, thinking, answer, and tool data
         """
         # Get response from the model
+        logger.debug(
+            f"Agent {self.identifier} is invoking the model with toolConfig: {self.model.toolConfig}"
+        )
         response = self.model.invoke(prompt=prompt_obj)
         logger.debug(f"Response structure: {response}")
 
@@ -1040,284 +1054,6 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
     # Helpers #
     ###########
 
-    def _handle_text_delta(
-        self, delta: dict, stream_handler: StreamHandler, answer_content: str | None
-    ) -> Generator[str, None, str | None]:
-        """Handle a text delta from the stream.
-
-        :param delta: The delta to process
-        :param stream_handler: The stream handler to use
-        :param answer_content: Current answer content
-        :return: Updated answer content
-        """
-        if "text" in delta:
-            text = delta["text"]
-            stream_handler.process_chunk(text)
-            # Yield answer content if available
-            if answer_content is not None:
-                yield answer_content
-                answer_content = None
-        return answer_content
-
-    def _handle_tool_start(self, chunk: dict) -> tuple[bool, str, dict, str]:
-        """Handle the start of a tool call.
-
-        :param chunk: The chunk containing the tool start
-        :return: Tuple of (is_collecting_tool_data, current_tool_name, current_tool_data, current_tool_buffer)
-        """
-        tool_info = chunk["contentBlockStart"]["start"]["toolUse"]
-        current_tool_name = tool_info.get("name")
-        current_tool_data = {"toolName": current_tool_name, "parameters": {}}
-
-        # Capture initial arguments if available
-        if "arguments" in tool_info:
-            try:
-                arguments = tool_info.get("arguments", {})
-                if isinstance(arguments, dict):
-                    current_tool_data["parameters"].update(arguments)
-                elif isinstance(arguments, str):
-                    parsed_args = json.loads(arguments)
-                    if isinstance(parsed_args, dict):
-                        current_tool_data["parameters"].update(parsed_args)
-            except Exception as e:
-                logger.warning(f"Error parsing initial tool arguments: {e}")
-
-        return True, current_tool_name, current_tool_data, ""
-
-    def _handle_tool_stop(
-        self,
-        _chunk: dict,
-        current_tool_buffer: str,
-        current_tool_data: dict,
-        current_tool_name: str,
-        stream_handler: StreamHandler,
-    ) -> tuple[bool, str | None, dict, str, bool]:
-        """Handle the end of a tool call.
-
-        :param _chunk: The chunk containing the tool stop (unused)
-        :param current_tool_buffer: Current tool buffer
-        :param current_tool_data: Current tool data
-        :param current_tool_name: Current tool name
-        :param stream_handler: The stream handler for storing tool usages
-        :return: Tuple of (is_collecting_tool_data, current_tool_name, current_tool_data, current_tool_buffer, tool_used)
-        """
-        # Parse any accumulated tool input
-        if current_tool_buffer:
-            try:
-                parsed_input = json.loads(current_tool_buffer)
-                if isinstance(parsed_input, dict):
-                    current_tool_data["parameters"].update(parsed_input)
-            except Exception as e:
-                logger.warning(
-                    f"Error parsing tool input: {e}, input buffer: {current_tool_buffer}"
-                )
-
-        # Execute the tool if we have valid data
-        tool_used = bool(current_tool_name and current_tool_data)
-        if tool_used:
-            self._process_tool_data(current_tool_data, stream_handler)
-
-        # Reset tool collection state
-        return False, None, {}, "", tool_used
-
-    def _stream_iteration(self, prompt_obj: Messages) -> Iterator[str]:
-        """Stream a single iteration of the agent's conversation with the model.
-
-        :param prompt_obj: Messages object containing the conversation history
-        :return: Iterator of response chunks
-        """
-        # Track the response for this iteration
-        iteration_response = ""
-        tool_used = False
-        delegate_used = False
-        answer_content = None
-
-        # State tracking for tool use
-        current_tool_data = {}
-        is_collecting_tool_data = False
-        current_tool_name = None
-        current_tool_buffer = ""
-
-        # Create a stream handler for processing tagged content
-        def handle_tagged_content(tag_name: str, content: str) -> None:
-            """Handle content from tagged sections.
-
-            :param tag_name: Name of the tag (thinking, answer, delegate, etc)
-            :param content: Content within the tag
-            """
-            nonlocal iteration_response, delegate_used, answer_content
-
-            # Add to iteration response
-            iteration_response += f"<{tag_name}>{content}</{tag_name}>"
-
-            # Handle different tag types
-            if tag_name == "thinking":
-                self._safe_event_handler(event_name="on_thinking", text=content)
-            elif tag_name == "answer":
-                self._safe_event_handler(event_name="on_answer", text=content)
-                answer_content = content
-            elif tag_name == "delegate":
-                delegate_used = True
-                agent_name, query = self._parse_delegate_tag(content)
-                if agent_name:
-                    result = self._execute_delegate(agent_name, query)
-                    # Store the delegate event
-                    stream_handler.events.append(
-                        {
-                            "type": "delegation",
-                            "content": {
-                                "agent_name": agent_name,
-                                "query": query,
-                                "result": result,
-                            },
-                        }
-                    )
-
-        stream_handler = StreamHandler(event_callback=handle_tagged_content)
-
-        # Stream and process the response
-        for chunk in self.model.stream(prompt=prompt_obj):
-            # Handle content deltas
-            if "contentBlockDelta" in chunk:
-                delta = chunk["contentBlockDelta"]["delta"]
-
-                # Handle text deltas
-                if "text" in delta:
-                    text = delta["text"]
-                    stream_handler.process_chunk(text)
-                    if answer_content is not None:
-                        yield answer_content
-                        answer_content = None
-
-                # Handle tool use input collection
-                elif (
-                    "toolUse" in delta
-                    and "input" in delta["toolUse"]
-                    and is_collecting_tool_data
-                ):
-                    current_tool_buffer += delta["toolUse"].get("input", "")
-
-            # Handle tool call start
-            elif "contentBlockStart" in chunk and "toolUse" in chunk.get(
-                "contentBlockStart", {}
-            ).get("start", {}):
-                (
-                    is_collecting_tool_data,
-                    current_tool_name,
-                    current_tool_data,
-                    current_tool_buffer,
-                ) = self._handle_tool_start(chunk)
-
-            # Handle end of tool call
-            elif "contentBlockStop" in chunk and is_collecting_tool_data:
-                (
-                    is_collecting_tool_data,
-                    current_tool_name,
-                    current_tool_data,
-                    current_tool_buffer,
-                    tool_used,
-                ) = self._handle_tool_stop(
-                    chunk,
-                    current_tool_buffer,
-                    current_tool_data,
-                    current_tool_name,
-                    stream_handler,
-                )
-
-            # Handle message end
-            elif "messageStop" in chunk:
-                # Add response to memory if it wasn't a tool call or delegation
-                if iteration_response and not tool_used and not delegate_used:
-                    self.memory.add_message(
-                        role="assistant", content=iteration_response
-                    )
-
-                # Log metadata if available
-                if "metadata" in chunk:
-                    logger.info(f"Response metadata: {chunk['metadata']}")
-
-                # Yield any remaining answer content
-                if answer_content is not None:
-                    yield answer_content
-                    answer_content = None
-
-        # Return special markers to indicate tool or delegation usage
-        if tool_used:
-            yield "[[TOOL_USED]]"
-        elif delegate_used:
-            yield "[[DELEGATE_USED]]"
-
-        # Return the collected events
-        yield {"events": stream_handler.events}
-
-    def stream(self, prompt: str, max_iterations: int = 10) -> Iterator[str]:
-        """Stream the agent's response with the given prompt.
-
-        :param prompt: The initial prompt to feed to the LLM
-        :param max_iterations: Maximum number of model-tool-model iterations
-        :return: Iterator of response chunks
-        """
-        # Reset memory and add prompt
-        self._flush_memory()
-        self.memory.add_message(role="user", content=prompt)
-
-        iterations = 0
-        all_events = []
-        has_answer = False
-        has_delegated = False
-
-        while iterations < max_iterations:
-            iterations += 1
-
-            # Get messages for the model
-            prompt_obj = Messages(
-                system=self.memory.get_system_message(),
-                messages=self.memory.get_messages(),
-            )
-
-            # Stream the response
-            tool_used = delegate_used = False
-
-            for chunk in self._stream_iteration(prompt_obj):
-                # Check for special markers
-                if chunk == "[[TOOL_USED]]":
-                    tool_used = True
-                    continue
-                elif chunk == "[[DELEGATE_USED]]":
-                    delegate_used = has_delegated = True
-                    continue
-
-                # Handle event collection chunks
-                if isinstance(chunk, dict):
-                    all_events.extend(chunk["events"])
-
-                    # Check for answer events
-                    for event in chunk.get("events", []):
-                        if event["type"] == "answer" and event["content"]:
-                            has_answer = True
-
-                    continue
-
-                # Yield normal chunks
-                yield chunk
-
-            # Check if we should continue
-            if not tool_used and not delegate_used:
-                # Continue if we've delegated but don't yet have an answer
-                if has_delegated and not has_answer and iterations < max_iterations:
-                    continue
-                break
-
-            # Check max iterations
-            if iterations >= max_iterations:
-                logger.warning(
-                    f"Reached maximum iterations ({max_iterations}). Stopping."
-                )
-                break
-
-        # Yield final events collection
-        yield {"events": all_events}
-
     def run(
         self, prompt: str, max_iterations: int = 10, stream: bool = False
     ) -> AgentResponse:
@@ -1367,7 +1103,6 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
 
 if __name__ == "__main__":
-    import json
 
     from fence.tools.base import BaseTool, tool
     from fence.utils.logger import setup_logging
@@ -1546,9 +1281,9 @@ if __name__ == "__main__":
     setup_logging(log_level="INFO", are_you_serious=False)
 
     # Set NovaPro as the model
-    from fence.models.bedrock import NovaPro
+    from fence.models.bedrock import Claude35Sonnet
 
-    model = NovaPro(region="us-east-1")
+    model = Claude35Sonnet(region="us-east-1")
 
     # Create a parent agent initially without delegates
     parent_agent = BedrockAgent(
