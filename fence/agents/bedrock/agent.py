@@ -22,7 +22,6 @@ from fence.agents.bedrock.models import (
 from fence.memory.base import BaseMemory, FleetingMemory
 from fence.models.base import LLM
 from fence.models.bedrock.base import BedrockTool, BedrockToolConfig
-from fence.streaming.base import StreamHandler
 from fence.templates.models import Messages
 from fence.tools.base import BaseTool
 
@@ -104,6 +103,10 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
     _THINKING_PATTERN = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
     _ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
     _DELEGATE_PATTERN = re.compile(r"<delegate>(.*?)</delegate>", re.DOTALL)
+
+    ########################
+    # Initialization/Setup #
+    ########################
 
     def __init__(
         self,
@@ -190,766 +193,56 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         return system_message
 
-    def update_delegates(self, delegates: list[BaseAgent]) -> None:
-        """Update the agent's delegates and refresh the system message.
+    ###############
+    # Public APIs #
+    ###############
 
-        :param delegates: New list of delegate agents to use
+    def update_user_system_message(self, new_system_message: str | None) -> None:
+        """Update the user-provided portion of the system message.
+
+        :param new_system_message: New system message text, or None to clear it
         """
-        self.delegates = self._setup_delegates(delegates)
-
-        # Rebuild and update the system message with new delegate information
-        self._system_message = self._build_system_message()
-        self.memory.set_system_message(self._system_message)
-
-        logger.info(f"Updated delegates: {[d.identifier for d in self.delegates]}")
-
-    def add_delegate(self, delegate: BaseAgent) -> None:
-        """Add a single delegate to the agent and update the system message.
-
-        :param delegate: Delegate agent to add
-        """
-        if not delegate.identifier:
-            logger.warning("Cannot add delegate without identifier")
-            return
-
-        # Skip if delegate with same identifier already exists
-        if any(d.identifier == delegate.identifier for d in self.delegates):
-            logger.warning(
-                f"Delegate with identifier {delegate.identifier} already exists"
-            )
-            return
-
-        # Pass environment variables to delegate
-        delegate.environment.update(self.environment)
-        self.delegates.append(delegate)
+        self._user_system_message = new_system_message
 
         # Update system message
         self._system_message = self._build_system_message()
         self.memory.set_system_message(self._system_message)
 
-        logger.info(f"Added delegate: {delegate.identifier}")
-
-    def remove_delegate(self, identifier: str) -> bool:
-        """Remove a delegate by identifier and update the system message.
-
-        :param identifier: Identifier of the delegate to remove
-        :return: True if delegate was removed, False if not found
-        """
-        for i, delegate in enumerate(self.delegates):
-            if delegate.identifier == identifier:
-                self.delegates.pop(i)
-
-                # Update system message
-                self._system_message = self._build_system_message()
-                self.memory.set_system_message(self._system_message)
-
-                logger.info(f"Removed delegate: {identifier}")
-                return True
-
-        logger.warning(f"Delegate not found: {identifier}")
-        return False
-
-    #############
-    # Callbacks #
-    #############
-
-    def _default_on_tool_use(
-        self, tool_name: str, parameters: dict, result: Any
-    ) -> None:
-        """Default callback for tool use.
-
-        :param tool_name: The name of the tool being called
-        :param parameters: The parameters passed to the tool
-        :param result: The result returned by the tool
-        """
-        if self.log_agentic_response:
-            self.log(
-                f"Using tool [{tool_name}] with parameters: {parameters} -> {result}",
-                AgentLogType.TOOL_USE,
-            )
-
-    def _default_on_delegate(
-        self,
-        delegate_name: str,
-        query: str,
-        answer: str | None,
-        events: list[AgentEvent] | None = None,
-    ) -> None:
-        """Default callback for delegate use.
-
-        :param delegate_name: The name of the delegate agent
-        :param query: The query passed to the delegate
-        :param answer: The answer returned by the delegate (None if before execution)
-        :param events: List of events from the delegate agent (only available on completion)
-        """
-        if not self.log_agentic_response:
-            return
-
-        if answer is None:
-            self.log(
-                f'Initiating delegation to {delegate_name} with query: "{query}"',
-                AgentLogType.DELEGATION,
-            )
-        else:
-            self.log(
-                f"Delegation to {delegate_name} concluded: {answer}",
-                AgentLogType.DELEGATION,
-            )
-
-    def _default_on_thinking(self, text: str) -> None:
-        """Default callback for agent thinking.
-
-        :param text: The text chunk produced by the agent
-        """
-        if self.log_agentic_response:
-            self.log(text, AgentLogType.THOUGHT)
-
-    def _default_on_answer(self, text: str) -> None:
-        """Default callback for agent answers.
-
-        :param text: The text chunk produced by the agent
-        """
-        if self.log_agentic_response:
-            self.log(text, AgentLogType.ANSWER)
-
-    def _set_event_handlers(
-        self, event_handlers: EventHandler | dict[str, HandlerType] | None = None
-    ) -> None:
-        """Set up the event handlers. If `log_agentic_response` is True, include default handlers.
-
-        :param event_handlers: Event handlers config for different agent events
-        """
-        # Convert dict to EventHandler if needed
-        if event_handlers is not None and not isinstance(event_handlers, EventHandler):
-            try:
-                event_handlers = EventHandler(**event_handlers)
-            except Exception as e:
-                raise ValueError(f"Invalid event handlers: {e}")
-
-        # Initialize handlers with defaults if logging enabled
-        self.event_handlers = {}
-        if self.log_agentic_response:
-            self.event_handlers = {
-                "on_tool_use": [self._default_on_tool_use],
-                "on_thinking": [self._default_on_thinking],
-                "on_answer": [self._default_on_answer],
-                "on_delegate": [self._default_on_delegate],
-            }
-
-        # Merge user-provided handlers
-        if event_handlers:
-            handlers_dict = event_handlers.model_dump(exclude_none=True)
-            for event_name, handler in handlers_dict.items():
-                handlers_to_add = (
-                    [handler] if not isinstance(handler, list) else handler
-                )
-
-                if event_name in self.event_handlers:
-                    self.event_handlers[event_name].extend(handlers_to_add)
-                else:
-                    self.event_handlers[event_name] = handlers_to_add
-
-    def _safe_event_handler(self, event_name: str, *args, **kwargs) -> None:
-        """Safely dispatch event handlers, handling cases where the handler isn't assigned.
-
-        :param event_name: The name of the event to invoke
-        :param args: Positional arguments to pass to the event handler
-        :param kwargs: Keyword arguments to pass to the event handler
-        """
-        handlers = self.event_handlers.get(event_name)
-        if not handlers:
-            return
-
-        # Convert single handler to list for uniform processing
-        handlers = [handlers] if not isinstance(handlers, list) else handlers
-
-        # Create and store event in chronological order for tracking
-        event = self._create_event(event_name, **kwargs)
-        if event:
-            self._record_event(event)
-
-        # Execute each handler safely
-        for handler in handlers:
-            if not callable(handler):
-                logger.warning(f"Event handler for {event_name} is not callable")
-                continue
-
-            try:
-                handler(*args, **kwargs)
-            except Exception as e:
-                logger.warning(f"Error in {event_name} event handler: {e}")
-
-    def _create_event(self, event_name: str, **kwargs) -> AgentEvent | None:
-        """Create an AgentEvent from the event name and kwargs.
-
-        :param event_name: Name of the event
-        :param kwargs: Event data parameters
-        :return: Created AgentEvent or None if event should not be recorded
-        """
-        # For thinking events
-        if event_name == "on_thinking" and "text" in kwargs:
-            return ThinkingEvent(content=kwargs["text"])
-
-        # For answer events
-        elif event_name == "on_answer" and "text" in kwargs:
-            return AnswerEvent(content=kwargs["text"])
-
-        # For delegate events - only record on completion
-        elif (
-            event_name == "on_delegate"
-            and "delegate_name" in kwargs
-            and "query" in kwargs
-        ):
-            # Only create event if we have an answer (completion phase)
-            if "answer" in kwargs and kwargs["answer"] is not None:
-                return DelegateEvent(
-                    content=DelegateData(
-                        agent_name=kwargs["delegate_name"],
-                        query=kwargs["query"],
-                        answer=kwargs["answer"],
-                        events=kwargs.get("events", []),
-                    )
-                )
-
-        # For tool events
-        elif event_name == "on_tool_use" and "tool_name" in kwargs:
-            return ToolUseEvent(
-                content=ToolUseData(
-                    name=kwargs["tool_name"],
-                    parameters=kwargs.get("parameters", {}),
-                    result=kwargs.get("result"),
-                )
-            )
-
-        return None
-
-    def _record_event(self, event: AgentEvent) -> None:
-        """Record an AgentEvent in chronological order.
-
-        :param event: The AgentEvent to record
-        """
-        if not hasattr(self, "_current_iteration_events"):
-            return
-
-        self._current_iteration_events.append(event.model_dump())
-
-    ###########
-    # Helpers #
-    ###########
-
-    def _register_tools(self):
-        """Register tools with the Bedrock model if supported."""
-        # Check if model supports tool registration
-        if not hasattr(self.model, "toolConfig"):
-            logger.warning(
-                f"Model {self.model.__class__.__name__} does not support tool registration"
-            )
-            return
-
-        # If no tools, clear the toolConfig
-        if not self.tools:
-            self.model.toolConfig = None
-            logger.debug(
-                f"Agent {self.identifier}: Cleared toolConfig (no tools available)"
-            )
-            return
-
-        # Convert BaseTool objects to BedrockTool format
-        bedrock_tools = [
-            BedrockTool(**tool.model_dump_bedrock_converse()) for tool in self.tools
-        ]
-
-        # Set the toolConfig on the model
-        self.model.toolConfig = BedrockToolConfig(tools=bedrock_tools)
-        tool_names = [tool.get_tool_name() for tool in self.tools]
-        logger.debug(
-            f"Agent {self.identifier}: Registered {len(bedrock_tools)} tools with Bedrock model: {tool_names}"
-        )
-        logger.info(f"Registered {len(bedrock_tools)} tools with Bedrock model")
-
-    def _find_tool(self, tool_name: str) -> BaseTool | None:
-        """Find a tool by name.
-
-        :param tool_name: Name of the tool to find
-        :return: The tool if found, None otherwise
-        """
-        for tool in self.tools:
-            if tool.get_tool_name() == tool_name:
-                return tool
-        return None
-
-    def _process_tool_call(self, tool_name: str, tool_parameters: dict) -> str:
-        """Process a single tool call.
-
-        :param tool_name: Name of the tool to call
-        :param tool_parameters: Parameters to pass to the tool
-        :return: The formatted tool result message
-        """
-        tool = self._find_tool(tool_name)
-        if not tool:
-            return f"[Tool Error: {tool_name}] Tool not found"
-
-        try:
-            return self._execute_tool(tool, tool_parameters)
-        except Exception as e:
-            return self._handle_tool_error(tool_name, str(e))
-
-    def _execute_tool(self, tool: BaseTool, parameters: dict) -> str:
-        """Execute a tool with the given parameters.
-
-        :param tool: Tool to execute
-        :param parameters: Parameters to pass to the tool
-        :return: The formatted tool result message
-        """
-        tool_name = tool.get_tool_name()
-        tool_result = tool.run(environment=self.environment, **parameters)
-
-        # Call the tool use callback
-        self._safe_event_handler(
-            event_name="on_tool_use",
-            tool_name=tool_name,
-            parameters=parameters,
-            result=tool_result,
+        logger.info(
+            f"{'Updated' if new_system_message else 'Cleared'} user system message"
         )
 
-        # Add tool result to memory
-        self.memory.add_message(
-            role="user",
-            content=f"[SYSTEM DIRECTIVE] The {tool_name} returned: {tool_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
-        )
-
-        return f"[Tool Result] {tool_name}({parameters}) -> {tool_result}"
-
-    def _handle_tool_error(self, tool_name: str, error: str) -> str:
-        """Handle a tool execution error.
-
-        :param tool_name: Name of the tool that failed
-        :param error: Error message
-        :return: The formatted error message
+    def run(
+        self, prompt: str, max_iterations: int = 10, stream: bool = False
+    ) -> AgentResponse:
         """
-        error_msg = f"[Tool Error: {tool_name}] {error}"
+        Run the agent with the given prompt.
 
-        # Log the error
-        self._safe_event_handler(
-            event_name="on_tool_use",
-            tool_name=tool_name,
-            result=f"Error: {error}",
-        )
-
-        # Add error to memory
-        self.memory.add_message(
-            role="user",
-            content=f"Your tool call resulted in an error: {error}. Please try a different approach.",
-        )
-
-        return error_msg
-
-    def _process_tool_data(
-        self, tool_data: dict, stream_handler: StreamHandler
-    ) -> None:
-        """Process collected tool data.
-
-        :param tool_data: Tool data to process
-        :param stream_handler: The stream handler to use for storing tool usages
+        :param prompt: The initial prompt to feed to the LLM
+        :param max_iterations: Maximum number of model-tool-model iterations
+        :param stream: Whether to stream the response or return the full text
+        :return: If stream=False: An AgentResponse object containing the answer and events
+                If stream=True: A dictionary containing 'events' in chronological order
         """
-        if not tool_data.get("toolName") or not tool_data.get("parameters"):
-            return
+        # If streaming is requested, use the stream method directly
+        if stream:
+            # Create collection for all events
+            all_events = []
 
-        tool_name = tool_data["toolName"]
-        tool_params = tool_data["parameters"]
+            # Process the stream and collect data
+            for chunk in self.stream(prompt, max_iterations):
+                # Check if this is our data collection chunk
+                if isinstance(chunk, dict):
+                    # Collect the events
+                    all_events.extend(chunk["events"])
 
-        # Find the tool by name
-        tool = self._find_tool(tool_name)
-        raw_result = None
+            # Return the unpacked events in the same format as invoke()
+            return self._unpack_event_stream(all_events)
 
-        if not tool:
-            raw_result = f"Error: Tool {tool_name} not found"
-
-            # Report error
-            self._safe_event_handler(
-                event_name="on_tool_use",
-                tool_name=tool_name,
-                parameters=tool_params,
-                result=raw_result,
-            )
-
-            # Add error to memory
-            self.memory.add_message(
-                role="user",
-                content=f"Tool '{tool_name}' not found. Please try a different approach.",
-            )
-        else:
-            try:
-                # Execute the tool directly
-                raw_result = tool.run(environment=self.environment, **tool_params)
-
-                # Report success
-                self._safe_event_handler(
-                    event_name="on_tool_use",
-                    tool_name=tool_name,
-                    parameters=tool_params,
-                    result=raw_result,
-                )
-
-                # Add result to memory
-                self.memory.add_message(
-                    role="user",
-                    content=f"[SYSTEM DIRECTIVE] The {tool_name} returned: {raw_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
-                )
-            except Exception as e:
-                error_msg = str(e)
-                raw_result = f"Error: {error_msg}"
-
-                # Report error
-                self._safe_event_handler(
-                    event_name="on_tool_use",
-                    tool_name=tool_name,
-                    parameters=tool_params,
-                    result=raw_result,
-                )
-
-                # Add error to memory
-                self.memory.add_message(
-                    role="user",
-                    content=f"Your tool call resulted in an error: {error_msg}. Please try a different approach.",
-                )
-
-        # Store tool usage as an event
-        stream_handler.events.append(
-            {
-                "type": "tool_use",
-                "content": {
-                    "name": tool_name,
-                    "parameters": tool_params,
-                    "result": raw_result,
-                },
-            }
+        response = self.invoke(prompt, max_iterations)
+        return AgentResponse(
+            answer=response["answer"] or "No answer found", events=response["events"]
         )
-
-    def _parse_delegate_tag(self, delegate_content: str) -> tuple[str, str]:
-        """Parse the delegate tag content to extract agent name and query.
-
-        :param delegate_content: Content of the delegate tag
-        :return: Tuple of (agent_name, query)
-        """
-        # Expected format is "agent_name:query"
-        parts = delegate_content.split(":", 1)
-        if len(parts) != 2:
-            return None, delegate_content
-
-        return parts[0].strip(), parts[1].strip()
-
-    def _execute_delegate(self, delegate_name: str, query: str) -> str:
-        """Execute a delegate agent with the given query.
-
-        :param delegate_name: Name of the delegate agent to call
-        :param query: Query to pass to the delegate
-        :return: The result from the delegate agent
-        """
-        # Find the delegate by name
-        delegate = next(
-            (d for d in self.delegates if d.identifier == delegate_name), None
-        )
-
-        if not delegate:
-            error_msg = f"Delegate agent '{delegate_name}' not found"
-            logger.warning(error_msg)
-            return error_msg
-
-        try:
-            # Ensure the delegate registers its tools before execution
-            if hasattr(delegate, "_register_tools"):
-                delegate._register_tools()
-                logger.debug(f"Re-registered tools for delegate {delegate_name}")
-
-            # Notify before execution
-            self._safe_event_handler(
-                event_name="on_delegate",
-                delegate_name=delegate_name,
-                query=query,
-                answer=None,
-            )
-
-            # Execute delegate
-            delegate_result = delegate.run(query)
-
-            # Extract answer and events
-            answer = delegate_result.answer
-            delegate_events = delegate_result.events
-
-            # Notify after execution with result
-            self._safe_event_handler(
-                event_name="on_delegate",
-                delegate_name=delegate_name,
-                query=query,
-                answer=answer,
-                events=delegate_events,
-            )
-
-            # Add result to memory
-            self.memory.add_message(
-                role="user",
-                content=f"[SYSTEM DIRECTIVE] Delegated to {delegate_name} with query: {query}. Result: {answer}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool or delegate, or (2) If all necessary operations have been completed, provide your final answer. Think back to the original user prompt and use that to guide your response.",
-            )
-
-            return answer
-        except Exception as e:
-            error_msg = f"Error executing delegate '{delegate_name}': {str(e)}"
-            logger.warning(error_msg)
-
-            # Report error
-            self._safe_event_handler(
-                event_name="on_delegate",
-                delegate_name=delegate_name,
-                query=query,
-                answer=f"Error: {str(e)}",
-                events=[],
-            )
-
-            # Add error to memory
-            self.memory.add_message(
-                role="user",
-                content=f"Delegation to '{delegate_name}' failed with error: {str(e)}. Please try a different approach.",
-            )
-
-            return error_msg
-
-    def _process_content(
-        self, content: str
-    ) -> tuple[list[str], list[str], list[tuple[str, str, str]]]:
-        """Process the content to extract thinking, answer, and delegate parts in chronological order.
-
-        :param content: The content to process
-        :return: A tuple of (thinking, answer, delegates)
-        """
-        thoughts = []
-        answers = []
-        delegates = []
-
-        # Process all tags in order of appearance
-        remaining_content = content
-        while remaining_content:
-            # Find positions of the next tag of each type
-            thinking_match = self._THINKING_PATTERN.search(remaining_content)
-            answer_match = self._ANSWER_PATTERN.search(remaining_content)
-            delegate_match = self._DELEGATE_PATTERN.search(remaining_content)
-
-            # Find earliest tag position or use infinity if not found
-            thinking_pos = thinking_match.start() if thinking_match else float("inf")
-            answer_pos = answer_match.start() if answer_match else float("inf")
-            delegate_pos = delegate_match.start() if delegate_match else float("inf")
-
-            # Find earliest tag type
-            next_tag_type = None
-            if thinking_pos < answer_pos and thinking_pos < delegate_pos:
-                next_tag_type = "thinking"
-                match = thinking_match
-            elif answer_pos < thinking_pos and answer_pos < delegate_pos:
-                next_tag_type = "answer"
-                match = answer_match
-            elif delegate_pos < thinking_pos and delegate_pos < answer_pos:
-                next_tag_type = "delegate"
-                match = delegate_match
-            else:
-                # No more tags found
-                break
-
-            # Process the found tag
-            if next_tag_type == "thinking":
-                thought = match.group(1).strip()
-                thoughts.append(thought)
-                self._safe_event_handler(event_name="on_thinking", text=thought)
-
-            elif next_tag_type == "answer":
-                answer = match.group(1).strip()
-                answers.append(answer)
-                self._safe_event_handler(event_name="on_answer", text=answer)
-
-            elif next_tag_type == "delegate":
-                delegate_content = match.group(1).strip()
-                agent_name, query = self._parse_delegate_tag(delegate_content)
-
-                if agent_name:
-                    result = self._execute_delegate(agent_name, query)
-                    delegates.append((agent_name, query, result))
-
-            # Move past the processed tag
-            remaining_content = remaining_content[match.end() :]
-
-        return thoughts, answers, delegates
-
-    ##########
-    # Invoke #
-    ##########
-
-    def _invoke_iteration(self, prompt_obj: Messages) -> dict[str, Any]:
-        """Process a single iteration of the agent's conversation with the model.
-
-        :param prompt_obj: Messages object containing the conversation history
-        :return: Dictionary with response data including content, thinking, answer, and tool data
-        """
-        # Get response from the model
-        logger.debug(
-            f"Agent {self.identifier} is invoking the model with toolConfig: {self.model.toolConfig}"
-        )
-        response = self.model.invoke(prompt=prompt_obj)
-        logger.debug(f"Response structure: {response}")
-
-        # Initialize return values
-        content = ""
-        thinking = []
-        answer = []
-        tool_used = False
-        tool_name = None
-        tool_parameters = {}
-        tool_results = []
-        tool_data = None
-        delegate_used = False
-        delegate_data = []
-
-        # Initialize event list for this iteration
-        self._current_iteration_events = []
-
-        # Process Bedrock response structure
-        if isinstance(response, dict):
-            # Extract message content
-            if "output" in response and "message" in response["output"]:
-                message = response["output"]["message"]
-
-                # Process content blocks
-                if "content" in message and isinstance(message["content"], list):
-                    for item in message["content"]:
-                        if isinstance(item, dict):
-                            # Extract text content
-                            if "text" in item:
-                                content += item["text"]
-
-                            # Extract tool use information
-                            if "toolUse" in item:
-                                tool_used = True
-                                tool_info = item["toolUse"]
-                                tool_name = tool_info.get("name")
-
-                                # Extract parameters
-                                if "input" in tool_info and isinstance(
-                                    tool_info["input"], dict
-                                ):
-                                    tool_parameters = tool_info["input"]
-
-                # Check if tool use was the stop reason
-                if "stopReason" in response and response["stopReason"] == "tool_use":
-                    tool_used = True
-        elif isinstance(response, str):
-            content = response
-
-        # Process content for thinking/answer/delegate tags
-        if content:
-            thinking, answer, delegates = self._process_content(content)
-
-            # Check if delegation occurred
-            if delegates:
-                delegate_used = True
-                delegate_data = delegates
-
-            # Add response to memory
-            self.memory.add_message(role="assistant", content=content)
-
-        # Process tool call if found
-        if tool_used and tool_name and tool_parameters:
-            tool = self._find_tool(tool_name)
-            if tool:
-                try:
-                    # Execute the tool
-                    tool_result = tool.run(
-                        environment=self.environment, **tool_parameters
-                    )
-
-                    # Create formatted result for logs
-                    formatted_result = (
-                        f"[Tool Result] {tool_name}({tool_parameters}) -> {tool_result}"
-                    )
-                    tool_results.append(formatted_result)
-
-                    # Store structured tool data
-                    tool_data = {
-                        "name": tool_name,
-                        "parameters": tool_parameters,
-                        "result": tool_result,
-                    }
-
-                    # Call callback and add to memory
-                    self._safe_event_handler(
-                        event_name="on_tool_use",
-                        tool_name=tool_name,
-                        parameters=tool_parameters,
-                        result=tool_result,
-                    )
-
-                    self.memory.add_message(
-                        role="user",
-                        content=f"[SYSTEM DIRECTIVE] The {tool_name} returned: {tool_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
-                    )
-                except Exception as e:
-                    error_msg = str(e)
-                    formatted_result = f"[Tool Error: {tool_name}] {error_msg}"
-                    tool_results.append(formatted_result)
-
-                    tool_data = {
-                        "name": tool_name,
-                        "parameters": tool_parameters,
-                        "result": f"Error: {error_msg}",
-                    }
-
-                    # Handle error
-                    self._safe_event_handler(
-                        event_name="on_tool_use",
-                        tool_name=tool_name,
-                        parameters=tool_parameters,
-                        result=f"Error: {error_msg}",
-                    )
-
-                    self.memory.add_message(
-                        role="user",
-                        content=f"Your tool call resulted in an error: {error_msg}. Please try a different approach.",
-                    )
-            else:
-                # Tool not found
-                formatted_result = f"[Tool Error: {tool_name}] Tool not found"
-                tool_results.append(formatted_result)
-
-                tool_data = {
-                    "name": tool_name,
-                    "parameters": tool_parameters,
-                    "result": "Error: Tool not found",
-                }
-
-                # Handle error
-                self._safe_event_handler(
-                    event_name="on_tool_use",
-                    tool_name=tool_name,
-                    result="Error: Tool not found",
-                )
-
-                self.memory.add_message(
-                    role="user",
-                    content=f"Tool '{tool_name}' not found. Please try a different approach.",
-                )
-
-        # Store events and clean up
-        iteration_events = self._current_iteration_events
-        delattr(self, "_current_iteration_events")
-
-        return {
-            "content": content,
-            "thinking": thinking,
-            "answer": answer,
-            "tool_used": tool_used,
-            "tool_data": tool_data,
-            "tool_results": tool_results,
-            "delegate_used": delegate_used,
-            "delegate_data": delegate_data,
-            "events": iteration_events,
-        }
 
     def invoke(self, prompt: str, max_iterations: int = 10) -> dict[str, Any]:
         """Run the agent with the given prompt using the model's invoke method.
@@ -1050,56 +343,661 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             "events": all_events,
         }
 
-    ###########
-    # Helpers #
-    ###########
+    ######################
+    # Delegate Management #
+    ######################
 
-    def run(
-        self, prompt: str, max_iterations: int = 10, stream: bool = False
-    ) -> AgentResponse:
+    def update_delegates(self, delegates: list[BaseAgent]) -> None:
+        """Update the agent's delegates and refresh the system message.
+
+        :param delegates: New list of delegate agents to use
         """
-        Run the agent with the given prompt.
+        self.delegates = self._setup_delegates(delegates)
 
-        :param prompt: The initial prompt to feed to the LLM
-        :param max_iterations: Maximum number of model-tool-model iterations
-        :param stream: Whether to stream the response or return the full text
-        :return: If stream=False: An AgentResponse object containing the answer and events
-                If stream=True: A dictionary containing 'events' in chronological order
+        # Rebuild and update the system message with new delegate information
+        self._system_message = self._build_system_message()
+        self.memory.set_system_message(self._system_message)
+
+        logger.info(f"Updated delegates: {[d.identifier for d in self.delegates]}")
+
+    def add_delegate(self, delegate: BaseAgent) -> None:
+        """Add a single delegate to the agent and update the system message.
+
+        :param delegate: Delegate agent to add
         """
-        # If streaming is requested, use the stream method directly
-        if stream:
-            # Create collection for all events
-            all_events = []
+        if not delegate.identifier:
+            logger.warning("Cannot add delegate without identifier")
+            return
 
-            # Process the stream and collect data
-            for chunk in self.stream(prompt, max_iterations):
-                # Check if this is our data collection chunk
-                if isinstance(chunk, dict):
-                    # Collect the events
-                    all_events.extend(chunk["events"])
+        # Skip if delegate with same identifier already exists
+        if any(d.identifier == delegate.identifier for d in self.delegates):
+            logger.warning(
+                f"Delegate with identifier {delegate.identifier} already exists"
+            )
+            return
 
-            # Return the unpacked events in the same format as invoke()
-            return self._unpack_event_stream(all_events)
-
-        response = self.invoke(prompt, max_iterations)
-        return AgentResponse(
-            answer=response["answer"] or "No answer found", events=response["events"]
-        )
-
-    def update_user_system_message(self, new_system_message: str | None) -> None:
-        """Update the user-provided portion of the system message.
-
-        :param new_system_message: New system message text, or None to clear it
-        """
-        self._user_system_message = new_system_message
+        # Pass environment variables to delegate
+        delegate.environment.update(self.environment)
+        self.delegates.append(delegate)
 
         # Update system message
         self._system_message = self._build_system_message()
         self.memory.set_system_message(self._system_message)
 
-        logger.info(
-            f"{'Updated' if new_system_message else 'Cleared'} user system message"
+        logger.info(f"Added delegate: {delegate.identifier}")
+
+    def remove_delegate(self, identifier: str) -> bool:
+        """Remove a delegate by identifier and update the system message.
+
+        :param identifier: Identifier of the delegate to remove
+        :return: True if delegate was removed, False if not found
+        """
+        for i, delegate in enumerate(self.delegates):
+            if delegate.identifier == identifier:
+                self.delegates.pop(i)
+
+                # Update system message
+                self._system_message = self._build_system_message()
+                self.memory.set_system_message(self._system_message)
+
+                logger.info(f"Removed delegate: {identifier}")
+                return True
+
+        logger.warning(f"Delegate not found: {identifier}")
+        return False
+
+    def _find_delegate(self, delegate_name: str) -> BaseAgent | None:
+        """Find a delegate agent by name.
+
+        :param delegate_name: Name of the delegate to find
+        :return: The delegate agent if found, None otherwise
+        """
+        return next((d for d in self.delegates if d.identifier == delegate_name), None)
+
+    def _parse_delegate_tag(self, delegate_content: str) -> tuple[str, str]:
+        """Parse the delegate tag content to extract agent name and query.
+
+        :param delegate_content: Content of the delegate tag
+        :return: Tuple of (agent_name, query)
+        """
+        # Expected format is "agent_name:query"
+        try:
+            agent_name, query = delegate_content.split(":", 1)
+            return agent_name.strip(), query.strip()
+        except ValueError:
+            return None, delegate_content
+
+    def _execute_delegate(self, delegate_name: str, query: str) -> str:
+        """Execute a delegate agent with the given query.
+
+        :param delegate_name: Name of the delegate agent to call
+        :param query: Query to pass to the delegate
+        :return: The result from the delegate agent
+        """
+        # Find the delegate by name
+        delegate = self._find_delegate(delegate_name)
+
+        if not delegate:
+            error_msg = f"Delegate agent '{delegate_name}' not found"
+            logger.warning(error_msg)
+            return error_msg
+
+        try:
+            # Ensure the delegate registers its tools before execution
+            if hasattr(delegate, "_register_tools"):
+                delegate._register_tools()
+                logger.debug(f"Re-registered tools for delegate {delegate_name}")
+
+            # Notify before execution
+            self._safe_event_handler(
+                event_name="on_delegate",
+                delegate_name=delegate_name,
+                query=query,
+                answer=None,
+            )
+
+            # Execute delegate
+            delegate_result = delegate.run(query)
+
+            # Extract answer and events
+            answer = delegate_result.answer
+            delegate_events = delegate_result.events
+
+            # Notify after execution with result
+            self._safe_event_handler(
+                event_name="on_delegate",
+                delegate_name=delegate_name,
+                query=query,
+                answer=answer,
+                events=delegate_events,
+            )
+
+            # Add result to memory
+            memory_msg = (
+                f"[SYSTEM DIRECTIVE] Delegated to {delegate_name} with query: {query}. "
+                f"Result: {answer}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN "
+                f"PROCEED IMMEDIATELY to either: (1) Call the next required tool or delegate, "
+                f"or (2) If all necessary operations have been completed, provide your final answer. "
+                f"Think back to the original user prompt and use that to guide your response."
+            )
+            self.memory.add_message(role="user", content=memory_msg)
+
+            return answer
+        except Exception as e:
+            return self._handle_delegate_error(delegate_name, query, str(e))
+
+    def _handle_delegate_error(self, delegate_name: str, query: str, error: str) -> str:
+        """Handle a delegate execution error.
+
+        :param delegate_name: Name of the delegate that failed
+        :param query: Query that was passed to the delegate
+        :param error: Error message
+        :return: The formatted error message
+        """
+        error_msg = f"Error executing delegate '{delegate_name}': {error}"
+        logger.warning(error_msg)
+
+        # Report error and add to memory
+        self._safe_event_handler(
+            event_name="on_delegate",
+            delegate_name=delegate_name,
+            query=query,
+            answer=f"Error: {error}",
+            events=[],
         )
+
+        self.memory.add_message(
+            role="user",
+            content=f"Delegation to '{delegate_name}' failed with error: {error}. Please try a different approach.",
+        )
+
+        return error_msg
+
+    ##################
+    # Tool Management #
+    ##################
+
+    def _register_tools(self):
+        """Register tools with the Bedrock model if supported."""
+        # Check if model supports tool registration
+        if not hasattr(self.model, "toolConfig"):
+            logger.warning(
+                f"Model {self.model.__class__.__name__} does not support tool registration"
+            )
+            return
+
+        # If no tools, clear the toolConfig
+        if not self.tools:
+            self.model.toolConfig = None
+            logger.debug(
+                f"Agent {self.identifier}: Cleared toolConfig (no tools available)"
+            )
+            return
+
+        # Convert BaseTool objects to BedrockTool format and set on model
+        bedrock_tools = [
+            BedrockTool(**tool.model_dump_bedrock_converse()) for tool in self.tools
+        ]
+        self.model.toolConfig = BedrockToolConfig(tools=bedrock_tools)
+
+        # Log the registered tools
+        tool_names = [tool.get_tool_name() for tool in self.tools]
+        logger.info(
+            f"Agent {self.identifier}: Registered {len(bedrock_tools)} tools with Bedrock model: {tool_names}"
+        )
+
+    def _find_tool(self, tool_name: str) -> BaseTool | None:
+        """Find a tool by name.
+
+        :param tool_name: Name of the tool to find
+        :return: The tool if found, None otherwise
+        """
+        return next(
+            (tool for tool in self.tools if tool.get_tool_name() == tool_name), None
+        )
+
+    def _execute_tool(self, tool_name: str, tool_parameters: dict) -> tuple[str, dict]:
+        """Execute a tool with the given parameters.
+
+        :param tool_name: Name of the tool to call
+        :param tool_parameters: Parameters for the tool
+        :return: Tuple of (formatted_result, tool_data_dict)
+        """
+        tool = self._find_tool(tool_name)
+        if not tool:
+            return self._handle_tool_not_found(tool_name, tool_parameters)
+
+        try:
+            # Execute the tool
+            tool_result = tool.run(environment=self.environment, **tool_parameters)
+
+            # Create formatted result for logs
+            formatted_result = (
+                f"[Tool Result] {tool_name}({tool_parameters}) -> {tool_result}"
+            )
+
+            # Store structured tool data
+            tool_data = {
+                "name": tool_name,
+                "parameters": tool_parameters,
+                "result": tool_result,
+            }
+
+            # Call callback and add to memory
+            self._safe_event_handler(
+                event_name="on_tool_use",
+                tool_name=tool_name,
+                parameters=tool_parameters,
+                result=tool_result,
+            )
+
+            self.memory.add_message(
+                role="user",
+                content=f"[SYSTEM DIRECTIVE] The {tool_name} returned: {tool_result}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+            )
+
+            return formatted_result, tool_data
+        except Exception as e:
+            return self._handle_tool_error(tool_name, tool_parameters, str(e))
+
+    def _handle_tool_not_found(
+        self, tool_name: str, tool_parameters: dict
+    ) -> tuple[str, dict]:
+        """Handle the case when a tool is not found.
+
+        :param tool_name: Name of the tool that wasn't found
+        :param tool_parameters: Parameters for the tool
+        :return: Tuple of (formatted_result, tool_data_dict)
+        """
+        formatted_result = f"[Tool Error: {tool_name}] Tool not found"
+        tool_data = {
+            "name": tool_name,
+            "parameters": tool_parameters,
+            "result": "Error: Tool not found",
+        }
+
+        # Handle error
+        self._safe_event_handler(
+            event_name="on_tool_use",
+            tool_name=tool_name,
+            result="Error: Tool not found",
+        )
+
+        self.memory.add_message(
+            role="user",
+            content=f"Tool '{tool_name}' not found. Please try a different approach.",
+        )
+        return formatted_result, tool_data
+
+    def _handle_tool_error(
+        self, tool_name: str, tool_parameters: dict, error: str
+    ) -> tuple[str, dict]:
+        """Handle a tool execution error.
+
+        :param tool_name: Name of the tool that failed
+        :param tool_parameters: Parameters that were passed to the tool
+        :param error: Error message
+        :return: Tuple of (formatted_result, tool_data_dict)
+        """
+        formatted_result = f"[Tool Error: {tool_name}] {error}"
+
+        tool_data = {
+            "name": tool_name,
+            "parameters": tool_parameters,
+            "result": f"Error: {error}",
+        }
+
+        # Handle error
+        self._safe_event_handler(
+            event_name="on_tool_use",
+            tool_name=tool_name,
+            parameters=tool_parameters,
+            result=f"Error: {error}",
+        )
+
+        self.memory.add_message(
+            role="user",
+            content=f"Your tool call resulted in an error: {error}. Please try a different approach.",
+        )
+
+        return formatted_result, tool_data
+
+    #################
+    # Event Handling #
+    #################
+
+    def _log_agent_event(self, message: str, log_type: AgentLogType) -> None:
+        """Helper method to log agent events if logging is enabled.
+
+        :param message: The message to log
+        :param log_type: The type of log message
+        """
+        if self.log_agentic_response:
+            self.log(message, log_type)
+
+    def _default_on_tool_use(
+        self, tool_name: str, parameters: dict, result: Any
+    ) -> None:
+        """Default callback for tool use.
+
+        :param tool_name: The name of the tool being called
+        :param parameters: The parameters passed to the tool
+        :param result: The result returned by the tool
+        """
+        self._log_agent_event(
+            f"Using tool [{tool_name}] with parameters: {parameters} -> {result}",
+            AgentLogType.TOOL_USE,
+        )
+
+    def _default_on_delegate(
+        self,
+        delegate_name: str,
+        query: str,
+        answer: str | None,
+        events: list[AgentEvent] | None = None,
+    ) -> None:
+        """Default callback for delegate use.
+
+        :param delegate_name: The name of the delegate agent
+        :param query: The query passed to the delegate
+        :param answer: The answer returned by the delegate (None if before execution)
+        :param events: List of events from the delegate agent (only available on completion)
+        """
+        if not self.log_agentic_response:
+            return
+
+        message = (
+            f'Initiating delegation to {delegate_name} with query: "{query}"'
+            if answer is None
+            else f"Delegation to {delegate_name} concluded: {answer}"
+        )
+        self.log(message, AgentLogType.DELEGATION)
+
+    def _default_on_thinking(self, text: str) -> None:
+        """Default callback for agent thinking.
+
+        :param text: The text chunk produced by the agent
+        """
+        self._log_agent_event(text, AgentLogType.THOUGHT)
+
+    def _default_on_answer(self, text: str) -> None:
+        """Default callback for agent answers.
+
+        :param text: The text chunk produced by the agent
+        """
+        self._log_agent_event(text, AgentLogType.ANSWER)
+
+    def _set_event_handlers(
+        self, event_handlers: EventHandler | dict[str, HandlerType] | None = None
+    ) -> None:
+        """Set up the event handlers. If `log_agentic_response` is True, include default handlers.
+
+        :param event_handlers: Event handlers config for different agent events
+        """
+        # Convert dict to EventHandler if needed
+        if event_handlers is not None and not isinstance(event_handlers, EventHandler):
+            try:
+                event_handlers = EventHandler(**event_handlers)
+            except Exception as e:
+                raise ValueError(f"Invalid event handlers: {e}")
+
+        # Initialize handlers with defaults if logging enabled
+        self.event_handlers = {}
+        if self.log_agentic_response:
+            self.event_handlers = {
+                "on_tool_use": [self._default_on_tool_use],
+                "on_thinking": [self._default_on_thinking],
+                "on_answer": [self._default_on_answer],
+                "on_delegate": [self._default_on_delegate],
+            }
+
+        # Merge user-provided handlers
+        if event_handlers:
+            handlers_dict = event_handlers.model_dump(exclude_none=True)
+            for event_name, handler in handlers_dict.items():
+                handlers_to_add = (
+                    [handler] if not isinstance(handler, list) else handler
+                )
+
+                if event_name in self.event_handlers:
+                    self.event_handlers[event_name].extend(handlers_to_add)
+                else:
+                    self.event_handlers[event_name] = handlers_to_add
+
+    def _safe_event_handler(self, event_name: str, *args, **kwargs) -> None:
+        """Safely dispatch event handlers, handling cases where the handler isn't assigned.
+
+        :param event_name: The name of the event to invoke
+        :param args: Positional arguments to pass to the event handler
+        :param kwargs: Keyword arguments to pass to the event handler
+        """
+        handlers = self.event_handlers.get(event_name)
+        if not handlers:
+            return
+
+        # Create and store event if possible
+        if event := self._create_event(event_name, **kwargs):
+            self._record_event(event)
+
+        # Execute each handler safely
+        for handler in handlers:
+            if not callable(handler):
+                logger.warning(f"Event handler for {event_name} is not callable")
+                continue
+
+            try:
+                handler(*args, **kwargs)
+            except Exception as e:
+                logger.warning(f"Error in {event_name} event handler: {e}")
+
+    def _create_event(self, event_name: str, **kwargs) -> AgentEvent | None:
+        """Create an AgentEvent from the event name and kwargs.
+
+        :param event_name: Name of the event
+        :param kwargs: Event data parameters
+        :return: Created AgentEvent or None if event should not be recorded
+        """
+        if event_name == "on_thinking" and "text" in kwargs:
+            return ThinkingEvent(content=kwargs["text"])
+
+        if event_name == "on_answer" and "text" in kwargs:
+            return AnswerEvent(content=kwargs["text"])
+
+        if event_name == "on_tool_use" and "tool_name" in kwargs:
+            return ToolUseEvent(
+                content=ToolUseData(
+                    name=kwargs["tool_name"],
+                    parameters=kwargs.get("parameters", {}),
+                    result=kwargs.get("result"),
+                )
+            )
+
+        # For delegate events, ensure all required parameters are present
+        required_keys = ["delegate_name", "query", "answer"]
+        if (
+            event_name == "on_delegate"
+            and all(k in kwargs for k in required_keys)
+            and kwargs["answer"] is not None
+        ):
+            return DelegateEvent(
+                content=DelegateData(
+                    agent_name=kwargs["delegate_name"],
+                    query=kwargs["query"],
+                    answer=kwargs["answer"],
+                    events=kwargs.get("events", []),
+                )
+            )
+
+        return None
+
+    def _record_event(self, event: AgentEvent) -> None:
+        """Record an AgentEvent in chronological order.
+
+        :param event: The AgentEvent to record
+        """
+        if not hasattr(self, "_current_iteration_events"):
+            return
+
+        self._current_iteration_events.append(event.model_dump())
+
+    #####################
+    # Content Processing #
+    #####################
+
+    def _process_content(
+        self, content: str
+    ) -> tuple[list[str], list[str], list[tuple[str, str, str]]]:
+        """Process the content to extract thinking, answer, and delegate parts in chronological order.
+
+        :param content: The content to process
+        :return: A tuple of (thinking, answer, delegates)
+        """
+        thoughts = []
+        answers = []
+        delegates = []
+
+        # Process all tags in order of appearance
+        remaining_content = content
+        while remaining_content:
+            # Find positions of the next tag of each type
+            matches = {
+                "thinking": self._THINKING_PATTERN.search(remaining_content),
+                "answer": self._ANSWER_PATTERN.search(remaining_content),
+                "delegate": self._DELEGATE_PATTERN.search(remaining_content),
+            }
+
+            # Find the earliest match
+            valid_matches = {tag: match for tag, match in matches.items() if match}
+            if not valid_matches:
+                break
+
+            # Get the earliest match
+            next_tag_type = min(
+                valid_matches, key=lambda tag: valid_matches[tag].start()
+            )
+            match = valid_matches[next_tag_type]
+
+            # Process the found tag
+            if next_tag_type == "thinking":
+                thought = match.group(1).strip()
+                thoughts.append(thought)
+                self._safe_event_handler(event_name="on_thinking", text=thought)
+            elif next_tag_type == "answer":
+                answer = match.group(1).strip()
+                answers.append(answer)
+                self._safe_event_handler(event_name="on_answer", text=answer)
+            elif next_tag_type == "delegate":
+                delegate_content = match.group(1).strip()
+                agent_name, query = self._parse_delegate_tag(delegate_content)
+
+                if agent_name:
+                    result = self._execute_delegate(agent_name, query)
+                    delegates.append((agent_name, query, result))
+
+            # Move past the processed tag
+            remaining_content = remaining_content[match.end() :]
+
+        return thoughts, answers, delegates
+
+    ####################
+    # Execution/Invoke #
+    ####################
+
+    def _invoke_iteration(self, prompt_obj: Messages) -> dict[str, Any]:
+        """Process a single iteration of the agent's conversation with the model.
+
+        :param prompt_obj: Messages object containing the conversation history
+        :return: Dictionary with response data including content, thinking, answer, and tool data
+        """
+        # Get response from the model
+        logger.debug(
+            f"Agent {self.identifier} is invoking the model with toolConfig: {self.model.toolConfig}"
+        )
+        response = self.model.invoke(prompt=prompt_obj)
+        logger.debug(f"Response structure: {response}")
+
+        # Initialize return values
+        content = ""
+        thinking = []
+        answer = []
+        tool_used = False
+        tool_name = None
+        tool_parameters = {}
+        tool_results = []
+        tool_data = None
+        delegate_used = False
+        delegate_data = []
+
+        # Initialize event list for this iteration
+        self._current_iteration_events = []
+
+        # Process Bedrock response structure
+        if isinstance(response, dict):
+            # Extract message content
+            if "output" in response and "message" in response["output"]:
+                message = response["output"]["message"]
+
+                # Process content blocks
+                if "content" in message and isinstance(message["content"], list):
+                    for item in message["content"]:
+                        if isinstance(item, dict):
+                            # Extract text content
+                            if "text" in item:
+                                content += item["text"]
+
+                            # Extract tool use information
+                            if "toolUse" in item:
+                                tool_used = True
+                                tool_info = item["toolUse"]
+                                tool_name = tool_info.get("name")
+
+                                # Extract parameters
+                                if "input" in tool_info and isinstance(
+                                    tool_info["input"], dict
+                                ):
+                                    tool_parameters = tool_info["input"]
+
+                # Check if tool use was the stop reason
+                if "stopReason" in response and response["stopReason"] == "tool_use":
+                    tool_used = True
+        elif isinstance(response, str):
+            content = response
+
+        # Process content for thinking/answer/delegate tags
+        if content:
+            thinking, answer, delegates = self._process_content(content)
+
+            # Check if delegation occurred
+            if delegates:
+                delegate_used = True
+                delegate_data = delegates
+
+            # Add response to memory
+            self.memory.add_message(role="assistant", content=content)
+
+        # Process tool call if found
+        if tool_used and tool_name and tool_parameters:
+            formatted_result, tool_data_dict = self._execute_tool(
+                tool_name, tool_parameters
+            )
+            tool_results.append(formatted_result)
+            tool_data = tool_data_dict
+
+        # Store events and clean up
+        iteration_events = self._current_iteration_events
+        delattr(self, "_current_iteration_events")
+
+        return {
+            "content": content,
+            "thinking": thinking,
+            "answer": answer,
+            "tool_used": tool_used,
+            "tool_data": tool_data,
+            "tool_results": tool_results,
+            "delegate_used": delegate_used,
+            "delegate_data": delegate_data,
+            "events": iteration_events,
+        }
 
 
 if __name__ == "__main__":

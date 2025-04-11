@@ -138,40 +138,40 @@ if __name__ == "__main__":
 
     prompt = "What is the top music played on WABC?"
 
-    # Test with tools
-    print("\n=== Testing with tools ===")
+    # # Test with tools
+    # print("\n=== Testing with tools ===")
 
-    print("\n1. Invoke without full_response:")
-    response = claude_with_tools.invoke(prompt)
-    print(response)
+    # print("\n1. Invoke without full_response:")
+    # response = claude_with_tools.invoke(prompt)
+    # print(response)
 
-    print("\n2. Invoke with full_response:")
-    response = claude_with_tools.invoke(prompt, full_response=True)
-    print(response)
+    # print("\n2. Invoke with full_response:")
+    # response = claude_with_tools.invoke(prompt, full_response=True)
+    # print(response)
 
-    print("\n3. Stream without full_response:")
-    for chunk in claude_with_tools.stream(prompt):
-        print(chunk, end="")
-
-    print("\n4. Stream with full_response:")
-    for chunk in claude_with_tools.stream(prompt, full_response=True):
-        print(chunk)
-
-    # Test without tools
-    print("\n=== Testing without tools ===")
-
-    print("\n1. Invoke without full_response:")
-    response = claude_without_tools.invoke(prompt)
-    print(response)
-
-    print("\n2. Invoke with full_response:")
-    response = claude_without_tools.invoke(prompt, full_response=True)
-    print(response)
-
-    print("\n3. Stream without full_response:")
-    for chunk in claude_without_tools.stream(prompt):
-        print(chunk, end="")
+    # print("\n3. Stream without full_response:")
+    # for chunk in claude_with_tools.stream(prompt):
+    #     print(chunk, end="")
 
     print("\n4. Stream with full_response:")
-    for chunk in claude_without_tools.stream(prompt, full_response=True):
-        print(chunk)
+    for chunk in claude_with_tools.stream(prompt, full_response=False):
+        print(chunk, end="")
+
+    # # Test without tools
+    # print("\n=== Testing without tools ===")
+
+    # print("\n1. Invoke without full_response:")
+    # response = claude_without_tools.invoke(prompt)
+    # print(response)
+
+    # print("\n2. Invoke with full_response:")
+    # response = claude_without_tools.invoke(prompt, full_response=True)
+    # print(response)
+
+    # print("\n3. Stream without full_response:")
+    # for chunk in claude_without_tools.stream(prompt):
+    #     print(chunk, end="")
+
+    # print("\n4. Stream with full_response:")
+    # for chunk in claude_without_tools.stream(prompt, full_response=True):
+    #     print(chunk)

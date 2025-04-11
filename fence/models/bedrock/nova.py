@@ -139,5 +139,5 @@ if __name__ == "__main__":
         print(chunk, end="")
 
     print("\n4. Stream with full_response:")
-    for chunk in nova_without_tools.stream(prompt, full_response=True):
-        print(chunk)
+    for chunk in nova_without_tools.stream(prompt, full_response=False):
+        print(chunk, end="")

@@ -1,0 +1,646 @@
+"""
+Bedrock agent class that uses native tool calling and streaming capabilities.
+"""
+
+import logging
+import re
+from pprint import pformat, pprint
+from typing import Any, Callable, List, Union
+
+from pydantic import BaseModel, field_validator
+
+from fence.agents.base import BaseAgent
+from fence.agents.bedrock.models import (
+    AgentEvent,
+    AgentEventTypes,
+    AgentResponse,
+    AnswerEvent,
+    DelegateData,
+    DelegateEvent,
+    ThinkingEvent,
+    ToolUseData,
+    ToolUseEvent,
+)
+from fence.memory.base import BaseMemory
+from fence.models.base import LLM
+from fence.models.bedrock.base import BedrockTool, BedrockToolConfig
+from fence.models.bedrock.nova import NovaPro
+from fence.templates.models import Messages
+from fence.tools.base import BaseTool
+
+logger = logging.getLogger(__name__)
+
+
+HandlerType = Union[Callable, List[Callable]]
+
+
+class EventHandler(BaseModel):
+    """Event handler for the BedrockAgent.
+
+    :param on_tool_use: Called when the agent uses a tool
+    :param on_thinking: Called when the agent is thinking
+    :param on_answer: Called when the agent provides text answer chunks
+    :param on_delegate: Called when the agent delegates to another agent
+    """
+
+    on_tool_use: HandlerType | None = None
+    on_thinking: HandlerType | None = None
+    on_answer: HandlerType | None = None
+    on_delegate: HandlerType | None = None
+
+    @field_validator("*", mode="before")
+    def validate_handlers(cls, value, info):
+        """Validate that handler functions are callables or lists of callables."""
+        if value is None:
+            return None
+
+        field_name = info.field_name
+
+        def validate_callable_signature(handler, field_name):
+            import inspect
+
+            sig = inspect.signature(handler)
+            param_count = len(
+                [
+                    p
+                    for p in sig.parameters.values()
+                    if p.default == inspect.Parameter.empty
+                ]
+            )
+
+            param_requirements = {
+                "on_tool_use": 3,
+                "on_thinking": 1,
+                "on_answer": 1,
+                "on_delegate": 3,
+            }
+
+            min_params = param_requirements.get(field_name, 0)
+            if param_count < min_params:
+                raise ValueError(
+                    f"{field_name} handler must accept at least {min_params} parameters"
+                )
+
+        if isinstance(value, list):
+            for handler in value:
+                if not callable(handler):
+                    raise ValueError(f"Handler {handler} is not callable")
+                validate_callable_signature(handler, field_name)
+            return value
+        elif callable(value):
+            validate_callable_signature(value, field_name)
+            return value
+        else:
+            raise ValueError(f"Handler {value} is not callable")
+
+
+class BedrockAgent(BaseAgent):
+    """
+    Bedrock agent that uses native tool calling and streaming capabilities.
+    """
+
+    _BASE_SYSTEM_MESSAGE = """
+You are a helpful assistant. You can think in <thinking> tags, and provide an answer in <answer> tags. Try to always plan your next steps in <thinking> tags. Make sure to exhaust all your tools and delegate capabilities before providing your final answer.
+"""
+
+    _THINKING_PATTERN = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
+    _ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
+    _DELEGATE_PATTERN = re.compile(r"<delegate>(.*?)</delegate>", re.DOTALL)
+
+    #########
+    # Setup #
+    #########
+
+    def __init__(
+        self,
+        identifier: str | None = None,
+        model: LLM = None,
+        description: str | None = None,
+        memory: BaseMemory | None = None,
+        environment: dict | None = None,
+        prefill: str | None = None,
+        log_agentic_response: bool = True,
+        are_you_serious: bool = False,
+        tools: list[BaseTool] | None = None,
+        delegates: list["BedrockAgent"] | None = None,
+        system_message: str | None = None,
+        event_handlers: EventHandler | dict[str, HandlerType] | None = None,
+    ):
+        """Initialize the BedrockAgent object.
+
+        :param identifier: An identifier for the agent
+        :param model: A Bedrock LLM model object
+        :param description: A description of the agent
+        :param memory: A memory object to store messages and system messages
+        :param environment: A dictionary of environment variables to pass to tools
+        :param prefill: A string to prefill the memory with
+        :param log_agentic_response: A flag to determine if the agent's responses should be logged
+        :param are_you_serious: A flag to determine if the log message should be printed in a frivolous manner
+        :param tools: A list of tools to make available to the agent
+        :param delegates: A list of delegate agents available to the agent
+        :param system_message: A system message to set for the agent
+        :param event_handlers: Event handlers for different agent events
+        """
+        # Set full_response to True for proper response handling
+        if model:
+            model.full_response = True
+
+        super().__init__(
+            identifier=identifier,
+            model=model,
+            description=description,
+            memory=memory,
+            environment=environment,
+            prefill=prefill,
+            log_agentic_response=log_agentic_response,
+            are_you_serious=are_you_serious,
+        )
+
+        # Store core configuration
+        self._user_system_message = system_message
+        self.tools = tools or []
+        self.delegates = delegates or []
+
+        # Build and set the system message
+        self._build_system_message()
+
+        # Register tools with the model if supported
+        self._register_tools()
+
+    def _build_system_message(self) -> str:
+        """Build the system message with delegation options based on available delegates.
+
+        :return: Complete system message including delegation options
+        """
+        system_message = self._BASE_SYSTEM_MESSAGE
+
+        # Add delegation instructions if delegates are available
+        if self.delegates:
+            delegate_info = "\nYou can delegate to the following agents using <delegate>agent_name:query</delegate> tags. Be sure to include all the necessary information in the query tag, and that the query is in natural language. For example: <delegate>SomeSpecialistAgent:Can you do this specialized task?</delegate>. These are the delegate agents available to you:"
+
+            # Add information about each delegate
+            for delegate in self.delegates:
+                delegate_name = delegate.identifier
+                delegate_desc = delegate.description or "No description available"
+                delegate_info += f"\n- {delegate_name}: {delegate_desc}"
+                delegate_info += f"\n- tools: {delegate.tools}"
+
+            system_message += delegate_info
+
+        # Append user system message if available
+        if self._user_system_message:
+            system_message += f"\n\n{self._user_system_message}"
+
+        logger.debug(f"System message: {system_message}")
+
+        self._system_message = system_message
+        self.memory.set_system_message(system_message)
+
+    ###############
+    # Public APIs #
+    ###############
+
+    def run(
+        self, prompt: str, max_iterations: int = 10, stream: bool = False
+    ) -> AgentResponse:
+        """
+        Run the agent with the given prompt.
+
+        :param prompt: The initial prompt to feed to the LLM
+        :param max_iterations: Maximum number of model-tool-model iterations
+        :param stream: Whether to stream the response or return the full text
+        :return: If stream=False: An AgentResponse object containing the answer and events
+                If stream=True: A dictionary containing 'events' in chronological order
+        """
+
+        response = self.invoke(prompt=prompt, max_iterations=max_iterations)
+        return AgentResponse(
+            answer=response.answer or "No answer found", events=response.events
+        )
+
+    def invoke(self, prompt: str, max_iterations: int = 10) -> dict[str, Any]:
+        """Run the agent with the given prompt using the model's invoke method.
+
+        :param prompt: The initial prompt to feed to the LLM
+        :param max_iterations: Maximum number of model-tool-model iterations
+        :return: A dictionary containing 'answer' and 'events'
+        """
+        # Reset memory and add prompt
+        self._flush_memory()
+        self.memory.add_message(role="user", content=prompt)
+
+        # Initialize result containers
+        all_events = []
+        iterations = 0
+        answer = None  # Initialize answer variable
+
+        while iterations < max_iterations:
+            # Get messages for the model
+            prompt_obj = Messages(
+                system=self.memory.get_system_message(),
+                messages=self.memory.get_messages(),
+            )
+
+            # Process one iteration
+            events = self._invoke_iteration(prompt_obj=prompt_obj)
+
+            # Collect events
+            all_events.extend(events["events"])
+
+            # Set stop reason to None for this iteration
+            stop_reason = None
+
+            # First check for answer (highest priority)
+            for event in events["events"]:
+                if isinstance(event, AnswerEvent):
+                    answer = event.content
+                    stop_reason = "answer"
+                    break  # Answer takes precedence over other events
+
+            # If no answer, check for tool use or delegation
+            if stop_reason is None:
+                for event in events["events"]:
+                    if isinstance(event, ToolUseEvent):
+                        stop_reason = "tool_use"
+                        break
+                    elif isinstance(event, DelegateEvent):
+                        stop_reason = "delegate_use"
+                        break
+
+            # Check if we've hit max iterations
+            if iterations >= max_iterations:
+                logger.warning(
+                    f"Reached maximum iterations ({max_iterations}). Stopping."
+                )
+                break
+
+            # If we got an answer, we're done
+            if stop_reason == "answer":
+                break
+
+            # If we used a tool or delegate, continue to next iteration
+            if stop_reason in ["tool_use", "delegate_use"]:
+                iterations += 1
+                continue
+
+            # If we got here without an answer, tool use, or delegate use,
+            # but there are events, continue to the next iteration
+            if events["events"]:
+                iterations += 1
+                continue
+
+            # If we got here with no events at all, we're done
+            logger.warning("Agentic loop interrupted: something went wrong")
+            break
+
+        # Return results
+        return AgentResponse(
+            answer=answer,
+            events=all_events,
+        )
+
+    ######################
+    # Delegate Management #
+    ######################
+
+    def _execute_delegate(self, event: DelegateEvent) -> str:
+        """Execute a delegate agent with the given query.
+
+        :param event: DelegateEvent object containing the delegate name and query
+        :return: The result from the delegate agent
+        """
+        # Extract delegate name and query from the event
+        delegate_name = event.content.agent_name
+        query = event.content.query
+
+        # Find the delegate by name
+        delegate = next(
+            (d for d in self.delegates if d.identifier == delegate_name), None
+        )
+
+        if not delegate:
+            error_msg = f"Delegate agent '{delegate_name}' not found"
+            logger.warning(error_msg)
+            return error_msg
+
+        try:
+            # Ensure the delegate registers its tools before execution
+            if hasattr(delegate, "_register_tools"):
+                delegate._register_tools()
+                logger.debug(f"Re-registered tools for delegate {delegate_name}")
+
+            # Execute delegate
+            delegate_result = delegate.run(prompt=query)
+
+            # Extract answer and events
+            answer = delegate_result.answer
+            delegate_events = delegate_result.events
+
+            # Add result to memory
+            memory_msg = (
+                f"[SYSTEM DIRECTIVE] Delegated to {delegate_name} with query: {query}. "
+                f"Result: {answer}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN "
+                f"PROCEED IMMEDIATELY to either: (1) Call the next required tool or delegate, "
+                f"or (2) If all necessary operations have been completed, provide your final answer. "
+                f"Think back to the original user prompt and use that to guide your response."
+            )
+            self.memory.add_message(role="user", content=memory_msg)
+
+            return answer, delegate_events
+        except Exception as e:
+            return self._handle_delegate_error(delegate_name, query, str(e))
+
+    ##################
+    # Tool Management #
+    ##################
+
+    def _register_tools(self):
+        """Register tools with the Bedrock model if supported."""
+        # Check if model supports tool registration
+        if not hasattr(self.model, "toolConfig"):
+            logger.warning(
+                f"Model {self.model.__class__.__name__} does not support tool registration"
+            )
+            return
+
+        # If no tools, clear the toolConfig
+        if not self.tools:
+            self.model.toolConfig = None
+            logger.debug(
+                f"Agent {self.identifier}: Cleared toolConfig (no tools available)"
+            )
+            return
+
+        # Check if tools have a description
+        for tool in self.tools:
+            if not tool.description:
+                raise ValueError(f"Tool {tool.get_tool_name()} has no description")
+
+        # Convert BaseTool objects to BedrockTool format and set on model
+        bedrock_tools = [
+            BedrockTool(**tool.model_dump_bedrock_converse()) for tool in self.tools
+        ]
+        self.model.toolConfig = BedrockToolConfig(tools=bedrock_tools)
+
+        # Log the registered tools
+        tool_names = [tool.get_tool_name() for tool in self.tools]
+        logger.info(
+            f"Agent {self.identifier}: Registered {len(bedrock_tools)} tools with Bedrock model: {tool_names}"
+        )
+
+    def _find_tool(self, tool_name: str) -> BaseTool | None:
+        """Find a tool by name.
+
+        :param tool_name: Name of the tool to find
+        :return: The tool if found, None otherwise
+        """
+        return next(
+            (tool for tool in self.tools if tool.get_tool_name() == tool_name), None
+        )
+
+    def _execute_tool(self, tool_name: str, tool_parameters: dict) -> tuple[str, dict]:
+        """Execute a tool with the given parameters.
+
+        :param tool_name: Name of the tool to call
+        :param tool_parameters: Parameters for the tool
+        :return: Tuple of (formatted_result, tool_data_dict)
+        """
+        tool = next(
+            (tool for tool in self.tools if tool.get_tool_name() == tool_name), None
+        )
+        if not tool:
+            return f"[Tool Error: {tool_name}] Tool not found"
+
+        try:
+            # Execute the tool
+            tool_result = tool.run(environment=self.environment, **tool_parameters)
+
+            # Create formatted result for logs
+            formatted_result = (
+                f"[Tool used] {tool_name}({tool_parameters}) -> {tool_result}"
+            )
+
+            # Store structured tool data as an event
+            tool_event = ToolUseEvent(
+                type=AgentEventTypes.TOOL_USE,
+                content=ToolUseData(
+                    name=tool_name,
+                    parameters=tool_parameters,
+                    result=tool_result,
+                ),
+            )
+
+            # Add to memory
+            self.memory.add_message(
+                role="user",
+                content=f"[SYSTEM DIRECTIVE] Using the tool <{tool_name}> with params <{tool_parameters}> returned: <{tool_result}>. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+            )
+
+            return {
+                "formatted_result": formatted_result,
+                "event": tool_event,
+            }
+        except Exception as e:
+            logger.error(f"Error executing tool {tool_name}: {e}")
+            return f"[Tool Error: {tool_name}] {e}"
+
+    ######################
+    # Content Processing #
+    ######################
+
+    def _process_content(
+        self, content: str
+    ) -> tuple[list[str], list[str], list[tuple[str, str, str]]]:
+        """Process the content to extract thinking, answer, and delegate parts in chronological order.
+
+        :param content: The content to process
+        :return: A list of events
+        """
+        events: list[AgentEvent] = []
+
+        # Process all tags in order of appearance
+        remaining_content = content
+        while remaining_content:
+            # Find positions of the next tag of each type
+            matches = {
+                "thinking": self._THINKING_PATTERN.search(remaining_content),
+                "answer": self._ANSWER_PATTERN.search(remaining_content),
+                "delegate": self._DELEGATE_PATTERN.search(remaining_content),
+            }
+
+            # Find the earliest match
+            valid_matches = {tag: match for tag, match in matches.items() if match}
+            if not valid_matches:
+                break
+
+            # Get the earliest match
+            next_tag_type = min(
+                valid_matches, key=lambda tag: valid_matches[tag].start()
+            )
+            match = valid_matches[next_tag_type]
+
+            if next_tag_type == "thinking":
+
+                thought = match.group(1).strip()
+                events.append(
+                    ThinkingEvent(type=AgentEventTypes.THINKING, content=thought)
+                )
+                # self._safe_event_handler(event_name="on_thinking", text=thought)
+
+            elif next_tag_type == "answer":
+                answer = match.group(1).strip()
+                events.append(AnswerEvent(type=AgentEventTypes.ANSWER, content=answer))
+                # self._safe_event_handler(event_name="on_answer", text=answer)
+
+            elif next_tag_type == "delegate":
+
+                delegate_content = match.group(1).strip()
+                try:
+                    agent_name, query = delegate_content.split(":", 1)
+                    agent_name = agent_name.strip()
+                    query = query.strip()
+                except ValueError:
+                    agent_name, query = None, delegate_content
+                events.append(
+                    DelegateEvent(
+                        type=AgentEventTypes.DELEGATION,
+                        content=DelegateData(agent_name=agent_name, query=query),
+                    )
+                )
+
+            # Move past the processed tag
+            remaining_content = remaining_content[match.end() :]
+
+        return events
+
+    ####################
+    # Execution/Invoke #
+    ####################
+
+    def _invoke_iteration(self, prompt_obj: Messages) -> dict[str, Any]:
+        """Process a single iteration of the agent's conversation with the model.
+
+        :param prompt_obj: Messages object containing the conversation history
+        :return: Dictionary with response data including content, thinking, answer, and tool data
+        """
+        # Get response from the model
+        logger.debug(
+            f"Agent {self.identifier} is invoking the model:\n"
+            f"\t[toolConfig]:\n{pformat(self.model.toolConfig, indent=4)}\n"
+            f"\t[prompt]:\n{pformat(prompt_obj, indent=4)}"
+        )
+
+        response = self.model.invoke(prompt=prompt_obj)
+        logger.debug(f"Agent got response:\n{pformat(response)}")
+
+        # Initialize event list for this iteration
+        self._current_iteration_events = []
+
+        # Initialize variables
+        content = ""
+        tool_name = None
+        tool_parameters = None
+
+        # Extract message content
+        if "output" in response and "message" in response["output"]:
+            message = response["output"]["message"]
+
+            # Process content blocks
+            if "content" in message and isinstance(message["content"], list):
+                content = ""
+                for item in message["content"]:
+
+                    # Extract text content
+                    if "text" in item:
+                        content += item["text"]
+
+                    # Extract tool use information
+                    if "toolUse" in item:
+                        tool_info = item["toolUse"]
+                        tool_name = tool_info.get("name")
+
+                        # Extract parameters
+                        if "input" in tool_info and isinstance(
+                            tool_info["input"], dict
+                        ):
+                            tool_parameters = tool_info["input"]
+
+        elif isinstance(response, str):
+            content = response
+
+        # Process content for thinking/answer/delegate tags
+        if content:
+            # Process the content for thinking/answer/delegate tags
+            events = self._process_content(content)
+
+            # Add response to memory
+            self.memory.add_message(role="assistant", content=content)
+
+            # If a delegate event is found, we need to execute the delegate
+            for event in events:
+                if isinstance(event, DelegateEvent):
+                    delegate_answer, delegate_events = self._execute_delegate(event)
+                    event.content.answer = delegate_answer
+                    event.content.events = delegate_events
+
+            # Add events to current iteration
+            self._current_iteration_events.extend(events)
+
+        # Process tool call if found
+        if tool_name and tool_parameters:
+            tool_package = self._execute_tool(tool_name, tool_parameters)
+            self._current_iteration_events.append(tool_package["event"])
+
+        # Store events and clean up
+        iteration_events = self._current_iteration_events
+        delattr(self, "_current_iteration_events")
+
+        return {
+            "events": iteration_events,
+        }
+
+
+if __name__ == "__main__":
+
+    from fence.tools.base import BaseTool, tool
+    from fence.utils.logger import setup_logging
+
+    setup_logging(log_level="info", are_you_serious=False)
+
+    # Create a test tool
+    @tool(description="Returns the age of the user")
+    def age_lookup_tool(name: str) -> str:
+        """Test tool"""
+        return f"Hello, {name}! You are 25 years old."
+
+    @tool(description="Checks eligibility for a loan")
+    def check_eligibility(name: str, age: int) -> str:
+        """Check eligibility for a loan"""
+        if age < 18:
+            return f"Hello, {name}! You are {age} years old. You are not eligible for a loan."
+        else:
+            return (
+                f"Hello, {name}! You are {age} years old. You are eligible for a loan."
+            )
+
+    eligibility_agent = BedrockAgent(
+        identifier="eligibility_agent",
+        model=NovaPro(region="us-east-1"),
+        description="An specialist agent that has various capabilities and tools to check eligibility for a loan. Only requires an age and name to check eligibility.",
+        tools=[check_eligibility],
+    )
+
+    agent = BedrockAgent(
+        identifier="test",
+        model=NovaPro(region="us-east-1"),
+        tools=[age_lookup_tool],
+        delegates=[eligibility_agent],
+        description="You are a helpful assistant that can check eligibility for a loan. All you need is an name. You can use the tools and delegates to check eligibility.",
+    )
+
+    response = agent.invoke(
+        "Hello, my name is Max. Can you check if I am eligible for a loan?",
+        max_iterations=4,
+    )
+    pprint(response.answer)
+    pprint(response.events)
