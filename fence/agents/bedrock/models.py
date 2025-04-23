@@ -116,8 +116,12 @@ class DelegateData(BaseModel):
     )
 
     def __str__(self):
-        events_str = "\n".join(f"\t>{str(event)}" for event in self.events)
-        return f"{self.agent_name} ({self.query}) -> {self.answer}\n{events_str}"
+        events_str = (
+            "\n" + "\n".join(f"\t>{str(event)}" for event in self.events)
+            if self.events
+            else ""
+        )
+        return f"{self.agent_name} ({self.query}) -> {self.answer}{events_str}"
 
     def __repr__(self):
         return self.__str__()

@@ -251,19 +251,26 @@ class ConverseStreamHandler:
         elif event_type == "delegate":
             # For delegate events, attempt to parse into agent_name and query
             try:
-                agent_name, query = content.split(":", 1)
-                agent_name = agent_name.strip()
-                query = query.strip()
+                # Split on the last colon to better handle agent names with colons
+                if ":" in content:
+                    agent_name, query = content.split(":", 1)
+                    # Only strip whitespace from ends, preserve internal spaces
+                    agent_name = agent_name.strip()
+                    query = query.strip()
 
-                if agent_name and query:
-                    # Complete delegate event with both name and query
-                    self.text_events.append(
-                        DelegateEvent(
-                            content=DelegateData(agent_name=agent_name, query=query)
+                    if agent_name and query:
+                        # Complete delegate event with both name and query
+                        self.text_events.append(
+                            DelegateEvent(
+                                content=DelegateData(agent_name=agent_name, query=query)
+                            )
                         )
-                    )
+                    else:
+                        raise ValueError("Invalid delegate event format")
                 else:
-                    raise ValueError("Invalid delegate event format")
+                    # Not in the correct format yet, keep buffering
+                    self.is_buffering_delegate = True
+                    self.delegate_buffer = content
             except ValueError:
                 # Not in the correct format yet, keep buffering
                 self.is_buffering_delegate = True
@@ -504,14 +511,34 @@ if __name__ == "__main__":
         {"contentBlockDelta": {"delta": {"text": ""}, "contentBlockIndex": 0}},
         {"contentBlockDelta": {"delta": {"text": "<delegate"}, "contentBlockIndex": 0}},
         {"contentBlockDelta": {"delta": {"text": ">"}, "contentBlockIndex": 0}},
-        {"contentBlockDelta": {"delta": {"text": "agent1:"}, "contentBlockIndex": 0}},
-        {"contentBlockDelta": {"delta": {"text": "query"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": "E"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": "lig"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": "ibility"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": " Agent"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": ":"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": "Check"}, "contentBlockIndex": 0}},
         {
             "contentBlockDelta": {
-                "delta": {"text": "</delegate>"},
+                "delta": {"text": " eligibility"},
                 "contentBlockIndex": 0,
             }
         },
+        {"contentBlockDelta": {"delta": {"text": " for"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": " a"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": " loan"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": " for"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": " Max"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": ","}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": " who"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": " is"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": " "}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": "2"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": "5"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": " years"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": " old"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": ".</"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": "delegate"}, "contentBlockIndex": 0}},
+        {"contentBlockDelta": {"delta": {"text": ">"}, "contentBlockIndex": 0}},
         {"contentBlockStop": {"contentBlockIndex": 0}},
         {
             "contentBlockStart": {

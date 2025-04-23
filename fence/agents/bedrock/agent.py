@@ -5,7 +5,7 @@ Bedrock agent class that uses native tool calling and streaming capabilities.
 import logging
 import re
 from pprint import pformat, pprint
-from typing import Any, Callable, List, Union
+from typing import Any, Callable, Generator, List, Union
 
 from pydantic import BaseModel, field_validator
 
@@ -25,6 +25,7 @@ from fence.memory.base import BaseMemory
 from fence.models.base import LLM
 from fence.models.bedrock.base import BedrockTool, BedrockToolConfig
 from fence.models.bedrock.nova import NovaPro
+from fence.streaming.base import ConverseStreamHandler
 from fence.templates.models import Messages
 from fence.tools.base import BaseTool
 
@@ -400,6 +401,104 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             events=all_events,
         )
 
+    def stream(
+        self, prompt: str, max_iterations: int = 10
+    ) -> Generator[AgentEvent, None, None]:
+        """Stream the agent's response to the user.
+
+        :param prompt: The initial prompt to feed to the LLM
+        :param max_iterations: Maximum number of model-tool-model iterations
+        :return: A generator of AgentEvent objects
+        """
+
+        # Reset memory and add prompt
+        self._flush_memory()
+        self.memory.add_message(role="user", content=prompt)
+
+        # Initialize result containers
+        all_events = []
+        iterations = 0
+        answer = None  # Initialize answer variable
+
+        while iterations < max_iterations:
+            # Get messages for the model
+            prompt_obj = Messages(
+                system=self.memory.get_system_message(),
+                messages=self.memory.get_messages(),
+            )
+
+            current_events = []
+
+            # Process one iteration
+            for event in self._stream_iteration(prompt_obj=prompt_obj):
+
+                # Collect events
+                current_events.append(event)
+
+            # Add events to all events
+            all_events.extend(current_events)
+
+            # Set stop reason to None for this iteration
+            stop_reason = None
+
+            # First check for answer (highest priority)
+            for event in current_events:
+                if isinstance(event, AnswerEvent):
+                    stop_reason = "answer"
+                    break  # Answer takes precedence over other events
+
+            # If no answer, check for tool use or delegation
+            if stop_reason is None:
+                for event in current_events:
+                    if isinstance(event, ToolUseEvent):
+                        stop_reason = "tool_use"
+                        break
+                    elif isinstance(event, DelegateEvent):
+                        stop_reason = "delegate_use"
+                        break
+
+            # Check if we've hit max iterations
+            if iterations >= max_iterations:
+                logger.warning(
+                    f"Reached maximum iterations ({max_iterations}). Stopping."
+                )
+                break
+
+            # If we got an answer, we're done
+            if stop_reason == "answer":
+                break
+
+            # If we used a tool or delegate, continue to next iteration
+            if stop_reason in ["tool_use", "delegate_use"]:
+                iterations += 1
+                continue
+
+            # If we got here without an answer, tool use, or delegate use,
+            # but there are events, continue to the next iteration
+            if current_events:
+                iterations += 1
+                continue
+
+            # If we got here with no events at all, we're done
+            logger.warning("Agentic loop interrupted: something went wrong")
+            break
+
+        # If we're done, get the final answer, which is the concatenation of the final successive answer events
+        if answer is None:
+            answer = "".join(
+                [
+                    event.content
+                    for event in all_events
+                    if isinstance(event, AnswerEvent)
+                ]
+            )
+
+        # Return results
+        return AgentResponse(
+            answer=answer,
+            events=all_events,
+        )
+
     ######################
     # Delegate Management #
     ######################
@@ -411,6 +510,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         :return: Tuple of (delegate_answer, delegate_events)
         """
         # Extract delegate name and query from the event
+        print(f"Executing delegate: {event.model_dump()}")
         delegate_name = event.content.agent_name
         query = event.content.query
 
@@ -470,6 +570,20 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             error_result = self._handle_delegate_error(delegate_name, query, str(e))
             return error_result, []
 
+    def _handle_delegate_error(
+        self, delegate_name: str, query: str, error_msg: str
+    ) -> str:
+        """Handle an error that occurred during delegate execution.
+
+        :param delegate_name: Name of the delegate that failed
+        :param query: Query that was used to delegate
+        :param error_msg: Error message from the delegate execution
+        :return: Error message to be returned to the user
+        """
+        error_msg = f"Error delegating to {delegate_name}: {error_msg}. Available delegates: {self.delegates}."
+        logger.error(error_msg)
+        return error_msg
+
     ##################
     # Tool Management #
     ##################
@@ -506,16 +620,6 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         tool_names = [tool.get_tool_name() for tool in self.tools]
         logger.debug(
             f"Agent {self.identifier}: Registered {len(bedrock_tools)} tools with Bedrock model: {tool_names}"
-        )
-
-    def _find_tool(self, tool_name: str) -> BaseTool | None:
-        """Find a tool by name.
-
-        :param tool_name: Name of the tool to find
-        :return: The tool if found, None otherwise
-        """
-        return next(
-            (tool for tool in self.tools if tool.get_tool_name() == tool_name), None
         )
 
     def _execute_tool(self, tool_name: str, tool_parameters: dict) -> dict:
@@ -727,6 +831,60 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             "events": iteration_events,
         }
 
+    def _stream_iteration(
+        self, prompt_obj: Messages
+    ) -> Generator[AgentEvent, None, None]:
+        """Process a single iteration of the agent's conversation with the model.
+
+        :param prompt_obj: Messages object containing the conversation history
+        :return: A generator of AgentEvent objects
+        """
+
+        # Initialize stream handler
+        stream_handler = ConverseStreamHandler()
+
+        for chunk in self.model.stream(prompt=prompt_obj):
+
+            # Process chunk and yield any events
+            for event in stream_handler.process_chunk(chunk):
+
+                print(f"Event: {event}")
+
+                # Handle tool use events by executing the tool and adding the result to the event
+                if isinstance(event, ToolUseEvent):
+                    tool_result = self._execute_tool(
+                        event.content.name, event.content.parameters
+                    )
+                    event.content.result = tool_result
+                    yield event
+
+                # Handle delegate events by executing the delegate and adding the answer and events to the event
+                elif isinstance(event, DelegateEvent):
+                    delegate_result = self._execute_delegate(event)
+                    event.content.answer = delegate_result[0]
+                    event.content.events = delegate_result[1]
+                    yield event
+
+                # Handle answer events
+                elif isinstance(event, AnswerEvent):
+
+                    # Call event handler
+                    self._safe_event_handler(event_name="on_answer", text=event.content)
+                    yield event
+
+                # Handle thinking events
+                elif isinstance(event, ThinkingEvent):
+
+                    # Call event handler
+                    self._safe_event_handler(
+                        event_name="on_thinking", text=event.content
+                    )
+
+                    yield event
+
+                else:
+                    logger.warning(f"Unhandled event type: {type(event)}")
+
 
 if __name__ == "__main__":
 
@@ -766,9 +924,18 @@ if __name__ == "__main__":
         description="You are a helpful assistant that can check eligibility for a loan. All you need is an name. You can use the tools and delegates to check eligibility.",
     )
 
+    # Invoke demo
     response = bank_agent.invoke(
         "Hello, my name is Max. Can you check if I am eligible for a loan?",
         max_iterations=4,
     )
     pprint(response.answer)
     pprint(response.events)
+
+    # Stream demo
+    stream = bank_agent.stream(
+        "Hello, my name is Max. Can you check if I am eligible for a loan?",
+        max_iterations=5,
+    )
+    for event in stream:
+        print(event)
