@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from fence.agents.agent import Agent
-from fence.agents.bedrock import BedrockAgent, EventHandler
+from fence.agents.bedrock import BedrockAgent, EventHandlers
 from fence.models.bedrock.claude import Claude35Sonnet
 from fence.models.openai.gpt import GPT4omini
 from fence.tools.base import BaseTool
@@ -370,7 +370,7 @@ class TestToolCalling:
             event_data.append({"type": "answer", "text": text})
 
         # Create event handlers model
-        event_handlers = EventHandler(
+        event_handlers = EventHandlers(
             on_tool_use=on_tool_use, on_thinking=on_thinking, on_answer=on_answer
         )
 

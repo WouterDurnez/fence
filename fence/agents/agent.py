@@ -281,7 +281,7 @@ class Agent(BaseAgent):
         """Handle actions involving delegate agents."""
 
         delegate_block = response.split("[DELEGATE]")[-1].strip()
-        self.log(message=delegate_block, type="delegate")
+        self.log(message=delegate_block, type="delegation")
         logger.debug(f"Processing delegate: {delegate_block}")
 
         try:

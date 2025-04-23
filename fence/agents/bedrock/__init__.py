@@ -1,3 +1,3 @@
-from .agent import BedrockAgent
+from .agent import BedrockAgent, EventHandlers
 
-__all__ = ["BedrockAgent"]
+__all__ = ["BedrockAgent", "EventHandlers"]
