@@ -134,8 +134,13 @@ class StreamHandler:
                         self.buffer = self.buffer.lstrip()
                         self.at_tag_start = False
 
-                    # Strip trailing whitespace from the last content chunk
-                    content = self.buffer.rstrip()
+                    # Strip trailing whitespace from the last content chunk, but only if it's not just whitespace
+                    if self.buffer.strip():
+                        content = self.buffer.rstrip()
+                    else:
+                        # If buffer is only whitespace, preserve it
+                        content = self.buffer
+
                     if content:
                         # Only emit and store if content is not empty after stripping
                         self._emit_content(content)
@@ -299,7 +304,7 @@ class ConverseStreamHandler:
 
                 # This will add events to self.text_events via _handle_text_event
                 self.text_stream_handler.process_chunk(
-                    chunk["contentBlockDelta"]["delta"]["text"].replace("\n\n", "")
+                    chunk["contentBlockDelta"]["delta"]["text"]
                 )
 
                 # Only yield events if we're not buffering a delegate event

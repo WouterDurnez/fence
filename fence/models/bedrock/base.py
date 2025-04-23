@@ -3,6 +3,7 @@ Base class for Bedrock foundation models
 """
 
 import logging
+from pprint import pformat
 from typing import Iterator, Literal
 
 import boto3
@@ -217,6 +218,7 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         :param **kwargs: Additional keyword arguments to override the default model kwargs
         :return: stream of responses
         """
+
         if "full_response" in kwargs:
             self.full_response = kwargs["full_response"]
         yield from self._invoke(prompt=prompt, stream=True, **kwargs)
@@ -269,7 +271,9 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         try:
 
             # Call the Bedrock API
-            logger.debug(f"Invoking Bedrock model with params: {invoke_params}")
+            logger.debug(
+                f"Invoking Bedrock model with params: {pformat(invoke_params)}"
+            )
             response = self.client.converse(**invoke_params)
 
             # Extract and log metrics regardless of full_response setting

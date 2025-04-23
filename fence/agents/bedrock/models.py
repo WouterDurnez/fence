@@ -49,12 +49,12 @@ class ToolUseData(BaseModel):
     :param result: Result returned by the tool
     """
 
-    name: str
+    tool_name: str
     parameters: dict[str, Any] = Field(default_factory=dict)
     result: str | None = None
 
     def __str__(self):
-        return f"{self.name} ({self.parameters}) -> {self.result}"
+        return f"{self.tool_name} ({self.parameters}) -> {self.result}"
 
     def __repr__(self):
         return self.__str__()
