@@ -55,7 +55,6 @@ class EventHandlers(BaseModel):
             return None
 
         field_name = info.field_name
-        logger.warning(f"Validating handlers for {field_name}")
 
         def validate_callable_signature(handler, field_name):
             import inspect
