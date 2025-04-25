@@ -42,14 +42,15 @@ class EventHandlers(BaseModel):
     :param on_tool_use: Called when the agent uses a tool
     :param on_thinking: Called when the agent is thinking
     :param on_answer: Called when the agent provides text answer chunks
-    :param on_delegate: Called when the agent delegates to another agent
+    :param on_delegation: Called when the agent delegates to another agent
     """
 
     on_start: HandlerType | None = None
     on_tool_use: HandlerType | None = None
     on_thinking: HandlerType | None = None
     on_answer: HandlerType | None = None
-    on_delegate: HandlerType | None = None
+    on_delegation_start: HandlerType | None = None
+    on_delegation_stop: HandlerType | None = None
     on_stop: HandlerType | None = None
 
     @field_validator("*", mode="before")
@@ -77,7 +78,11 @@ class EventHandlers(BaseModel):
                 "on_tool_use": [3, {"tool_name", "parameters", "result"}],
                 "on_thinking": [1, {"text"}],
                 "on_answer": [1, {"text"}],
-                "on_delegate": [3, {"delegate_name", "query", "answer"}],
+                "on_delegation_start": [2, {"delegate_name", "query"}],
+                "on_delegation_stop": [
+                    4,
+                    {"delegate_name", "query", "answer", "events"},
+                ],
                 "on_stop": [0, {}],
             }
 
@@ -100,7 +105,7 @@ class EventHandlers(BaseModel):
                 # Check if the required parameters are present in the given parameters
                 if given_params != set(required_params):
                     raise ValueError(
-                        f"{field_name} handler parameter mismatch: missing {missing_params}, superfluous {superfluous_params}"
+                        f"{field_name} handler parameter mismatch: missing {missing_params if missing_params else 'none'}, superfluous {superfluous_params if superfluous_params else 'none'}"
                     )
 
         if isinstance(value, list):
@@ -273,13 +278,17 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                 "on_answer": [
                     lambda text: self._log_agent_event(text, AgentLogType.ANSWER)
                 ],
-                "on_delegate": [
-                    lambda delegate_name, query, answer, events=None: self.log(
+                "on_delegation_start": [
+                    lambda delegate_name, query: self.log(
                         (
                             f'Initiating delegation to {delegate_name} with query: "{query}"'
-                            if answer is None
-                            else f"Delegation to {delegate_name} concluded: {answer}"
                         ),
+                        AgentLogType.DELEGATION,
+                    )
+                ],
+                "on_delegation_stop": [
+                    lambda delegate_name, query, answer, events: self.log(
+                        f"Delegation to {delegate_name} concluded: {answer}",
                         AgentLogType.DELEGATION,
                     )
                 ],
@@ -487,11 +496,9 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
         # Call event handler before execution
         self._safe_event_handler(
-            event_name="on_delegate",
+            event_name="on_delegation_start",
             delegate_name=delegate_name,
             query=query,
-            answer=None,
-            events=None,
         )
 
         # Find the delegate by name
@@ -520,7 +527,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
             # Call event handler after execution with the result
             self._safe_event_handler(
-                event_name="on_delegate",
+                event_name="on_delegation_stop",
                 delegate_name=delegate_name,
                 query=query,
                 answer=answer,
