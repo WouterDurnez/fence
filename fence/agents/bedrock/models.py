@@ -15,6 +15,8 @@ from pydantic import BaseModel, Field
 class AgentEventTypes(StrEnum):
     """Enumeration of possible agent event types."""
 
+    START = "start"
+    STOP = "stop"
     THINKING = "thinking"
     ANSWER = "answer"
     TOOL_USE = "tool_use"
@@ -28,6 +30,7 @@ class AgentEvent(BaseModel):
     :param content: The content of the event
     """
 
+    agent_name: str
     type: AgentEventTypes
     content: Any
 
@@ -35,10 +38,41 @@ class AgentEvent(BaseModel):
         use_enum_values = True
 
     def __str__(self):
-        return f"{self.type.capitalize()} event: {self.content}"
+        return f"{self.agent_name} [{self.type.capitalize()}] {self.content}"
 
     def __repr__(self):
         return self.__str__()
+
+
+class AgentStartEvent(AgentEvent):
+    """Event representing an agent's start."""
+
+    type: AgentEventTypes = AgentEventTypes.START
+    content: str | None = None
+
+    def __str__(self):
+        return f"{self.agent_name} [{self.type.capitalize()}]"
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class AgentStopEvent(AgentEvent):
+    """Event representing an agent's stop."""
+
+    type: AgentEventTypes = AgentEventTypes.STOP
+    content: str | None = None
+
+    def __str__(self):
+        return f"{self.agent_name} [{self.type.capitalize()}]"
+
+    def __repr__(self):
+        return self.__str__()
+
+
+#######################
+# Tool Related Models #
+#######################
 
 
 class ToolUseData(BaseModel):
@@ -66,7 +100,16 @@ class ToolUseEvent(AgentEvent):
     type: AgentEventTypes = AgentEventTypes.TOOL_USE
     content: ToolUseData
 
+    def __str__(self):
+        return f"{self.agent_name} [{self.type.capitalize()}] {self.content}"
 
+    def __repr__(self):
+        return self.__str__()
+
+
+#######################
+# Text Related Models #
+#######################
 class ThinkingEvent(AgentEvent):
     """Event representing an agent's thinking process."""
 
@@ -74,7 +117,7 @@ class ThinkingEvent(AgentEvent):
     content: str
 
     def __str__(self):
-        return f'{self.type.capitalize()} event: "{self.content}"'
+        return f"{self.agent_name} [{self.type.capitalize()}] {self.content}"
 
     def __repr__(self):
         return self.__str__()
@@ -87,7 +130,7 @@ class AnswerEvent(AgentEvent):
     content: str
 
     def __str__(self):
-        return f'{self.type.capitalize()} event: "{self.content}"'
+        return f"{self.agent_name} [{self.type.capitalize()}] {self.content}"
 
     def __repr__(self):
         return self.__str__()
