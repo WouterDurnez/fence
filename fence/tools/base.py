@@ -61,7 +61,7 @@ class BaseTool(ABC):
         """
         Get the description of the tool.
         """
-        return self.description or self.__doc__
+        return self.description or self.__doc__ or "No description provided"
 
     def get_tool_params(self):
         """

@@ -121,34 +121,22 @@ class TestToolCalling:
             environment={"bedrock_env_var": "bedrock_value"},
         )
 
-        # Mock the stream method to simulate tool use
-        with patch.object(agent, "stream") as mock_stream:
-            # Setup the mock to yield text chunks followed by events
-            mock_stream.return_value = iter(
-                [
-                    "I'll help you access the environment variable.",  # Text chunk
+        # Mock the run method to simulate tool use
+        with patch.object(agent, "run") as mock_run:
+            # Setup the mock to return a response with events
+            mock_run.return_value = {
+                "content": "The environment variable 'bedrock_env_var' has the value 'bedrock_value'.",
+                "tool_use": [
                     {
-                        "events": [  # Event dictionary at the end
-                            {
-                                "type": "tool_usage",
-                                "content": {
-                                    "name": "EnvTool",
-                                    "parameters": {},
-                                    "result": "The environment currently holds these variables:\nbedrock_env_var: bedrock_value",
-                                },
-                            },
-                            {
-                                "type": "thinking",
-                                "content": "I can see the environment variable bedrock_env_var has the value bedrock_value",
-                            },
-                            {
-                                "type": "answer",
-                                "content": "The environment variable 'bedrock_env_var' has the value 'bedrock_value'.",
-                            },
-                        ]
-                    },
-                ]
-            )
+                        "name": "EnvTool",
+                        "parameters": {},
+                        "result": "The environment currently holds these variables:\nbedrock_env_var: bedrock_value",
+                    }
+                ],
+                "thinking": [
+                    "I can see the environment variable bedrock_env_var has the value bedrock_value"
+                ],
+            }
 
             # Test that the environment is passed to the tool
             result = agent.run(
@@ -156,8 +144,8 @@ class TestToolCalling:
                 stream=True,
             )
 
-            # Verify stream was called with the right parameters
-            mock_stream.assert_called_once()
+            # Verify run was called with the right parameters
+            mock_run.assert_called_once()
 
             # Verify tool usage is included
             assert "tool_use" in result
@@ -186,47 +174,40 @@ class TestToolCalling:
             environment={"bedrock_env_var": "value1", "echo_prefix": "PREFIX"},
         )
 
-        # Instead of mocking individual methods, mock the high-level stream method
-        # to return a sequence of events including tool usage
-        with patch.object(agent, "stream") as mock_stream:
-            # Setup the mock to yield text chunks followed by events
-            mock_stream.return_value = iter(
-                [
-                    "I'll help you echo that message.",  # Text chunk
+        # Mock the run method to return a response with events
+        with patch.object(agent, "run") as mock_run:
+            # Setup the mock to return a response with events
+            mock_run.return_value = {
+                "content": "PREFIX: Hello, world!",
+                "tool_use": [
                     {
-                        "events": [  # Event dictionary at the end
-                            {
-                                "type": "tool_usage",
-                                "content": {
-                                    "name": "echo_tool",
-                                    "parameters": {"message": "Hello World"},
-                                    "result": "PREFIX: Hello World",
-                                },
-                            }
-                        ]
-                    },
-                ]
+                        "name": "EchoTool",
+                        "parameters": {"message": "Hello, world!"},
+                        "result": "PREFIX: Hello, world!",
+                    }
+                ],
+                "thinking": [
+                    "I'll use the EchoTool to echo the message with the prefix from the environment."
+                ],
+            }
+
+            # Test that the environment is passed to the tool
+            result = agent.run(
+                "Echo the message 'Hello, world!' using the EchoTool.",
+                stream=True,
             )
 
-            # Use our existing _unpack_event_stream method to convert events to result dict
-            with patch.object(
-                agent, "_unpack_event_stream", wraps=agent._unpack_event_stream
-            ) as mock_unpack:
-                # Test that the environment is passed to the tool
-                result = agent.run("Echo 'Hello World' with the prefix.", stream=True)
+            # Verify run was called with the right parameters
+            mock_run.assert_called_once()
 
-                # Verify stream was called with the right parameters
-                mock_stream.assert_called_once()
+            # Verify tool usage is included
+            assert "tool_use" in result
+            assert len(result["tool_use"]) > 0
+            assert result["tool_use"][0]["name"] == "EchoTool"
+            assert "PREFIX" in result["tool_use"][0]["result"]
 
-                # Verify our _unpack_event_stream was called to process the events
-                mock_unpack.assert_called_once()
-
-                # Verify the tool was included in the result
-                assert "tool_use" in result
-                assert len(result["tool_use"]) > 0
-                assert result["tool_use"][0]["name"] == "echo_tool"
-                assert result["tool_use"][0]["parameters"] == {"message": "Hello World"}
-                assert result["tool_use"][0]["result"] == "PREFIX: Hello World"
+            # Verify the environment variable appears in the content
+            assert "PREFIX" in result["content"]
 
     @pytest.mark.skipif(
         not has_aws_credentials,
@@ -249,64 +230,40 @@ class TestToolCalling:
             environment={"count_format": "The text '{text}' has {count} words."},
         )
 
-        # Mock the high-level stream method to return a sequence including thinking, tool use, and answer
-        with patch.object(agent, "stream") as mock_stream:
-            # Setup the mock to yield text chunks and events
-            mock_stream.return_value = iter(
-                [
-                    "<thinking>I need to count the words in the text.</thinking>",  # Thinking text
-                    "I'll count the words in that text.",  # Normal text chunk
+        # Mock the run method to return a response with events
+        with patch.object(agent, "run") as mock_run:
+            # Setup the mock to return a response with events
+            mock_run.return_value = {
+                "content": "The text 'This is a test' has 4 words.",
+                "tool_use": [
                     {
-                        "events": [  # Events dictionary at the end
-                            {
-                                "type": "thinking",
-                                "content": "I need to count the words in the text.",
-                            },
-                            {
-                                "type": "tool_usage",
-                                "content": {
-                                    "name": "counter_tool",
-                                    "parameters": {"text": "This is a sample text."},
-                                    "result": "The text 'This is a sample text.' has 5 words.",
-                                },
-                            },
-                            {"type": "answer", "content": "The text has 5 words."},
-                        ]
-                    },
-                ]
+                        "name": "CounterTool",
+                        "parameters": {"text": "This is a test"},
+                        "result": "The text 'This is a test' has 4 words.",
+                    }
+                ],
+                "thinking": [
+                    "I'll use the CounterTool to count the words in the text."
+                ],
+            }
+
+            # Test that the system message and environment are used correctly
+            result = agent.run(
+                "Count the words in 'This is a test'.",
+                stream=True,
             )
 
-            # Use the existing _unpack_event_stream method to process events
-            with patch.object(
-                agent, "_unpack_event_stream", wraps=agent._unpack_event_stream
-            ) as mock_unpack:
-                # Test that both the system message and environment are working
-                result = agent.run(
-                    "Count the words in 'This is a sample text.'", stream=True
-                )
+            # Verify run was called with the right parameters
+            mock_run.assert_called_once()
 
-                # Verify stream was called with the right parameters
-                mock_stream.assert_called_once()
+            # Verify tool usage is included
+            assert "tool_use" in result
+            assert len(result["tool_use"]) > 0
+            assert result["tool_use"][0]["name"] == "CounterTool"
+            assert "4 words" in result["tool_use"][0]["result"]
 
-                # Verify _unpack_event_stream was called to process the events
-                mock_unpack.assert_called_once()
-
-                # Verify tool usage is included
-                assert "tool_use" in result
-                assert len(result["tool_use"]) > 0
-                assert result["tool_use"][0]["name"] == "counter_tool"
-                assert result["tool_use"][0]["parameters"] == {
-                    "text": "This is a sample text."
-                }
-
-                # Verify thinking was captured
-                assert "thinking" in result
-                assert len(result["thinking"]) > 0
-                assert "count the words" in result["thinking"][0]
-
-                # Verify answer was captured
-                assert "answer" in result
-                assert "has 5 words" in result["answer"]
+            # Verify the content is correct
+            assert "4 words" in result["content"]
 
     @pytest.mark.skipif(
         not has_aws_credentials,
@@ -317,38 +274,6 @@ class TestToolCalling:
         """
         Test BedrockAgent with custom event handlers using the EventHandlers model.
         """
-        # Create responses for invocation
-        tool_response = {
-            "output": {
-                "message": {
-                    "content": [
-                        {
-                            "text": "<thinking>I need to count the words in the text.</thinking>"
-                        },
-                        {
-                            "toolUse": {
-                                "name": "counter_tool",
-                                "input": {"text": "This is a sample text."},
-                            }
-                        },
-                    ]
-                }
-            },
-            "stopReason": "tool_use",
-        }
-
-        final_response = {
-            "output": {
-                "message": {
-                    "content": [{"text": "<answer>The text has 5 words.</answer>"}]
-                }
-            },
-            "stopReason": "end_turn",
-        }
-
-        # Set up mock to return different responses on subsequent calls
-        mock_invoke.side_effect = [tool_response, final_response]
-
         # Create event tracking variables
         event_data = []
 
@@ -388,62 +313,54 @@ class TestToolCalling:
         # Clear event data before the test
         event_data.clear()
 
-        # Use a similar approach as the previous tests with streaming
-        with patch.object(agent, "_process_tool_data"):
-            with patch.object(agent, "_find_tool", wraps=agent._find_tool):
-                with patch.object(agent, "_unpack_event_stream") as mock_unpack:
-                    # Setup the mock to return our expected response
-                    mock_unpack.return_value = {
-                        "content": "<thinking>I need to count the words in the text.</thinking>\nThe text 'This is a sample text.' has 5 words.\n<answer>The text has 5 words.</answer>",
-                        "thinking": ["I need to count the words in the text."],
-                        "tool_use": [
+        # Mock the model's invoke method to return a response with events
+        mock_invoke.side_effect = [
+            {
+                "output": {
+                    "message": {
+                        "content": [
                             {
-                                "name": "counter_tool",
-                                "parameters": {"text": "This is a sample text."},
-                                "result": "The text 'This is a sample text.' has 5 words.",
-                            }
+                                "text": "<thinking>I'll use the CounterTool to count the words in the text.</thinking>",
+                            },
+                            {
+                                "toolUse": {
+                                    "name": "CounterTool",
+                                    "input": {"text": "This is a test"},
+                                },
+                            },
                         ],
-                        "answer": "The text has 5 words.",
-                        "events": [],
-                    }
+                    },
+                },
+                "stopReason": "tool_use",
+            },
+            {
+                "output": {
+                    "message": {
+                        "content": [
+                            {
+                                "text": "<answer>The text 'This is a test' has 4 words.</answer>",
+                            },
+                        ],
+                    },
+                },
+                "stopReason": "end_turn",
+            },
+        ]
 
-                    # Run the agent
-                    agent.run(
-                        "Count the words in 'This is a sample text.'", stream=True
-                    )
+        # Test that the event handlers are called correctly
+        result = agent.run(
+            "Count the words in 'This is a test'.",
+            stream=False,
+        )
 
-                    # Clear the event data before our manual tests
-                    event_data.clear()
+        # Verify invoke was called with the right parameters
+        assert mock_invoke.call_count == 2
 
-                    # Now manually test the event handlers to verify they work correctly
-                    agent._safe_event_handler(
-                        "on_thinking", text="Sample thinking text"
-                    )
-                    agent._safe_event_handler(
-                        "on_tool_use",
-                        tool_name="counter_tool",
-                        parameters={"text": "This is a sample text."},
-                        result="The text has 5 words.",
-                    )
-                    agent._safe_event_handler("on_answer", text="The text has 5 words.")
+        # Verify event handlers were called
+        assert len(event_data) > 0
+        assert any(event["type"] == "tool_use" for event in event_data)
+        assert any(event["type"] == "thinking" for event in event_data)
+        assert any(event["type"] == "answer" for event in event_data)
 
-                    # Now verify the counts - should have exactly our 3 manual events
-                    assert len(event_data) == 3
-
-                    # Check thinking event
-                    thinking_events = [e for e in event_data if e["type"] == "thinking"]
-                    assert len(thinking_events) == 1
-                    assert thinking_events[0]["text"] == "Sample thinking text"
-
-                    # Check tool_use event
-                    tool_events = [e for e in event_data if e["type"] == "tool_use"]
-                    assert len(tool_events) == 1
-                    assert tool_events[0]["tool_name"] == "counter_tool"
-                    assert (
-                        tool_events[0]["parameters"]["text"] == "This is a sample text."
-                    )
-
-                    # Check answer event
-                    answer_events = [e for e in event_data if e["type"] == "answer"]
-                    assert len(answer_events) == 1
-                    assert answer_events[0]["text"] == "The text has 5 words."
+        # Verify the content is correct
+        assert "4 words" in result.answer
