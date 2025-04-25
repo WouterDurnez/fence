@@ -18,6 +18,8 @@ link_logger.setLevel("INFO")
 
 # Parts of an agentic response
 class AgentLogType(Enum):
+    START = "start"
+    STOP = "stop"
     THOUGHT = "thought"
     ACTION = "action"
     DELEGATION = "delegation"
@@ -140,7 +142,9 @@ agent_description = """{self.description or self.__doc__}"""
             AgentLogType.DELEGATION: "\033[93m",  # Yellow
             AgentLogType.ANSWER: "\033[91m",  # Red
             AgentLogType.OBSERVATION: "\033[95m",  # Purple
-            AgentLogType.TOOL_USE: "\033[38;5;208m",  # Cyan
+            AgentLogType.TOOL_USE: "\033[38;5;208m",  # Orange
+            AgentLogType.START: "\033[96m",  # Cyan
+            AgentLogType.STOP: "\033[96m",  # Cyan
             "identifier": "\033[1m",  # Bold
             "reset": "\033[0m",  # Reset
         }
@@ -151,6 +155,8 @@ agent_description = """{self.description or self.__doc__}"""
             AgentLogType.ANSWER: "🎯",
             AgentLogType.OBSERVATION: "🔍",
             AgentLogType.TOOL_USE: "🔧",
+            AgentLogType.START: "🚀",
+            AgentLogType.STOP: "🏁",
         }
 
         tag = f"[{type.value}]"
