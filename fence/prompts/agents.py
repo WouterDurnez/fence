@@ -48,10 +48,10 @@ Choose [ACTION] when you need more information, for which you have a tool availa
 ```toml
 tool_name = """tool_name"""
 [tool_params]
-parameter = value
+*parameter* = *value*
 ```
 
-This will call the tool `tool_name` with the parameter `value`. You will then be called again with the result of this tool.
+This will call the tool `tool_name` with the parameter `value`. If the tool requires no parameters, you can omit the `[tool_params]` section. You will then be called again with the result of this tool.
 
 Choose [DELEGATE] when you believe this task would best be handled by another delegate agent. The list of available delegates, and their capabilities, will follow. You can delegate to an agent by replying as follows:
 

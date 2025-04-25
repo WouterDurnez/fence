@@ -82,3 +82,8 @@ include = [
     "README.md",
     "LICENSE",
 ]
+
+[tool.ruff]
+include = [
+    "fence/**",
+]

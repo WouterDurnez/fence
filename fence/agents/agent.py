@@ -9,15 +9,12 @@ from contextlib import contextmanager
 from fence.agents.base import BaseAgent
 from fence.links import Link
 from fence.links import logger as link_logger
-from fence.memory.base import BaseMemory
+from fence.memory.base import BaseMemory, FleetingMemory
 from fence.models.base import LLM
-from fence.models.bedrock.claude import ClaudeInstant
+from fence.models.openai import GPT4omini
 from fence.parsers import TOMLParser
 from fence.prompts.agents import REACT_MULTI_AGENT_TOOL_PROMPT
 from fence.tools.base import BaseTool
-from fence.tools.math import CalculatorTool, PrimeTool
-from fence.tools.scratch import EnvTool
-from fence.tools.text import TextInverterTool
 from fence.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -161,7 +158,8 @@ class Agent(BaseAgent):
         :param delegate: Delegate to add
         """
         if delegate.__class__.__name__ not in self.delegates:
-            self.delegates[delegate.__class__.__name__]
+            self.delegates[delegate.__class__.__name__] = delegate
+            self._update_system_message()
 
     def remove_delegate(self, delegate_name: str) -> None:
         """
@@ -181,6 +179,9 @@ class Agent(BaseAgent):
             delegates=self._format_entities(list(self.delegates.values())),
             tools=self._format_entities(list(self.tools.values())),
         )
+
+        # Also update the system message in memory
+        self.memory.set_system_message(self._system_message)
 
     def run(self, prompt: str, max_iterations: int | None = None) -> str:
         """
@@ -236,7 +237,7 @@ class Agent(BaseAgent):
                         if delegate_response:
                             self.memory.add_message(
                                 role="user",
-                                content=f"[OBSERVATION] {delegate_response}",
+                                content=f"[OBSERVATION] Call to delegate completed. Result: {delegate_response}",
                             )
 
                     # Handle tool actions
@@ -245,7 +246,8 @@ class Agent(BaseAgent):
                         self.log(message=tool_response, type="observation")
                         if tool_response:
                             self.memory.add_message(
-                                role="user", content=f"[OBSERVATION] {tool_response}"
+                                role="user",
+                                content=f"[OBSERVATION] Call to tool completed. Result: {tool_response}",
                             )
 
                 iteration_count += 1
@@ -255,6 +257,10 @@ class Agent(BaseAgent):
 
     def _extract_thought(self, response: str) -> str:
         """Extract the thought from the response. Starts with [THOUGHT], and ends before [ACTION], [DELEGATE], or [ANSWER]."""
+        if "[THOUGHT]" not in response:
+            logger.warning("No thought found in response")
+            return ""
+
         thought = (
             response.split("[THOUGHT]")[1]
             .split("[ACTION]")[0]
@@ -275,7 +281,7 @@ class Agent(BaseAgent):
         """Handle actions involving delegate agents."""
 
         delegate_block = response.split("[DELEGATE]")[-1].strip()
-        self.log(message=delegate_block, type="delegate")
+        self.log(message=delegate_block, type="delegation")
         logger.debug(f"Processing delegate: {delegate_block}")
 
         try:
@@ -352,7 +358,7 @@ TimeoutError("Iteration exceeded maximum time")
 
 if __name__ == "__main__":
 
-    setup_logging(log_level="kill", are_you_serious=False)
+    setup_logging(log_level="debug", are_you_serious=False)
 
     # # Create the delegate agent
     # delegate = ToolAgent(
@@ -389,88 +395,88 @@ if __name__ == "__main__":
     #     prompt="What is the secret string? Then, invert it. Finally, ask for advice on how to best phrase this. It is important the inverted string is in the final response."
     # )
 
-    class SearchTool(BaseTool):
-        """
-        A tool that searches a knowledge base for relevant contextual information.
-        """
-
-        def __init__(self):
-            """
-            Initialize the tool with a retriever.
-            """
-            super().__init__(
-                description="Given a query, this tool searches a knowledge base for relevant contextual information."
-            )
-
-        def execute_tool(self, query: str, **kwargs):
-
-            if query is None:
-                raise Exception("Missing query parameter")
-
-            # Get the assets from Showpad
-            logger.info(f"Retrieving assets for query: {query}")
-            if query.lower().__contains__("alexander"):
-                return "Alexander the Great was a king of Macedonia who conquered an empire that stretched from the Balkans to modern-day Pakistan."
-            if query.lower().__contains__("cyrus"):
-                return "Cyrus the Great was the founder of the Achaemenid Empire, the first Persian Empire."
-
-    # Define the tools available to the agent
-    tools = [CalculatorTool(), PrimeTool(), TextInverterTool(), EnvTool()]
-
-    # Create an agent with a model and tools
-    agent = Agent(
-        model=ClaudeInstant(),
-        tools=[SearchTool()],
-        environment={"some_env_var": "some_value"},
-    )
-
-    for q in [
-        # "How much is 9 + 10?",
-        # "Is 1172233 a prime number?",
-        # "What is the square root of 16?",
-        # Math question we don't have a tool for
-        # "Find the first 2 prime numbers beyond 10000",
-        # "Find the sum of the first 2 prime numbers beyond 1005, take the number as a string and reverse it",
-        # "Tell me what the value of the environment variable 'some_env_var' is",
-        "Find information about Alexander the Great",
-    ]:
-        logger.critical(f"Running agent with prompt: {q}")
-        response = agent.run(q)
-        logger.critical(f"Response: {response}")
-
-    # class AccountNameRetrieverTool(BaseTool):
+    # class SearchTool(BaseTool):
     #     """
-    #     Tool to retrieve the account holder name from a database.
+    #     A tool that searches a knowledge base for relevant contextual information.
     #     """
-    #
-    #     def execute_tool(self, environment):
-    #         account_id = self.environment.get("current_account_id", "unknown")
-    #         logger.info(f"Retrieving account holder name for account_id: {account_id}")
-    #         if account_id == "foo":
-    #             return "Bert"
-    #         if account_id == "bar":
-    #             return "Ernie"
-    #         return "Unknown"
-    #
-    # # Create the memory object
+
+    #     def __init__(self):
+    #         """
+    #         Initialize the tool with a retriever.
+    #         """
+    #         super().__init__(
+    #             description="Given a query, this tool searches a knowledge base for relevant contextual information."
+    #         )
+
+    #     def execute_tool(self, query: str, **kwargs):
+
+    #         if query is None:
+    #             raise Exception("Missing query parameter")
+
+    #         # Get the assets from Showpad
+    #         logger.info(f"Retrieving assets for query: {query}")
+    #         if query.lower().__contains__("alexander"):
+    #             return "Alexander the Great was a king of Macedonia who conquered an empire that stretched from the Balkans to modern-day Pakistan."
+    #         if query.lower().__contains__("cyrus"):
+    #             return "Cyrus the Great was the founder of the Achaemenid Empire, the first Persian Empire."
+
+    # # Define the tools available to the agent
+    # tools = [CalculatorTool(), PrimeTool(), TextInverterTool(), EnvTool()]
+
+    # # Create an agent with a model and tools
+    # agent = Agent(
+    #     model=ClaudeInstant(),
+    #     tools=[SearchTool()],
+    #     environment={"some_env_var": "some_value"},
+    # )
+
+    # for q in [
+    #     # "How much is 9 + 10?",
+    #     # "Is 1172233 a prime number?",
+    #     # "What is the square root of 16?",
+    #     # Math question we don't have a tool for
+    #     # "Find the first 2 prime numbers beyond 10000",
+    #     # "Find the sum of the first 2 prime numbers beyond 1005, take the number as a string and reverse it",
+    #     # "Tell me what the value of the environment variable 'some_env_var' is",
+    #     "Find information about Alexander the Great",
+    # ]:
+    #     logger.critical(f"Running agent with prompt: {q}")
+    #     response = agent.run(q)
+    #     logger.critical(f"Response: {response}")
+
+    class AccountNameRetrieverTool(BaseTool):
+        """
+        Tool to retrieve the account holder name from a database.
+        """
+
+        def execute_tool(self, environment):
+            account_id = self.environment.get("current_account_id", "unknown")
+            logger.info(f"Retrieving account holder name for account_id: {account_id}")
+            if account_id == "foo":
+                return "Bert"
+            if account_id == "bar":
+                return "Ernie"
+            return "Unknown"
+
+    # Create the memory object
     # memory = DynamoDBMemory(
     #     table_name="fence_test",
     #     primary_key_name="session",
     #     primary_key_value="02d2b1b0-cf84-401e-b9d9-16f24c359cc8",
     # )
-    #
-    # # Create the agents
-    # child_agent = Agent(
-    #     identifier="child_accountant",
-    #     description="An agent that can retrieve the account holder name",
-    #     model=GPT4omini(source="agent"),
-    #     tools=[AccountNameRetrieverTool()],
-    # )
-    # parent_agent = Agent(
-    #     identifier="parent_accountant",
-    #     model=GPT4omini(source="agent"),
-    #     delegates=[child_agent],
-    #     environment={"current_account_id": "bar"},
-    #     memory=FleetingMemory(),
-    # )
-    # result = parent_agent.run("what is the current account holders name?")
+
+    # Create the agents
+    child_agent = Agent(
+        identifier="child_accountant",
+        description="An agent that can retrieve the account holder name",
+        model=GPT4omini(source="agent"),
+        tools=[AccountNameRetrieverTool()],
+    )
+    parent_agent = Agent(
+        identifier="parent_accountant",
+        model=GPT4omini(source="agent"),
+        delegates=[child_agent],
+        environment={"current_account_id": "bar"},
+        memory=FleetingMemory(),
+    )
+    result = parent_agent.run("what is the current account holders name?")

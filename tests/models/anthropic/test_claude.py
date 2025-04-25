@@ -2,6 +2,7 @@
 Anthropic Claude model tests
 """
 
+import os
 from unittest.mock import Mock
 
 import pytest
@@ -9,7 +10,13 @@ import pytest
 from fence.models.anthropic.claude import Claude35Haiku, ClaudeBase
 from fence.templates.messages import Message, Messages
 
+# Check if Anthropic API key is present
+has_anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY") is not None
 
+
+@pytest.mark.skipif(
+    not has_anthropic_api_key, reason="Anthropic API key not found in environment"
+)
 def test_claude_base_invoke_with_empty_prompt():
     """
     Test case for the invoke method of the GPTBase class with an empty prompt.
@@ -20,6 +27,9 @@ def test_claude_base_invoke_with_empty_prompt():
         claude.invoke(prompt="")
 
 
+@pytest.mark.skipif(
+    not has_anthropic_api_key, reason="Anthropic API key not found in environment"
+)
 def test_claude_base_invoke_with_none_prompt():
     """
     Test case for the invoke method of the GPTBase class with a None prompt.
@@ -30,6 +40,9 @@ def test_claude_base_invoke_with_none_prompt():
         claude.invoke(prompt=None)
 
 
+@pytest.mark.skipif(
+    not has_anthropic_api_key, reason="Anthropic API key not found in environment"
+)
 def test_claude_base_invoke_with_empty_messages_prompt():
     """
     Test case for the invoke method of the GPTBase class with an empty Messages prompt.
@@ -67,6 +80,9 @@ def test_claude_base_invoke_with_messages_prompt():
     assert response == "mocked response"
 
 
+@pytest.mark.skipif(
+    not has_anthropic_api_key, reason="Anthropic API key not found in environment"
+)
 def test_claude_base_invoke_with_invalid_prompt():
     """
     Test case for the invoke method of the Claude base class with an invalid prompt.
@@ -77,6 +93,9 @@ def test_claude_base_invoke_with_invalid_prompt():
         claude.invoke(prompt=123)
 
 
+@pytest.mark.skipif(
+    not has_anthropic_api_key, reason="Anthropic API key not found in environment"
+)
 def test_claude_haiku_init():
     """
     Test case for the __init__ method of the GPT4o class.

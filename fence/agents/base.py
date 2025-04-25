@@ -3,7 +3,7 @@ Base Agent class
 """
 
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from enum import Enum
 
 from fence.links import logger as link_logger
@@ -20,12 +20,18 @@ link_logger.setLevel("INFO")
 class AgentLogType(Enum):
     THOUGHT = "thought"
     ACTION = "action"
-    DELEGATE = "delegate"
+    DELEGATION = "delegation"
     ANSWER = "answer"
     OBSERVATION = "observation"
+    TOOL_USE = "tool_use"
 
 
-class BaseAgent:
+####################
+# Base Agent class #
+####################
+
+
+class BaseAgent(ABC):
     """Base Agent class"""
 
     def __init__(
@@ -37,6 +43,7 @@ class BaseAgent:
         environment: dict | None = None,
         prefill: str | None = None,
         log_agentic_response: bool = True,
+        system_message: str | None = None,
         are_you_serious: bool = False,
     ):
         """
@@ -65,7 +72,7 @@ class BaseAgent:
         self.memory = memory or FleetingMemory()
 
         # Set system message
-        self._system_message = None
+        self._system_message = system_message
 
     @abstractmethod
     def run(self, prompt: str) -> str:
@@ -93,23 +100,19 @@ agent_description = """{self.description or self.__doc__}"""
     def _flush_memory(self):
         """
         Clear or reset the agent's memory context.
-
-        :param prefill: A string to prefill the memory with, i.e. an assistant message.
         """
 
-        # Check if there are any messages in the memory
-        self.memory.messages = self.memory.get_messages()
+        # Create a fresh memory object of the same type as the current one
+        memory_type = type(self.memory)
+        self.memory = memory_type()
 
-        # If there are no messages, add the prefill message
-        if not self.memory.messages and self.prefill:
+        # Apply the system message if available
+        if hasattr(self, "_system_message") and self._system_message:
+            self.memory.set_system_message(self._system_message)
+
+        # If we have a prefill, add it
+        if self.prefill:
             self.memory.add_message(role="assistant", content=self.prefill)
-
-        # Check if there is a system message in the memory
-        self.memory.system = self.memory.get_system_message()
-
-        # If no system message is present, add a new one
-        if not self.memory.system:
-            self.memory.set_system_message(content=self._system_message)
 
     def log(
         self,
@@ -134,18 +137,20 @@ agent_description = """{self.description or self.__doc__}"""
         colors = {
             AgentLogType.THOUGHT: "\033[94m",  # Blue
             AgentLogType.ACTION: "\033[92m",  # Green
-            AgentLogType.DELEGATE: "\033[93m",  # Yellow
+            AgentLogType.DELEGATION: "\033[93m",  # Yellow
             AgentLogType.ANSWER: "\033[91m",  # Red
             AgentLogType.OBSERVATION: "\033[95m",  # Purple
-            "identifier": "\033[96m",  # Cyan
+            AgentLogType.TOOL_USE: "\033[38;5;208m",  # Cyan
+            "identifier": "\033[1m",  # Bold
             "reset": "\033[0m",  # Reset
         }
         emojis = {
             AgentLogType.THOUGHT: "💭",
             AgentLogType.ACTION: "🛠️",
-            AgentLogType.DELEGATE: "🤝",
+            AgentLogType.DELEGATION: "🤝",
             AgentLogType.ANSWER: "🎯",
             AgentLogType.OBSERVATION: "🔍",
+            AgentLogType.TOOL_USE: "🔧",
         }
 
         tag = f"[{type.value}]"

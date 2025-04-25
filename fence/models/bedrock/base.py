@@ -3,6 +3,7 @@ Base class for Bedrock foundation models
 """
 
 import logging
+from pprint import pformat
 from typing import Iterator, Literal
 
 import boto3
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from fence.models.base import LLM, InvokeMixin, MessagesMixin, StreamMixin
 from fence.templates.messages import Messages
+from fence.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,7 @@ logger = logging.getLogger(__name__)
 ##########
 
 
-class InferenceConfig(BaseModel):
+class BedrockInferenceConfig(BaseModel):
     max_tokens: int | None = Field(
         None,
         ge=1,
@@ -27,8 +29,8 @@ class InferenceConfig(BaseModel):
     )
     stop_sequences: list[str] | None = Field(
         None,
-        min_items=0,
-        max_items=4,
+        min_length=0,
+        max_length=4,
         description="A list of stop sequences. A stop sequence is a sequence of characters that causes the model to stop generating the response.",
     )
     temperature: float | None = Field(
@@ -49,38 +51,83 @@ class InferenceConfig(BaseModel):
     )
 
 
-class JSONSchema(BaseModel):
-    type: Literal["object"]
-    properties: dict[str, dict[str, str]]
-    required: list[str]
+class BedrockJSONSchema(BaseModel):
+    """
+    JSON schema for the tool input.
+
+    Example:
+    ```json
+    {
+        "type": "object",
+        "properties": {
+            "sign": {
+            "type": "string",
+            "description": "The call sign for the radio station for which you want the most popular song. Example calls signs are WZPZ, and WKRP.",
+        }
+        },
+        "required": ["sign"],
+    }
+    ```
+    """
+
+    type: Literal["object"] = Field(..., description="The type of the schema.")
+    properties: dict[str, dict[str, str]] = Field(
+        ..., description="The properties of the schema."
+    )
+    required: list[str] = Field(
+        [], description="The required properties of the schema."
+    )
 
 
-class ToolInputSchema(BaseModel):
-    json_field: JSONSchema = Field(
+class BedrockToolInputSchema(BaseModel):
+    json_field: BedrockJSONSchema = Field(
         ..., alias="json", description="The input schema for the tool in JSON format."
     )
 
 
-class ToolSpec(BaseModel):
+class BedrockToolSpec(BaseModel):
     name: str = Field(
         ..., min_length=1, max_length=64, description="The name for the tool."
     )
     description: str | None = Field(
         None, min_length=1, description="The description for the tool."
     )
-    inputSchema: ToolInputSchema = Field(
+    inputSchema: BedrockToolInputSchema = Field(
         ..., description="The input schema for the tool in JSON format."
     )
 
 
-class Tool(BaseModel):
-    toolSpec: ToolSpec | None = Field(..., description="The tool specification.")
+class BedrockTool(BaseModel):
+    toolSpec: BedrockToolSpec | None = Field(..., description="The tool specification.")
 
 
-class ToolConfig(BaseModel):
-    tools: list[Tool] = Field(
+class BedrockToolConfig(BaseModel):
+    tools: list[BedrockTool] = Field(
         ..., min_length=1, description="The tools to use for the conversation."
     )
+
+    def model_dump_bedrock_converse(self):
+        """
+        Dump the tool config in the format required by Bedrock Converse.
+        """
+        return {
+            "tools": [
+                {
+                    "toolSpec": {
+                        "name": tool.toolSpec.name,
+                        "description": tool.toolSpec.description,
+                        "inputSchema": {
+                            "json": {
+                                "type": "object",
+                                "properties": tool.toolSpec.inputSchema.json_field.properties,
+                                "required": tool.toolSpec.inputSchema.json_field.required,
+                            }
+                        },
+                    }
+                }
+                for tool in self.tools
+            ]
+        }
 
 
 ############################################
@@ -100,8 +147,8 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
     def __init__(
         self,
         source: str | None = None,
-        inferenceConfig: InferenceConfig | dict | None = None,
-        toolConfig: ToolConfig | dict | None = None,
+        inferenceConfig: BedrockInferenceConfig | dict | None = None,
+        toolConfig: BedrockToolConfig | dict | list[BedrockTool] | None = None,
         full_response: bool = False,
         **kwargs,
     ):
@@ -116,13 +163,37 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
 
         # Config
         self.inferenceConfig = (
-            InferenceConfig(**inferenceConfig)
+            BedrockInferenceConfig(**inferenceConfig)
             if isinstance(inferenceConfig, dict)
             else inferenceConfig
         )
-        self.toolConfig = (
-            ToolConfig(**toolConfig) if isinstance(toolConfig, dict) else toolConfig
-        )
+
+        # Handle toolConfig initialization with proper match/case syntax
+        self.toolConfig = None
+        if toolConfig:
+            match toolConfig:
+                case BedrockToolConfig():
+                    self.toolConfig = toolConfig
+                case dict():
+                    self.toolConfig = BedrockToolConfig(**toolConfig)
+                case list():
+                    # Check if all items in the list are BedrockTool
+                    if all(isinstance(item, BedrockTool) for item in toolConfig):
+                        self.toolConfig = BedrockToolConfig(tools=toolConfig)
+                    elif all(isinstance(item, BaseTool) for item in toolConfig):
+                        self.toolConfig = BedrockToolConfig(
+                            tools=[
+                                BedrockTool(**item.model_dump_bedrock_converse())
+                                for item in toolConfig
+                            ]
+                        )
+                    else:
+                        raise ValueError(
+                            "All items in the toolConfig list must be BedrockTool or BaseTool objects"
+                        )
+                case _:
+                    raise ValueError(f"Invalid toolConfig type: {type(toolConfig)}")
+
         self.full_response = full_response
 
         # AWS
@@ -147,6 +218,7 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         :param **kwargs: Additional keyword arguments to override the default model kwargs
         :return: stream of responses
         """
+
         if "full_response" in kwargs:
             self.full_response = kwargs["full_response"]
         yield from self._invoke(prompt=prompt, stream=True, **kwargs)
@@ -185,7 +257,7 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
             invoke_params["inferenceConfig"] = self.inferenceConfig.model_dump()
         if self.toolConfig:
             invoke_params["toolConfig"] = self.toolConfig.model_dump(by_alias=True)
-        if "system" in messages:
+        if "system" in messages and messages["system"] is not None:
             invoke_params["system"] = messages["system"]
         return invoke_params
 
@@ -197,7 +269,11 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         :return: completion text or full response object if full_response is True
         """
         try:
+
             # Call the Bedrock API
+            logger.debug(
+                f"Invoking Bedrock model with params: {pformat(invoke_params)}"
+            )
             response = self.client.converse(**invoke_params)
 
             # Extract and log metrics regardless of full_response setting
@@ -346,6 +422,6 @@ if __name__ == "__main__":
     }
     # Try to parse the tool config
     try:
-        tool_config = ToolConfig(**tool_config)
+        tool_config = BedrockToolConfig(**tool_config)
     except Exception as e:
         print(e)
