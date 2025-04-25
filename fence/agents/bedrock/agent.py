@@ -7,7 +7,7 @@ import re
 from pprint import pformat, pprint
 from typing import Any, Callable, List, Union
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from fence.agents.base import AgentLogType, BaseAgent
 from fence.agents.bedrock.models import (
@@ -119,6 +119,8 @@ class EventHandlers(BaseModel):
             return value
         else:
             raise ValueError(f"Handler {value} is not callable")
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class BedrockAgent(BaseAgent):
@@ -257,6 +259,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
         :param event_handlers: Event handlers config for different agent events
         """
+
         # Initialize with default handlers if logging is enabled
         default_handlers = {}
         if self.log_agentic_response:
