@@ -14,6 +14,8 @@ from fence.agents.bedrock.models import (
     AgentEvent,
     AgentEventTypes,
     AgentResponse,
+    AgentStartEvent,
+    AgentStopEvent,
     AnswerEvent,
     DelegateData,
     DelegateEvent,
@@ -43,10 +45,12 @@ class EventHandlers(BaseModel):
     :param on_delegate: Called when the agent delegates to another agent
     """
 
+    on_start: HandlerType | None = None
     on_tool_use: HandlerType | None = None
     on_thinking: HandlerType | None = None
     on_answer: HandlerType | None = None
     on_delegate: HandlerType | None = None
+    on_stop: HandlerType | None = None
 
     @field_validator("*", mode="before")
     def validate_handlers(cls, value, info):
@@ -69,10 +73,12 @@ class EventHandlers(BaseModel):
             )
 
             param_requirements = {
+                "on_start": [0, {}],
                 "on_tool_use": [3, {"tool_name", "parameters", "result"}],
                 "on_thinking": [1, {"text"}],
                 "on_answer": [1, {"text"}],
                 "on_delegate": [3, {"delegate_name", "query", "answer"}],
+                "on_stop": [0, {}],
             }
 
             # Check if the handler has the correct number of parameters
@@ -116,11 +122,11 @@ class BedrockAgent(BaseAgent):
     """
 
     _BASE_SYSTEM_MESSAGE = """
-You are a helpful assistant. You can think in <thinking> tags, and provide an answer in <answer> tags. Try to always plan your next steps in <thinking> tags. Make sure to exhaust all your tools and delegate capabilities before providing your final answer.
+You are a helpful assistant. You can think in <thinking> tags. Your answer to the user does not need tags. Try to always plan your next steps using the <thinking> tags, unless the query is very straightforward. Make sure to exhaust all your tools and delegate capabilities before providing your final answer. If the query is complicated, multiple thoughts are allowed.
 """
 
     _THINKING_PATTERN = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
-    _ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
+    # _ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
     _DELEGATE_PATTERN = re.compile(r"<delegate>(.*?)</delegate>", re.DOTALL)
 
     #########
@@ -177,6 +183,10 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         self.tools = tools or []
         self.delegates = delegates or []
 
+        # Make sure delegates are marked as delegates
+        for delegate in self.delegates:
+            delegate._is_delegate = True
+
         # Set event handlers
         self._set_event_handlers(event_handlers)
 
@@ -185,6 +195,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         # Register tools with the model if supported
         self._register_tools()
+
+        # Set is_delegate flag
+        self._is_delegate = False
 
     def _build_system_message(self) -> str:
         """Build the system message with delegation options based on available delegates.
@@ -243,6 +256,11 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         default_handlers = {}
         if self.log_agentic_response:
             default_handlers = {
+                "on_start": [
+                    lambda: self._log_agent_event(
+                        f"Agent {self.identifier} started", AgentLogType.START
+                    )
+                ],
                 "on_tool_use": [
                     lambda tool_name, parameters, result: self._log_agent_event(
                         f"Using tool [{tool_name}] with parameters: {parameters} -> {result}",
@@ -263,6 +281,11 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
                             else f"Delegation to {delegate_name} concluded: {answer}"
                         ),
                         AgentLogType.DELEGATION,
+                    )
+                ],
+                "on_stop": [
+                    lambda: self._log_agent_event(
+                        f"Agent {self.identifier} stopped", AgentLogType.STOP
                     )
                 ],
             }
@@ -362,6 +385,15 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         iterations = 0
         answer = None  # Initialize answer variable
 
+        # Call on_start event handler
+        if not self._is_delegate:
+            self._safe_event_handler(event_name="on_start")
+            all_events.append(
+                AgentStartEvent(
+                    agent_name=self.identifier, type=AgentEventTypes.START, content=None
+                )
+            )
+
         while iterations < max_iterations:
             # Get messages for the model
             prompt_obj = Messages(
@@ -371,6 +403,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
             # Process one iteration
             events = self._invoke_iteration(prompt_obj=prompt_obj)
+            logger.debug(f"Iteration {iterations} events: {events}")
 
             # Collect events
             all_events.extend(events["events"])
@@ -420,6 +453,15 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             # If we got here with no events at all, we're done
             logger.warning("Agentic loop interrupted: something went wrong")
             break
+
+        # Call on_stop event handler
+        if not self._is_delegate:
+            self._safe_event_handler(event_name="on_stop")
+            all_events.append(
+                AgentStopEvent(
+                    agent_name=self.identifier, type=AgentEventTypes.STOP, content=None
+                )
+            )
 
         # Return results
         return AgentResponse(
@@ -560,6 +602,9 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
         :param tool_parameters: Parameters for the tool
         :return: Dictionary with event and formatted result
         """
+        logger.debug(
+            f" Trying to execute tool: {tool_name} with params: {tool_parameters}"
+        )
         tool = next(
             (tool for tool in self.tools if tool.get_tool_name() == tool_name), None
         )
@@ -589,6 +634,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
             # Store structured tool data as an event
             tool_event = ToolUseEvent(
+                agent_name=self.identifier,
                 type=AgentEventTypes.TOOL_USE,
                 content=ToolUseData(
                     tool_name=tool_name,
@@ -617,63 +663,84 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
     def _process_content(self, content: str) -> list[AgentEvent]:
         """Process the content to extract thinking, answer, and delegate parts in chronological order.
+        Any text not inside thinking or delegate tags will be treated as answer text.
 
         :param content: The content to process
         :return: A list of events
         """
         events: list[AgentEvent] = []
 
-        # Process all tags in order of appearance
-        remaining_content = content
-        while remaining_content:
-            # Find positions of the next tag of each type
-            matches = {
-                "thinking": self._THINKING_PATTERN.search(remaining_content),
-                "answer": self._ANSWER_PATTERN.search(remaining_content),
-                "delegate": self._DELEGATE_PATTERN.search(remaining_content),
-            }
+        # Find all thinking and delegate tags
+        thinking_matches = list(self._THINKING_PATTERN.finditer(content))
+        delegate_matches = list(self._DELEGATE_PATTERN.finditer(content))
 
-            # Find the earliest match
-            valid_matches = {tag: match for tag, match in matches.items() if match}
-            if not valid_matches:
-                break
+        # Create a list of all tagged sections with their start/end positions
+        tagged_sections = []
 
-            # Get the earliest match
-            next_tag_type = min(
-                valid_matches, key=lambda tag: valid_matches[tag].start()
+        for match in thinking_matches:
+            thought = match.group(1).strip()
+            event = ThinkingEvent(
+                agent_name=self.identifier,
+                type=AgentEventTypes.THINKING,
+                content=thought,
             )
-            match = valid_matches[next_tag_type]
+            events.append(event)
+            self._safe_event_handler(event_name="on_thinking", text=thought)
+            tagged_sections.append((match.start(), match.end()))
 
-            if next_tag_type == "thinking":
-                thought = match.group(1).strip()
-                event = ThinkingEvent(type=AgentEventTypes.THINKING, content=thought)
-                events.append(event)
-                self._safe_event_handler(event_name="on_thinking", text=thought)
+        for match in delegate_matches:
+            delegate_content = match.group(1).strip()
+            try:
+                agent_name, query = delegate_content.split(":", 1)
+                agent_name = agent_name.strip()
+                query = query.strip()
+            except ValueError:
+                agent_name, query = None, delegate_content
 
-            elif next_tag_type == "answer":
-                answer = match.group(1).strip()
-                event = AnswerEvent(type=AgentEventTypes.ANSWER, content=answer)
-                events.append(event)
-                self._safe_event_handler(event_name="on_answer", text=answer)
+            event = DelegateEvent(
+                agent_name=self.identifier,
+                type=AgentEventTypes.DELEGATION,
+                content=DelegateData(agent_name=agent_name, query=query),
+            )
+            events.append(event)
+            tagged_sections.append((match.start(), match.end()))
 
-            elif next_tag_type == "delegate":
-                delegate_content = match.group(1).strip()
-                try:
-                    agent_name, query = delegate_content.split(":", 1)
-                    agent_name = agent_name.strip()
-                    query = query.strip()
-                except ValueError:
-                    agent_name, query = None, delegate_content
+        # Sort tagged sections by start position
+        tagged_sections.sort()
 
-                event = DelegateEvent(
-                    type=AgentEventTypes.DELEGATION,
-                    content=DelegateData(agent_name=agent_name, query=query),
+        # Extract untagged text as answer
+        answer_parts = []
+        last_end = 0
+
+        for start, end in tagged_sections:
+            # Add text between last tag and current tag
+            if start > last_end:
+                untagged_text = content[last_end:start].strip()
+                if untagged_text:
+                    answer_parts.append(untagged_text)
+            last_end = end
+
+        # Add text after the last tag
+        if last_end < len(content):
+            untagged_text = content[last_end:].strip()
+            if untagged_text:
+                answer_parts.append(untagged_text)
+
+        # If there were no tags at all, the entire content is the answer
+        if not tagged_sections and content.strip():
+            answer_parts = [content.strip()]
+
+        # Join all answer parts and create an answer event if there's anything
+        if answer_parts:
+            answer_text = " ".join(answer_parts)
+            if answer_text.strip():
+                event = AnswerEvent(
+                    agent_name=self.identifier,
+                    type=AgentEventTypes.ANSWER,
+                    content=answer_text,
                 )
                 events.append(event)
-                # Delegate event handlers are called after execution in _execute_delegate
-
-            # Move past the processed tag
-            remaining_content = remaining_content[match.end() :]
+                self._safe_event_handler(event_name="on_answer", text=answer_text)
 
         return events
 
@@ -716,10 +783,12 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
                     # Extract text content
                     if "text" in item:
+                        logger.debug(f"Text found: {item}")
                         content += item["text"]
 
                     # Extract tool use information
                     if "toolUse" in item:
+                        logger.debug(f"Tool use found: {item}")
                         tool_info = item["toolUse"]
                         tool_name = tool_info.get("name")
 
@@ -733,9 +802,14 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             content = response
 
         # Process content for thinking/answer/delegate tags
-        if content:
+        if content.strip():
+
             # Process the content for thinking/answer/delegate tags and trigger event handlers
-            events = self._process_content(content)
+            try:
+                events = self._process_content(content)
+            except Exception as e:
+                logger.error(f"Error processing content: {e}")
+                events = []
 
             # Add response to memory
             self.memory.add_message(role="assistant", content=content)
@@ -751,7 +825,8 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             self._current_iteration_events.extend(events)
 
         # Process tool call if found
-        if tool_name and tool_parameters:
+
+        if tool_name and tool_parameters is not None:
             tool_result = self._execute_tool(tool_name, tool_parameters)
             if "event" in tool_result:
                 self._current_iteration_events.append(tool_result["event"])
