@@ -150,12 +150,14 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         inferenceConfig: BedrockInferenceConfig | dict | None = None,
         toolConfig: BedrockToolConfig | dict | list[BedrockTool] | None = None,
         full_response: bool = False,
+        cross_region: Literal["us", "eu"] | None = None,
         **kwargs,
     ):
         """
         Initialize a Bedrock model
 
-        :param str source: An indicator of where (e.g., which feature) the model is operating from. Useful to pass to the logging callback
+        :param source: An indicator of where (e.g., which feature) the model is operating from. Useful to pass to the logging callback
+        :param cross_region: Region prefix for model ID, either "us" or "eu". Use this to switch to an inference profile, for cross-region inference.
         :param **kwargs: Additional keyword arguments
         """
         super().__init__(**kwargs)
@@ -199,6 +201,16 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         # AWS
         self.region = kwargs.get("region", "eu-central-1")
         self.client = boto3.client("bedrock-runtime", self.region)
+        logger.debug(f"Initialized Bedrock client in region: {self.region}")
+
+        # Update model ID with cross-region prefix (us or eu) if specified
+        if cross_region:
+            if cross_region not in {"us", "eu"}:
+                raise ValueError(
+                    f"Invalid cross_region value: {cross_region}. Should be either 'us' or 'eu'."
+                )
+            else:
+                self.model_id = f"{cross_region}.{self.model_id}"
 
     def invoke(self, prompt: str | Messages, **kwargs) -> str:
         """

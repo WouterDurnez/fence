@@ -274,9 +274,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
             # Convert dict to EventHandlers if needed
             if not isinstance(event_handlers, EventHandlers):
                 try:
-                    logger.warning(
-                        f"Converting dict to EventHandlers: {event_handlers}"
-                    )
+                    logger.debug(f"Converting dict to EventHandlers: {event_handlers}")
                     event_handlers = EventHandlers(**event_handlers)
                 except Exception as e:
                     logger.warning(f"Error converting dict to EventHandlers: {e}")
@@ -540,7 +538,7 @@ You are a helpful assistant. You can think in <thinking> tags, and provide an an
 
         # Check if tools have a description
         for tool in self.tools:
-            if not tool.description:
+            if not tool.get_tool_description():
                 raise ValueError(f"Tool {tool.get_tool_name()} has no description")
 
         # Convert BaseTool objects to BedrockTool format and set on model
@@ -793,7 +791,7 @@ if __name__ == "__main__":
             )
 
     eligibility_agent = BedrockAgent(
-        identifier="Eligibility Agent",
+        identifier="EligibilityAgent",
         model=NovaPro(region="us-east-1"),
         description="An specialist agent that has various capabilities and tools to check eligibility for a loan. Only requires an age and name to check eligibility.",
         tools=[check_eligibility],
@@ -801,7 +799,7 @@ if __name__ == "__main__":
     )
 
     bank_agent = BedrockAgent(
-        identifier="Bank Agent",
+        identifier="BankAgent",
         model=NovaPro(region="us-east-1"),
         tools=[age_lookup_tool],
         delegates=[eligibility_agent],

@@ -26,10 +26,10 @@ class ClaudeInstant(BedrockBase):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(**kwargs)
-
         self.model_id = MODEL_ID_INSTANT
         self.model_name = "Claude Instant"
+
+        super().__init__(**kwargs)
 
 
 class ClaudeHaiku(BedrockBase):
@@ -42,10 +42,10 @@ class ClaudeHaiku(BedrockBase):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(**kwargs)
-
         self.model_id = MODEL_ID_HAIKU
         self.model_name = "Claude Haiku"
+
+        super().__init__(**kwargs)
 
 
 class ClaudeSonnet(BedrockBase):
@@ -58,10 +58,10 @@ class ClaudeSonnet(BedrockBase):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(**kwargs)
-
         self.model_id = MODEL_ID_SONNET
         self.model_name = "Claude Sonnet"
+
+        super().__init__(**kwargs)
 
 
 class Claude35Sonnet(BedrockBase):
@@ -74,10 +74,10 @@ class Claude35Sonnet(BedrockBase):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(**kwargs)
-
         self.model_id = MODEL_ID_SONNET_3_5
         self.model_name = "Claude 3.5 Sonnet"
+
+        super().__init__(**kwargs)
 
 
 class Claude35SonnetV2(BedrockBase):
@@ -90,10 +90,10 @@ class Claude35SonnetV2(BedrockBase):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(**kwargs)
-
         self.model_id = MODEL_ID_SONNET_3_5_V2
         self.model_name = "Claude 3.5 Sonnet V2"
+
+        super().__init__(**kwargs)
 
 
 if __name__ == "__main__":

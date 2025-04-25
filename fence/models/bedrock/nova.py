@@ -5,11 +5,11 @@ Claude Gen 3 models
 import logging
 
 from fence.models.bedrock.base import BedrockBase
+from fence.utils.logger import setup_logging
 
 MODEL_ID_PRO = "amazon.nova-pro-v1:0"
 MODEL_ID_LITE = "amazon.nova-lite-v1:0"
 MODEL_ID_MICRO = "amazon.nova-micro-v1:0"
-
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +24,10 @@ class NovaPro(BedrockBase):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(**kwargs)
-
         self.model_id = MODEL_ID_PRO
         self.model_name = "Nova Pro"
+
+        super().__init__(**kwargs)
 
 
 class NovaLite(BedrockBase):
@@ -40,10 +40,10 @@ class NovaLite(BedrockBase):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(**kwargs)
-
         self.model_id = MODEL_ID_LITE
         self.model_name = "Nova Lite"
+
+        super().__init__(**kwargs)
 
 
 class NovaMicro(BedrockBase):
@@ -56,20 +56,23 @@ class NovaMicro(BedrockBase):
         :param **kwargs: Additional keyword arguments
         """
 
-        super().__init__(**kwargs)
-
         self.model_id = MODEL_ID_MICRO
         self.model_name = "Nova Micro"
+
+        super().__init__(**kwargs)
 
 
 if __name__ == "__main__":
 
+    setup_logging(log_level="DEBUG")
+
     # Create model with tools
     nova_with_tools = NovaPro(
         source="test",
+        cross_region="eu",
         metric_prefix="supertest",
         extra_tags={"test": "test"},
-        region="us-east-1",
+        region="eu-central-1",
         toolConfig={
             "tools": [
                 {
