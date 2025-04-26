@@ -34,8 +34,7 @@ class AgentEvent(BaseModel):
     type: AgentEventTypes
     content: Any
 
-    class Config:
-        use_enum_values = True
+    model_config = {"use_enum_values": True}
 
     def __str__(self):
         return f"{self.agent_name} [{self.type.capitalize()}] {self.content}"
@@ -192,5 +191,4 @@ class AgentResponse(BaseModel):
     answer: str
     events: list[AgentEvent]
 
-    class Config:
-        use_enum_values = True
+    model_config = {"use_enum_values": True}
