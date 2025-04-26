@@ -18,6 +18,7 @@ env:
 jobs:
   # Job for running tests
   test:
+    name: 🧪 Run tests
     runs-on: ubuntu-latest
     environment: tests
     steps:
@@ -48,6 +49,7 @@ jobs:
 
   # Job for building the package
   build:
+    name: 📦 Build package
     runs-on: ubuntu-latest
     needs: test # Only run if the test job passes
     steps:

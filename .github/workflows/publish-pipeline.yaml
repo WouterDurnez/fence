@@ -16,6 +16,7 @@ permissions:
 jobs:
   # Job for running tests
   test:
+    name: 🧪 Run tests
     runs-on: ubuntu-latest
     environment: tests
     steps:
@@ -45,7 +46,8 @@ jobs:
           path: fence/tests/report.xml
 
   pypi-publish:
-    name: Upload release to PyPI
+    name: 🚀 Upload release to PyPI
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: pypi-release
