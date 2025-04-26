@@ -497,7 +497,7 @@ wheels = [
 
 [[package]]
 name = "fence-llm"
-version = "0.1.8"
+version = "1.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
