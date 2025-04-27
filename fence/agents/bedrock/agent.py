@@ -18,10 +18,12 @@ from fence.agents.bedrock.models import (
     AgentStopEvent,
     AnswerEvent,
     DelegateData,
-    DelegateEvent,
+    DelegateStartEvent,
+    DelegateStopEvent,
     ThinkingEvent,
     ToolUseData,
-    ToolUseEvent,
+    ToolUseStartEvent,
+    ToolUseStopEvent,
 )
 from fence.memory.base import BaseMemory
 from fence.models.base import LLM
@@ -78,7 +80,8 @@ class EventHandlers(BaseModel):
 
             param_requirements = {
                 "on_start": [0, {}],
-                "on_tool_use": [3, {"tool_name", "parameters", "result"}],
+                "on_tool_use_start": [2, {"tool_name", "parameters"}],
+                "on_tool_use_stop": [3, {"tool_name", "parameters", "result"}],
                 "on_thinking": [1, {"text"}],
                 "on_answer": [1, {"text"}],
                 "on_delegation_start": [2, {"delegate_name", "query"}],
@@ -136,7 +139,6 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 """
 
     _THINKING_PATTERN = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
-    # _ANSWER_PATTERN = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
     _DELEGATE_PATTERN = re.compile(r"<delegate>(.*?)</delegate>", re.DOTALL)
 
     #########
@@ -163,7 +165,6 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         :param identifier: An identifier for the agent
         :param model: A Bedrock LLM model object
         :param description: A description of the agent, used in the agent's representation towards the user or other agents
-        :param role: A role for the agent, used in the system message to describe its purpose
         :param memory: A memory object to store messages and system messages
         :param environment: A dictionary of environment variables to pass to tools
         :param prefill: A string to prefill the memory with
@@ -280,9 +281,15 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                         f"Agent {self.identifier} started", AgentLogType.START
                     )
                 ],
-                "on_tool_use": [
+                "on_tool_use_start": [
+                    lambda tool_name, parameters: self._log_agent_event(
+                        f"Tool [{tool_name}] requested with parameters: {parameters}",
+                        AgentLogType.TOOL_USE,
+                    )
+                ],
+                "on_tool_use_stop": [
                     lambda tool_name, parameters, result: self._log_agent_event(
-                        f"Using tool [{tool_name}] with parameters: {parameters} -> {result}",
+                        f"Tool [{tool_name}] executed with parameters: {parameters} -> {result}",
                         AgentLogType.TOOL_USE,
                     )
                 ],
@@ -373,31 +380,27 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
     def run(
         self, prompt: str, max_iterations: int = 10, stream: bool = False
     ) -> AgentResponse:
-        """
-        Run the agent with the given prompt.
+        """Execute the agent with the given prompt.
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
-        :param stream: Whether to stream the response or return the full text
-        :return: If stream=False: An AgentResponse object containing the answer and events
-                If stream=True: A dictionary containing 'events' in chronological order
+        :param stream: Whether to stream the response. Currently not implemented.
+        :return: An AgentResponse object containing the answer and events
+        :raises NotImplementedError: If stream=True, as streaming is not yet implemented
         """
         if stream:
             raise NotImplementedError(
-                "Streaming is not implemented for Bedrock Agents yet, because it's a real SOB"
-            )
-        else:
-            response = self.invoke(prompt=prompt, max_iterations=max_iterations)
-            return AgentResponse(
-                answer=response.answer or "No answer found", events=response.events
+                "Streaming is not yet implemented for BedrockAgent"
             )
 
-    def invoke(self, prompt: str, max_iterations: int = 10) -> dict[str, Any]:
+        return self.invoke(prompt=prompt, max_iterations=max_iterations)
+
+    def invoke(self, prompt: str, max_iterations: int = 10) -> AgentResponse:
         """Run the agent with the given prompt using the model's invoke method.
 
         :param prompt: The initial prompt to feed to the LLM
         :param max_iterations: Maximum number of model-tool-model iterations
-        :return: A dictionary containing 'answer' and 'events'
+        :return: An AgentResponse object containing the answer and events
         """
         # Reset memory and add prompt
         self._flush_memory()
@@ -425,56 +428,44 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             )
 
             # Process one iteration
-            events = self._invoke_iteration(prompt_obj=prompt_obj)
-            logger.debug(f"Iteration {iterations} events: {events}")
+            iteration_response = self._invoke_iteration(prompt_obj=prompt_obj)
+            logger.debug(f"Iteration {iterations} events: {iteration_response}")
 
             # Collect events
-            all_events.extend(events["events"])
-
-            # Set stop reason to None for this iteration
-            stop_reason = None
+            all_events.extend(iteration_response["events"])
 
             # First check for answer (highest priority)
-            for event in events["events"]:
+            for event in iteration_response["events"]:
                 if isinstance(event, AnswerEvent):
                     answer = event.content
-                    stop_reason = "answer"
-                    break  # Answer takes precedence over other events
+                    # Found an answer, exit the loop
+                    break
 
-            # If no answer, check for tool use or delegation
-            if stop_reason is None:
-                for event in events["events"]:
-                    if isinstance(event, ToolUseEvent):
-                        stop_reason = "tool_use"
-                        break
-                    elif isinstance(event, DelegateEvent):
-                        stop_reason = "delegate_use"
-                        break
-
-            # Check if we've hit max iterations
-            if iterations >= max_iterations:
-                logger.warning(
-                    f"Reached maximum iterations ({max_iterations}). Stopping."
-                )
+            # If we found an answer, stop the agentic loop
+            if answer is not None:
                 break
 
-            # If we got an answer, we're done
-            if stop_reason == "answer":
-                break
+            # Check for tool use or delegation to continue the loop
+            found_action = False
+            for event in iteration_response["events"]:
+                if isinstance(event, ToolUseStartEvent) or isinstance(
+                    event, DelegateStartEvent
+                ):
+                    found_action = True
+                    break
 
-            # If we used a tool or delegate, continue to next iteration
-            if stop_reason in ["tool_use", "delegate_use"]:
+            # If we found a tool use or delegate event, continue to next iteration
+            if found_action:
                 iterations += 1
                 continue
 
-            # If we got here without an answer, tool use, or delegate use,
-            # but there are events, continue to the next iteration
-            if events["events"]:
-                iterations += 1
-                continue
+            # If no significant events happened, something went wrong
+            if not iteration_response["events"]:
+                logger.warning("Agentic loop interrupted: no events returned")
+                break
 
-            # If we got here with no events at all, we're done
-            logger.warning("Agentic loop interrupted: something went wrong")
+            # If we got here without an answer or tool/delegate use,
+            # we're done because the model has nothing more to add
             break
 
         # Call on_stop event handler
@@ -497,7 +488,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
     ######################
 
     def _execute_delegate(
-        self, event: DelegateEvent, stream: bool = False
+        self, event: DelegateStartEvent, stream: bool = False
     ) -> tuple[str, list[AgentEvent]]:
         """Execute a delegate agent with the given query.
 
@@ -626,6 +617,22 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         logger.debug(
             f" Trying to execute tool: {tool_name} with params: {tool_parameters}"
         )
+
+        # Call event handler before execution
+        self._safe_event_handler(
+            event_name="on_tool_use_start",
+            tool_name=tool_name,
+            parameters=tool_parameters,
+        )
+
+        # Set start event
+        tool_start_event = ToolUseStartEvent(
+            agent_name=self.identifier,
+            type=AgentEventTypes.TOOL_USE_START,
+            content=ToolUseData(tool_name=tool_name, parameters=tool_parameters),
+        )
+
+        # Find the tool
         tool = next(
             (tool for tool in self.tools if tool.get_tool_name() == tool_name), None
         )
@@ -642,7 +649,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
             # Call event handler
             self._safe_event_handler(
-                event_name="on_tool_use",
+                event_name="on_tool_use_stop",
                 tool_name=tool_name,
                 parameters=tool_parameters,
                 result=tool_result,
@@ -654,9 +661,9 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             )
 
             # Store structured tool data as an event
-            tool_event = ToolUseEvent(
+            tool_stop_event = ToolUseStopEvent(
                 agent_name=self.identifier,
-                type=AgentEventTypes.TOOL_USE,
+                type=AgentEventTypes.TOOL_USE_STOP,
                 content=ToolUseData(
                     tool_name=tool_name,
                     parameters=tool_parameters,
@@ -672,20 +679,23 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
             return {
                 "formatted_result": formatted_result,
-                "event": tool_event,
+                "events": [tool_start_event, tool_stop_event],
             }
         except Exception as e:
-            error_msg = self._handle_tool_error(tool_name, e)
+            error_msg = self._handle_tool_error(tool_name, tool_parameters, e)
             return {"error": error_msg}
 
-    def _handle_tool_error(self, tool_name: str, error: Exception) -> str:
+    def _handle_tool_error(
+        self, tool_name: str, tool_parameters: dict, error: Exception
+    ) -> str:
         """Handle an error that occurred during tool execution.
 
         :param tool_name: Name of the tool that failed
+        :param tool_parameters: Parameters that were passed to the tool
         :param error: Error that occurred during tool execution
         :return: Error message to be returned to the user
         """
-        error_msg = f"[Tool Error: {tool_name}] {error}"
+        error_msg = f"[Tool Error: {tool_name}] Error with parameters {tool_parameters}: {error}"
         logger.error(error_msg)
         self.memory.add_message(role="user", content=error_msg)
         return error_msg
@@ -730,9 +740,9 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             except ValueError:
                 agent_name, query = None, delegate_content
 
-            event = DelegateEvent(
+            event = DelegateStartEvent(
                 agent_name=self.identifier,
-                type=AgentEventTypes.DELEGATION,
+                type=AgentEventTypes.DELEGATION_START,
                 content=DelegateData(agent_name=agent_name, query=query),
             )
             events.append(event)
@@ -794,77 +804,106 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             f"\t[prompt]:\n{pformat(prompt_obj.model_dump(), indent=4)}"
         )
 
-        response = self.model.invoke(prompt=prompt_obj)
-        logger.debug(f"Agent got response:\n{pformat(response)}")
-
         # Initialize event list for this iteration
         self._current_iteration_events = []
 
-        # Initialize variables
-        content = ""
-        tool_name = None
-        tool_parameters = None
+        try:
+            response = self.model.invoke(prompt=prompt_obj)
+            logger.debug(f"Agent got response:\n{pformat(response)}")
 
-        # Extract message content
-        if "output" in response and "message" in response["output"]:
-            message = response["output"]["message"]
+            # Initialize variables
+            content = ""
+            tool_name = None
+            tool_parameters = None
 
-            # Process content blocks
-            if "content" in message and isinstance(message["content"], list):
-                content = ""
-                for item in message["content"]:
+            # Extract message content
+            if "output" in response and "message" in response["output"]:
+                message = response["output"]["message"]
 
-                    # Extract text content
-                    if "text" in item:
-                        logger.debug(f"Text found: {item}")
-                        content += item["text"]
+                # Process content blocks
+                if "content" in message and isinstance(message["content"], list):
+                    content = ""
+                    for item in message["content"]:
 
-                    # Extract tool use information
-                    if "toolUse" in item:
-                        logger.debug(f"Tool use found: {item}")
-                        tool_info = item["toolUse"]
-                        tool_name = tool_info.get("name")
+                        # Extract text content
+                        if "text" in item:
+                            logger.debug(f"Text found: {item}")
+                            content += item["text"]
 
-                        # Extract parameters
-                        if "input" in tool_info and isinstance(
-                            tool_info["input"], dict
-                        ):
-                            tool_parameters = tool_info["input"]
+                        # Extract tool use information
+                        if "toolUse" in item:
+                            logger.debug(f"Tool use found: {item}")
+                            tool_info = item["toolUse"]
+                            tool_name = tool_info.get("name")
 
-        elif isinstance(response, str):
-            content = response
+                            # Extract parameters
+                            if "input" in tool_info and isinstance(
+                                tool_info["input"], dict
+                            ):
+                                tool_parameters = tool_info["input"]
 
-        # Process content for thinking/delegate tags
-        if content.strip():
+            elif isinstance(response, str):
+                content = response
 
-            # Process the content for thinking/delegate tags and trigger event handlers
-            try:
-                events = self._process_content(content)
-            except Exception as e:
-                logger.error(f"Error processing content: {e}")
-                events = []
+            # Process content for thinking/delegate tags
+            if content.strip():
 
-            # Add response to memory
-            self.memory.add_message(role="assistant", content=content)
+                # Process the content for thinking/delegate tags and trigger event handlers
+                try:
+                    events = self._process_content(content)
+                except Exception as e:
+                    logger.error(f"Error processing content: {e}")
+                    events = []
 
-            # If a delegate event is found, we need to execute the delegate
-            for event in events:
-                if isinstance(event, DelegateEvent):
-                    delegate_answer, delegate_events = self._execute_delegate(event)
-                    event.content.answer = delegate_answer
-                    event.content.events = delegate_events
+                # Add response to memory
+                self.memory.add_message(role="assistant", content=content)
 
-            # Add events to current iteration
-            self._current_iteration_events.extend(events)
+                # If a delegate event is found, we need to execute the delegate
+                for i, event in enumerate(events):
+                    if isinstance(event, DelegateStartEvent):
+                        delegate_answer, delegate_events = self._execute_delegate(event)
+                        delegate_stop_event = DelegateStopEvent(
+                            agent_name=self.identifier,
+                            type=AgentEventTypes.DELEGATION_STOP,
+                            content=DelegateData(
+                                agent_name=event.content.agent_name,
+                                query=event.content.query,
+                                answer=delegate_answer,
+                                events=delegate_events,
+                            ),
+                        )
+                        # Insert the stop event right after the start event
+                        events.insert(i + 1, delegate_stop_event)
 
-        # Process tool call if found
+                # Add events to current iteration
+                self._current_iteration_events.extend(events)
 
-        if tool_name and tool_parameters is not None:
-            tool_result = self._execute_tool(tool_name, tool_parameters)
-            if "event" in tool_result:
-                self._current_iteration_events.append(tool_result["event"])
-            elif "error" in tool_result:
-                logger.error(tool_result["error"])
+            # Process tool call if found
+            if tool_name and tool_parameters is not None:
+                tool_result = self._execute_tool(tool_name, tool_parameters)
+                if "events" in tool_result:
+                    self._current_iteration_events.extend(tool_result["events"])
+                elif "error" in tool_result:
+                    logger.error(tool_result["error"])
+
+        except Exception as e:
+            error_message = f"Error during model invocation: {str(e)}"
+            logger.error(error_message)
+
+            # Add error message to memory so the agent knows something went wrong
+            self.memory.add_message(
+                role="user",
+                content=f"[SYSTEM ERROR] {error_message}. Please try a different approach.",
+            )
+
+            # Create a thinking event to indicate the error
+            error_event = ThinkingEvent(
+                agent_name=self.identifier,
+                type=AgentEventTypes.THINKING,
+                content=f"Encountered an error: {error_message}",
+            )
+            self._current_iteration_events.append(error_event)
+            self._safe_event_handler(event_name="on_thinking", text=error_event.content)
 
         # Store events and clean up
         iteration_events = self._current_iteration_events

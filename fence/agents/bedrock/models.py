@@ -19,8 +19,10 @@ class AgentEventTypes(StrEnum):
     STOP = "stop"
     THINKING = "thinking"
     ANSWER = "answer"
-    TOOL_USE = "tool_use"
-    DELEGATION = "delegation"
+    TOOL_USE_START = "tool_use_start"
+    TOOL_USE_STOP = "tool_use_stop"
+    DELEGATION_START = "delegation_start"
+    DELEGATION_STOP = "delegation_stop"
 
 
 class AgentEvent(BaseModel):
@@ -93,10 +95,10 @@ class ToolUseData(BaseModel):
         return self.__str__()
 
 
-class ToolUseEvent(AgentEvent):
+class ToolUseStartEvent(AgentEvent):
     """Event representing an agent's use of a tool."""
 
-    type: AgentEventTypes = AgentEventTypes.TOOL_USE
+    type: AgentEventTypes = AgentEventTypes.TOOL_USE_START
     content: ToolUseData
 
     def __str__(self):
@@ -104,6 +106,13 @@ class ToolUseEvent(AgentEvent):
 
     def __repr__(self):
         return self.__str__()
+
+
+class ToolUseStopEvent(AgentEvent):
+    """Event representing an agent's tool use stop."""
+
+    type: AgentEventTypes = AgentEventTypes.TOOL_USE_STOP
+    content: ToolUseData
 
 
 #######################
@@ -169,10 +178,17 @@ class DelegateData(BaseModel):
         return self.__str__()
 
 
-class DelegateEvent(AgentEvent):
+class DelegateStartEvent(AgentEvent):
     """Event representing an agent delegating a task to another agent."""
 
-    type: AgentEventTypes = AgentEventTypes.DELEGATION
+    type: AgentEventTypes = AgentEventTypes.DELEGATION_START
+    content: DelegateData
+
+
+class DelegateStopEvent(AgentEvent):
+    """Event representing an agent's delegation stop."""
+
+    type: AgentEventTypes = AgentEventTypes.DELEGATION_STOP
     content: DelegateData
 
 
