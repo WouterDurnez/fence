@@ -278,10 +278,19 @@ class TestToolCalling:
         event_data = []
 
         # Create custom event handlers
-        def on_tool_use(tool_name, parameters, result):
+        def on_tool_use_start(tool_name, parameters):
             event_data.append(
                 {
-                    "type": "tool_use",
+                    "type": "tool_use_start",
+                    "tool_name": tool_name,
+                    "parameters": parameters,
+                }
+            )
+
+        def on_tool_use_stop(tool_name, parameters, result):
+            event_data.append(
+                {
+                    "type": "tool_use_stop",
                     "tool_name": tool_name,
                     "parameters": parameters,
                     "result": result,
@@ -296,7 +305,10 @@ class TestToolCalling:
 
         # Create event handlers model
         event_handlers = EventHandlers(
-            on_tool_use=on_tool_use, on_thinking=on_thinking, on_answer=on_answer
+            on_tool_use_start=on_tool_use_start,
+            on_tool_use_stop=on_tool_use_stop,
+            on_thinking=on_thinking,
+            on_answer=on_answer,
         )
 
         # Create a Bedrock agent with event handlers
@@ -358,7 +370,8 @@ class TestToolCalling:
 
         # Verify event handlers were called
         assert len(event_data) > 0
-        assert any(event["type"] == "tool_use" for event in event_data)
+        assert any(event["type"] == "tool_use_start" for event in event_data)
+        assert any(event["type"] == "tool_use_stop" for event in event_data)
         assert any(event["type"] == "thinking" for event in event_data)
         assert any(event["type"] == "answer" for event in event_data)
 

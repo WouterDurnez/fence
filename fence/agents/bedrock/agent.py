@@ -42,7 +42,8 @@ class EventHandlers(BaseModel):
     """Event handlers for the BedrockAgent.
 
     :param on_start: Called when the agent starts
-    :param on_tool_use: Called when the agent uses a tool
+    :param on_tool_use_start: Called when the agent starts using a tool
+    :param on_tool_use_stop: Called when the agent completes using a tool
     :param on_thinking: Called when the agent is thinking
     :param on_answer: Called when the agent provides text answer chunks
     :param on_delegation_start: Called when the agent starts delegating to another agent
@@ -51,7 +52,8 @@ class EventHandlers(BaseModel):
     """
 
     on_start: HandlerType | None = None
-    on_tool_use: HandlerType | None = None
+    on_tool_use_start: HandlerType | None = None
+    on_tool_use_stop: HandlerType | None = None
     on_thinking: HandlerType | None = None
     on_answer: HandlerType | None = None
     on_delegation_start: HandlerType | None = None

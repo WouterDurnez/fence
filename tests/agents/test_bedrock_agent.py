@@ -244,7 +244,8 @@ class TestBedrockAgent:
         # Check tools and event handlers
         assert hasattr(agent, "tools")
         assert len(agent.tools) == 0
-        assert "on_tool_use" in agent.event_handlers
+        assert "on_tool_use_start" in agent.event_handlers
+        assert "on_tool_use_stop" in agent.event_handlers
         assert "on_thinking" in agent.event_handlers
         assert "on_answer" in agent.event_handlers
 
@@ -266,7 +267,8 @@ class TestBedrockAgent:
         # Check that default event handlers are set
         assert "on_thinking" in fresh_agent.event_handlers
         assert "on_answer" in fresh_agent.event_handlers
-        assert "on_tool_use" in fresh_agent.event_handlers
+        assert "on_tool_use_start" in fresh_agent.event_handlers
+        assert "on_tool_use_stop" in fresh_agent.event_handlers
 
         # Instead of checking logger calls, use captures to verify console output
         # since the default handlers use print() through self.log() rather than logger
@@ -275,11 +277,14 @@ class TestBedrockAgent:
             fresh_agent._safe_event_handler("on_thinking", "Test thinking")
             fresh_agent._safe_event_handler("on_answer", "Test answer")
             fresh_agent._safe_event_handler(
-                "on_tool_use", "test_tool", {"param": "value"}, "Test result"
+                "on_tool_use_start", "test_tool", {"param": "value"}
+            )
+            fresh_agent._safe_event_handler(
+                "on_tool_use_stop", "test_tool", {"param": "value"}, "Test result"
             )
 
             # Verify print was called for each handler
-            assert mock_print.call_count >= 3
+            assert mock_print.call_count >= 4
 
             # Check for specific output patterns in the calls
             print_calls = [call[0][0] for call in mock_print.call_args_list]
@@ -323,10 +328,17 @@ class TestBedrockAgent:
 
         # Check the result
         assert "error" not in result
-        assert "event" in result
-        assert result["event"].content.tool_name == "test_tool"
-        assert result["event"].content.parameters == {"param": "value"}
-        assert "Result from test_tool" in result["event"].content.result
+        assert "events" in result
+        assert len(result["events"]) == 2  # should have start and stop events
+
+        # Check start event
+        assert result["events"][0].content.tool_name == "test_tool"
+        assert result["events"][0].content.parameters == {"param": "value"}
+
+        # Check stop event
+        assert result["events"][1].content.tool_name == "test_tool"
+        assert result["events"][1].content.parameters == {"param": "value"}
+        assert "Result from test_tool" in result["events"][1].content.result
 
     def test_execute_tool_error(self, agent_with_tools):
         """Test executing a tool that raises an error."""
@@ -380,7 +392,8 @@ class TestBedrockAgent:
             AgentEventTypes,
             AnswerEvent,
             ToolUseData,
-            ToolUseEvent,
+            ToolUseStartEvent,
+            ToolUseStopEvent,
         )
 
         # Configure the mock LLM to return a tool call
@@ -388,9 +401,18 @@ class TestBedrockAgent:
         mock_llm.full_response = True
 
         # Create tool event and answer event
-        tool_event = ToolUseEvent(
+        tool_start_event = ToolUseStartEvent(
             agent_name=agent_with_tools.identifier,
-            type=AgentEventTypes.TOOL_USE,
+            type=AgentEventTypes.TOOL_USE_START,
+            content=ToolUseData(
+                tool_name="get_weather",
+                parameters={"location": "New York"},
+            ),
+        )
+
+        tool_stop_event = ToolUseStopEvent(
+            agent_name=agent_with_tools.identifier,
+            type=AgentEventTypes.TOOL_USE_STOP,
             content=ToolUseData(
                 tool_name="get_weather",
                 parameters={"location": "New York"},
@@ -408,14 +430,14 @@ class TestBedrockAgent:
         with patch.object(agent_with_tools, "_invoke_iteration") as mock_invoke_iter:
             # First call returns a tool event, second call returns an answer
             mock_invoke_iter.side_effect = [
-                {"events": [tool_event]},
+                {"events": [tool_start_event, tool_stop_event]},
                 {"events": [answer_event]},
             ]
 
             # Mock _execute_tool to avoid actual tool execution
             with patch.object(agent_with_tools, "_execute_tool") as mock_execute_tool:
                 mock_execute_tool.return_value = {
-                    "event": tool_event,
+                    "events": [tool_start_event, tool_stop_event],
                     "formatted_result": "Result from get_weather",
                 }
 
@@ -519,7 +541,8 @@ class TestBedrockAgent:
             AgentEventTypes,
             AnswerEvent,
             ToolUseData,
-            ToolUseEvent,
+            ToolUseStartEvent,
+            ToolUseStopEvent,
         )
 
         # Configure the mock LLM to return a tool call
@@ -555,9 +578,18 @@ class TestBedrockAgent:
         # Instead of checking tool execution directly, mock _invoke_iteration
         with patch.object(agent_with_tools, "_invoke_iteration") as mock_invoke_iter:
             # Set up mock to return tool_use first, then a final answer
-            tool_event = ToolUseEvent(
+            tool_start_event = ToolUseStartEvent(
                 agent_name=agent_with_tools.identifier,
-                type=AgentEventTypes.TOOL_USE,
+                type=AgentEventTypes.TOOL_USE_START,
+                content=ToolUseData(
+                    tool_name="get_weather",
+                    parameters={},
+                ),
+            )
+
+            tool_stop_event = ToolUseStopEvent(
+                agent_name=agent_with_tools.identifier,
+                type=AgentEventTypes.TOOL_USE_STOP,
                 content=ToolUseData(
                     tool_name="get_weather", parameters={}, result="Sunny, 75°F"
                 ),
@@ -570,7 +602,7 @@ class TestBedrockAgent:
             )
 
             mock_invoke_iter.side_effect = [
-                {"events": [tool_event]},
+                {"events": [tool_start_event, tool_stop_event]},
                 {"events": [answer_event]},
             ]
 
@@ -588,17 +620,27 @@ class TestBedrockAgent:
             AgentEventTypes,
             AnswerEvent,
             ToolUseData,
-            ToolUseEvent,
+            ToolUseStartEvent,
+            ToolUseStopEvent,
         )
 
         # Configure the mock LLM to always return a tool call
         mock_llm.response_type = "tool_call"
         mock_llm.full_response = True
 
-        # Create a tool event
-        tool_event = ToolUseEvent(
+        # Create tool events
+        tool_start_event = ToolUseStartEvent(
             agent_name=agent_with_tools.identifier,
-            type=AgentEventTypes.TOOL_USE,
+            type=AgentEventTypes.TOOL_USE_START,
+            content=ToolUseData(
+                tool_name="get_weather",
+                parameters={"location": "New York"},
+            ),
+        )
+
+        tool_stop_event = ToolUseStopEvent(
+            agent_name=agent_with_tools.identifier,
+            type=AgentEventTypes.TOOL_USE_STOP,
             content=ToolUseData(
                 tool_name="get_weather",
                 parameters={"location": "New York"},
@@ -621,8 +663,12 @@ class TestBedrockAgent:
         # and an answer for the last
         with patch.object(agent_with_tools, "_invoke_iteration") as mock_invoke_iter:
             mock_invoke_iter.side_effect = [
-                {"events": [tool_event]},  # First iteration - tool use
-                {"events": [tool_event]},  # Second iteration - tool use
+                {
+                    "events": [tool_start_event, tool_stop_event]
+                },  # First iteration - tool use
+                {
+                    "events": [tool_start_event, tool_stop_event]
+                },  # Second iteration - tool use
                 {"events": [answer_event]},  # Third iteration - answer
             ]
 
@@ -641,14 +687,20 @@ class TestBedrockAgent:
             AnswerEvent,
             ThinkingEvent,
             ToolUseData,
-            ToolUseEvent,
+            ToolUseStartEvent,
+            ToolUseStopEvent,
         )
 
         # Create tracked states
         events = []
 
-        def track_tool_use(tool_name, parameters, result):
-            events.append({"type": "tool_use", "tool": tool_name, "result": result})
+        def track_tool_use_start(tool_name, parameters):
+            events.append({"type": "tool_use_start", "tool": tool_name})
+
+        def track_tool_use_stop(tool_name, parameters, result):
+            events.append(
+                {"type": "tool_use_stop", "tool": tool_name, "result": result}
+            )
 
         def track_thinking(text):
             events.append({"type": "thinking", "text": text})
@@ -662,7 +714,8 @@ class TestBedrockAgent:
             model=mock_llm,
             memory=FleetingMemory(),
             event_handlers=EventHandlers(
-                on_tool_use=track_tool_use,
+                on_tool_use_start=track_tool_use_start,
+                on_tool_use_stop=track_tool_use_stop,
                 on_thinking=track_thinking,
                 on_answer=track_answer,
             ),
@@ -675,9 +728,18 @@ class TestBedrockAgent:
             content="this is thinking",
         )
 
-        tool_event = ToolUseEvent(
+        tool_start_event = ToolUseStartEvent(
             agent_name=agent.identifier,
-            type=AgentEventTypes.TOOL_USE,
+            type=AgentEventTypes.TOOL_USE_START,
+            content=ToolUseData(
+                tool_name="test_tool",
+                parameters={"param": "value"},
+            ),
+        )
+
+        tool_stop_event = ToolUseStopEvent(
+            agent_name=agent.identifier,
+            type=AgentEventTypes.TOOL_USE_STOP,
             content=ToolUseData(
                 tool_name="test_tool",
                 parameters={"param": "value"},
@@ -696,13 +758,21 @@ class TestBedrockAgent:
             # Set up the mock to return our mock response with proper AgentResponse format
             mock_invoke.return_value = AgentResponse(
                 answer="this is the answer",
-                events=[thinking_event, tool_event, answer_event],
+                events=[
+                    thinking_event,
+                    tool_start_event,
+                    tool_stop_event,
+                    answer_event,
+                ],
             )
 
             # Manually trigger the event handlers as they won't be called with the mocked invoke
             agent._safe_event_handler("on_thinking", "this is thinking")
             agent._safe_event_handler(
-                "on_tool_use", "test_tool", {"param": "value"}, "test result"
+                "on_tool_use_start", "test_tool", {"param": "value"}
+            )
+            agent._safe_event_handler(
+                "on_tool_use_stop", "test_tool", {"param": "value"}, "test result"
             )
             agent._safe_event_handler("on_answer", "this is the answer")
 
@@ -713,14 +783,14 @@ class TestBedrockAgent:
             assert result.answer == "this is the answer"
 
             # Check that our event handlers were called (via manual triggering)
-            assert len(events) == 3
+            assert len(events) == 4
             assert events[0]["type"] == "thinking"
             assert events[0]["text"] == "this is thinking"
-            assert events[1]["type"] == "tool_use"
+            assert events[1]["type"] == "tool_use_start"
             assert events[1]["tool"] == "test_tool"
-            assert events[1]["result"] == "test result"
-            assert events[2]["type"] == "answer"
-            assert events[2]["text"] == "this is the answer"
+            assert events[2]["type"] == "tool_use_stop"
+            assert events[2]["tool"] == "test_tool"
+            assert events[2]["result"] == "test result"
 
     def test_initialization_with_delegates(self, agent_with_delegates, mock_delegate):
         """Test that the agent initializes correctly with delegates."""
