@@ -39,10 +39,13 @@ HandlerType = Union[Callable, List[Callable]]
 class EventHandlers(BaseModel):
     """Event handlers for the BedrockAgent.
 
+    :param on_start: Called when the agent starts
     :param on_tool_use: Called when the agent uses a tool
     :param on_thinking: Called when the agent is thinking
     :param on_answer: Called when the agent provides text answer chunks
-    :param on_delegation: Called when the agent delegates to another agent
+    :param on_delegation_start: Called when the agent starts delegating to another agent
+    :param on_delegation_stop: Called when the agent stops delegating to another agent
+    :param on_stop: Called when the agent stops
     """
 
     on_start: HandlerType | None = None
@@ -129,7 +132,7 @@ class BedrockAgent(BaseAgent):
     """
 
     _BASE_SYSTEM_MESSAGE = """
-You are a helpful assistant. You can think in <thinking> tags. Your answer to the user does not need tags. Try to always plan your next steps using the <thinking> tags, unless the query is very straightforward. Make sure to exhaust all your tools and delegate capabilities before providing your final answer. If the query is complicated, multiple thoughts are allowed.
+You are a helpful assistant. You can think in <thinking> tags. Your answer to the user does not need tags. Try to always plan your next steps using the <thinking> tags, unless the query is very straightforward. Make sure to exhaust all your tools and delegate capabilities before providing your final answer. If the query is complicated, multiple thoughts are allowed.\n
 """
 
     _THINKING_PATTERN = re.compile(r"<thinking>(.*?)</thinking>", re.DOTALL)
@@ -159,7 +162,8 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
         :param identifier: An identifier for the agent
         :param model: A Bedrock LLM model object
-        :param description: A description of the agent
+        :param description: A description of the agent, used in the agent's representation towards the user or other agents
+        :param role: A role for the agent, used in the system message to describe its purpose
         :param memory: A memory object to store messages and system messages
         :param environment: A dictionary of environment variables to pass to tools
         :param prefill: A string to prefill the memory with
@@ -213,29 +217,36 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         """
         system_message = self._BASE_SYSTEM_MESSAGE
 
+        # Add description if available
+        if self.description:
+            system_message += f"This describes who you are: {self.description}\n\n"
+
         # Add delegation instructions if delegates are available
         if self.delegates:
-            delegate_info = "\nYou can delegate to the following agents using <delegate>agent_name:query</delegate> tags. Be sure to include all the necessary information in the query tag, and that the query is in natural language. For example: <delegate>SomeSpecialistAgent:Can you do this specialized task?</delegate>. These are the delegate agents available to you:"
+            delegate_info = "You can delegate to other agents using <delegate>agent_name:query</delegate> tags. Be sure to include all the necessary information in the query tag, and that the query is in natural language. For example: <delegate>SomeSpecialistAgent:Can you do this specialized task?</delegate>.\n\n"
 
-            # Add information about each delegate
+            # Get structured delegate information using a simplified version of the get_representation format
+            delegate_info += "These are the delegate agents available to you:\n\n"
             for delegate in self.delegates:
-                delegate_name = delegate.identifier
-                delegate_desc = delegate.description or "No description available"
-                delegate_info += f"\n- {delegate_name}: {delegate_desc}"
-                delegate_info += (
-                    f"\n- tools: {[t.get_tool_name() for t in delegate.tools]}"
-                )
+                delegate_info += f"{delegate.get_representation()}"
 
             system_message += delegate_info
 
         # Append user system message if available
         if self._user_system_message:
-            system_message += f"\n\n{self._user_system_message}"
+            system_message += f"{self._user_system_message}"
 
         logger.debug(f"System message: {system_message}")
 
         self._system_message = system_message
         self.memory.set_system_message(system_message)
+
+    def get_system_message(self) -> str:
+        """Get the system message for the agent.
+
+        :return: The system message for the agent
+        """
+        return self._system_message
 
     #######################
     # Event Handler Setup #
@@ -656,7 +667,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             # Add to memory
             self.memory.add_message(
                 role="user",
-                content=f"[SYSTEM DIRECTIVE] Using the tool <{tool_name}> with params <{tool_parameters}> returned: <{tool_result}>. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+                content=f"[SYSTEM DIRECTIVE] Tool <{tool_name}> was requested with params <{tool_parameters}> and returned: <{tool_result}>. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
             )
 
             return {
@@ -664,8 +675,20 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                 "event": tool_event,
             }
         except Exception as e:
-            logger.error(f"Error executing tool {tool_name}: {e}")
-            return {"error": f"[Tool Error: {tool_name}] {e}"}
+            error_msg = self._handle_tool_error(tool_name, e)
+            return {"error": error_msg}
+
+    def _handle_tool_error(self, tool_name: str, error: Exception) -> str:
+        """Handle an error that occurred during tool execution.
+
+        :param tool_name: Name of the tool that failed
+        :param error: Error that occurred during tool execution
+        :return: Error message to be returned to the user
+        """
+        error_msg = f"[Tool Error: {tool_name}] {error}"
+        logger.error(error_msg)
+        self.memory.add_message(role="user", content=error_msg)
+        return error_msg
 
     ######################
     # Content Processing #
@@ -811,10 +834,10 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         elif isinstance(response, str):
             content = response
 
-        # Process content for thinking/answer/delegate tags
+        # Process content for thinking/delegate tags
         if content.strip():
 
-            # Process the content for thinking/answer/delegate tags and trigger event handlers
+            # Process the content for thinking/delegate tags and trigger event handlers
             try:
                 events = self._process_content(content)
             except Exception as e:
@@ -888,7 +911,7 @@ if __name__ == "__main__":
         model=NovaPro(region="us-east-1"),
         tools=[age_lookup_tool],
         delegates=[eligibility_agent],
-        description="You are a helpful assistant that can check eligibility for a loan. All you need is an name. You can use the tools and delegates to check eligibility.",
+        description="A helpful assistant that can check eligibility for a loan.",
         log_agentic_response=True,
     )
 
@@ -899,3 +922,6 @@ if __name__ == "__main__":
     )
     pprint(response.answer)
     pprint(response.events)
+
+    print(bank_agent._system_message)
+    # print(bank_agent.get_representation())

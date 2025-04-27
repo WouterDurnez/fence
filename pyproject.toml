@@ -72,6 +72,7 @@ dev = [
     "plotly>=5.24.1",
     "pytest-cov>=6.0.0",
     "pillow>=11.0.0",
+    "git-changelog>=2.5.3",
 ]
 
 [tool.hatch.build.targets.sdist]

@@ -69,6 +69,44 @@ class BaseTool(ABC):
         """
         return inspect.signature(self.execute_tool).parameters
 
+    def get_representation(self):
+        """
+        Get the representation of the tool.
+        """
+        tool_name = self.get_tool_name()
+        tool_description = self.get_tool_description()
+        tool_params = self.get_tool_params()
+
+        # Format parameters in a more readable way
+        formatted_params = []
+        for name, param in tool_params.items():
+            if name in ["environment", "kwargs"]:
+                continue
+
+            # Get parameter type
+            param_type = (
+                param.annotation.__name__
+                if param.annotation != inspect.Parameter.empty
+                else "str"
+            )
+
+            # Check if parameter is required
+            is_optional = param.default != inspect.Parameter.empty
+            required_str = "(optional)" if is_optional else "(required)"
+
+            # Add formatted parameter
+            formatted_params.append(f"{name}: {param_type} {required_str}")
+
+        # Join parameters or show "None" if no parameters
+        params_str = (
+            "\n  - " + "\n  - ".join(formatted_params) if formatted_params else "None"
+        )
+
+        return f"""### {tool_name}
+- Description: {tool_description}
+- Parameters: {params_str}
+"""
+
     def format_toml(self):
         """
         Returns a TOML-formatted key-value pair of the tool name,

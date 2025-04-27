@@ -9,6 +9,7 @@ from enum import Enum
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory, FleetingMemory
 from fence.models.base import LLM
+from fence.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +42,22 @@ class BaseAgent(ABC):
         identifier: str | None = None,
         model: LLM = None,
         description: str | None = None,
+        role: str | None = None,
         memory: BaseMemory | None = None,
         environment: dict | None = None,
         prefill: str | None = None,
         log_agentic_response: bool = True,
         system_message: str | None = None,
         are_you_serious: bool = False,
+        tools: list[BaseTool] | None = None,
     ):
         """
         Initialize the Agent object.
 
         :param identifier: An identifier for the agent. If none is provided, the class name will be used.
         :param model: An LLM model object.
-        :param description: A description of the agent.
+        :param description: A description of the agent. Used in the agent's representation.
+        :param role: The role of the agent. Used to describe the agent's purpose in its own system message.
         :param environment: A dictionary of environment variables to pass to delegates and tools.
         :param memory: A memory object to store messages and system messages.
         :param prefill: A string to prefill the memory with, i.e. an assistant message.
@@ -64,6 +68,7 @@ class BaseAgent(ABC):
         self.identifier = identifier or self.__class__.__name__
         self.model = model
         self.description = description
+        self.role = role
         self.prefill = prefill
 
         # Set the log configuration
@@ -76,6 +81,9 @@ class BaseAgent(ABC):
         # Set system message
         self._system_message = system_message
 
+        # Set tools
+        self.tools = tools or []
+
     @abstractmethod
     def run(self, prompt: str) -> str:
         """
@@ -84,6 +92,27 @@ class BaseAgent(ABC):
         :param prompt: The initial prompt to feed to the LLM
         """
         raise NotImplementedError
+
+    def get_description(self):
+        """
+        Returns a string description of the agent.
+        """
+        return self.description or self.__doc__
+
+    def get_representation(self):
+        """
+        Returns a string representation of the agent.
+        """
+        representation = (
+            f"# {self.identifier}\n\n## Description:\n{self.get_description()}\n\n"
+        )
+
+        if self.tools:
+            representation += "## Tools:\n"
+            for tool in self.tools:
+                representation += f"{tool.get_representation()}\n"
+
+        return representation
 
     def format_toml(self):
         """
