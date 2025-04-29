@@ -239,7 +239,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         if self._user_system_message:
             system_message += f"{self._user_system_message}"
 
-        logger.debug(f"System message: {system_message}")
+        logger.debug(f"System message for {self.identifier}: {system_message}")
 
         self._system_message = system_message
         self.memory.set_system_message(system_message)
@@ -543,11 +543,8 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
             # Add result to memory
             memory_msg = (
-                f"[SYSTEM DIRECTIVE] Delegated to {delegate_name} with query: {query}. "
-                f"Result: {answer}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN "
-                f"PROCEED IMMEDIATELY to either: (1) Call the next required tool or delegate, "
-                f"or (2) If all necessary operations have been completed, provide your final answer. "
-                f"Think back to the original user prompt and use that to guide your response."
+                f"Delegated to {delegate_name} with query: {query}. "
+                f"Result: {answer}."
             )
             self.memory.add_message(role="user", content=memory_msg)
 
@@ -676,7 +673,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             # Add to memory
             self.memory.add_message(
                 role="user",
-                content=f"[SYSTEM DIRECTIVE] Tool <{tool_name}> was requested with params <{tool_parameters}> and returned: <{tool_result}>. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+                content=f"Tool <{tool_name}> was requested with params <{tool_parameters}> and returned: <{tool_result}>.",
             )
 
             return {
@@ -921,7 +918,7 @@ if __name__ == "__main__":
     from fence.tools.base import BaseTool, tool
     from fence.utils.logger import setup_logging
 
-    setup_logging(log_level="info", are_you_serious=False)
+    setup_logging(log_level="kill", are_you_serious=False)
 
     # Create a test tool
     @tool(description="Returns the age of the user")

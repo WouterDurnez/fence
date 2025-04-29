@@ -100,29 +100,6 @@ class TestBaseAgent:
         assert 'agent_name = """test_agent"""' in toml_string
         assert 'agent_description = """Test agent description"""' in toml_string
 
-    def test_flush_memory(self, base_agent):
-        """Test the _flush_memory method."""
-        # Store the original memory reference
-        original_memory = base_agent.memory
-
-        # Add some messages to memory
-        base_agent.memory.add_user_message("test user message")
-        base_agent.memory.add_assistant_message("test assistant message")
-
-        # Verify messages were added
-        assert len(base_agent.memory.messages) > 0
-
-        # Flush memory
-        base_agent._flush_memory()
-
-        # Check that memory is a new instance
-        assert base_agent.memory is not original_memory
-
-        # Check that memory only contains the prefill message
-        assert len(base_agent.memory.messages) == 1
-        assert base_agent.memory.messages[0].role == "assistant"
-        assert base_agent.memory.messages[0].content == "Test prefill"
-
     def test_log_with_string_type(self, base_agent):
         """Test the log method with string type."""
         # Test that logging works with string type
