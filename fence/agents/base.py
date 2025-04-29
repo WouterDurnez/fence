@@ -8,7 +8,7 @@ from enum import Enum
 
 from fence.links import logger as link_logger
 from fence.memory.base import BaseMemory, FleetingMemory
-from fence.models.base import LLM
+from fence.models.bedrock.base import BedrockBase
 from fence.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ class BaseAgent(ABC):
     def __init__(
         self,
         identifier: str | None = None,
-        model: LLM = None,
+        model: BedrockBase = None,
         description: str | None = None,
         role: str | None = None,
         memory: BaseMemory | None = None,

@@ -4,7 +4,7 @@ Bedrock agent class that uses native tool calling and streaming capabilities.
 
 import logging
 import re
-from pprint import pformat, pprint
+from pprint import pformat
 from typing import Any, Callable, List, Union
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -28,6 +28,7 @@ from fence.agents.bedrock.models import (
 from fence.memory.base import BaseMemory
 from fence.models.base import LLM
 from fence.models.bedrock.base import BedrockTool, BedrockToolConfig
+from fence.models.bedrock.claude import Claude35Sonnet
 from fence.models.bedrock.nova import NovaPro
 from fence.templates.models import Messages
 from fence.tools.base import BaseTool
@@ -442,10 +443,6 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                     # Found an answer, exit the loop
                     break
 
-            # If we found an answer, stop the agentic loop
-            if answer is not None:
-                break
-
             # Check for tool use or delegation to continue the loop
             found_action = False
             for event in iteration_response["events"]:
@@ -542,8 +539,11 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
             # Add result to memory
             memory_msg = (
-                f"Delegated to {delegate_name} with query: {query}. "
-                f"Result: {answer}."
+                f"[SYSTEM DIRECTIVE] Delegated to {delegate_name} with query: {query}. "
+                f"Result: {answer}. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN "
+                f"PROCEED IMMEDIATELY to either: (1) Call the next required tool or delegate, "
+                f"or (2) If all necessary operations have been completed, provide your final answer. "
+                f"Think back to the original user prompt and use that to guide your response."
             )
             self.memory.add_message(role="user", content=memory_msg)
 
@@ -672,7 +672,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             # Add to memory
             self.memory.add_message(
                 role="user",
-                content=f"Tool <{tool_name}> was requested with params <{tool_parameters}> and returned: <{tool_result}>.",
+                content=f"[SYSTEM DIRECTIVE] Tool <{tool_name}> was requested with params <{tool_parameters}> and returned: <{tool_result}>. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
             )
 
             return {
@@ -938,6 +938,9 @@ if __name__ == "__main__":
     from fence.tools.base import BaseTool, tool
     from fence.utils.logger import setup_logging
 
+    MODEL = Claude35Sonnet(region="us-east-1")
+    MODEL2 = NovaPro(region="us-east-1")
+
     setup_logging(log_level="kill", are_you_serious=False)
 
     # Create a test tool
@@ -958,7 +961,7 @@ if __name__ == "__main__":
 
     eligibility_agent = BedrockAgent(
         identifier="EligibilityAgent",
-        model=NovaPro(region="us-east-1"),
+        model=MODEL,
         description="An specialist agent that has various capabilities and tools to check eligibility for a loan. Only requires an age and name to check eligibility.",
         tools=[check_eligibility],
         log_agentic_response=True,
@@ -966,7 +969,7 @@ if __name__ == "__main__":
 
     bank_agent = BedrockAgent(
         identifier="BankAgent",
-        model=NovaPro(region="us-east-1"),
+        model=MODEL,
         tools=[age_lookup_tool],
         delegates=[eligibility_agent],
         description="A helpful assistant that can check eligibility for a loan.",
@@ -974,12 +977,12 @@ if __name__ == "__main__":
     )
 
     # Invoke demo
-    response = bank_agent.invoke(
+    response = bank_agent.run(
         "Hello, my name is Max. Can you check if I am eligible for a loan?",
         max_iterations=4,
     )
-    pprint(response.answer)
-    pprint(response.events)
+    # pprint(response.answer)
+    # pprint(response.events)
 
-    print(bank_agent._system_message)
+    # print(bank_agent._system_message)
     # print(bank_agent.get_representation())
