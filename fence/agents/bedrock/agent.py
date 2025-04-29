@@ -405,7 +405,6 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         :return: An AgentResponse object containing the answer and events
         """
         # Reset memory and add prompt
-        self._flush_memory()
         self.memory.add_message(role="user", content=prompt)
 
         # Initialize result containers
@@ -911,6 +910,27 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         return {
             "events": iteration_events,
         }
+
+    def _flush_memory(self):
+        """Clear or reset the agent's memory context.
+
+        Overrides the BaseAgent implementation to ensure message list is cleared.
+        """
+        # Get the current system message (if any)
+        system_message = self.memory.get_system_message()
+
+        # Clear all messages
+        self.memory.get_messages().clear()
+
+        # Set the system message (either preserved or new)
+        if system_message:
+            self.memory.set_system_message(system_message)
+        elif self._system_message:
+            self.memory.set_system_message(self._system_message)
+
+        # If we have a prefill, add it
+        if self.prefill:
+            self.memory.add_message(role="assistant", content=self.prefill)
 
 
 if __name__ == "__main__":

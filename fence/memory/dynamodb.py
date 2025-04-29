@@ -23,9 +23,9 @@ class DynamoDBMemory(BaseMemory):
     def __init__(
         self,
         table_name: str,
+        primary_key_value: str,
+        sort_key_value: str | None = None,
         primary_key_name: str = "PK",
-        primary_key_value: str | None = None,
-        primary_key_value_prefix: str = "",
         sort_key_name: str = "SK",
         region_name: str = "eu-central-1",
         source: str = None,
@@ -33,10 +33,10 @@ class DynamoDBMemory(BaseMemory):
         """
         Initialize the DynamoDBMemory object.
         :param str table_name: The name of the DynamoDB table.
-        :param str primary_key_name: The name of the partition key.
-        :param str primary_key_value: The partition key.
-        :param str primary_key_value_prefix: The prefix for the partition key. Useful for tenant isolation.
-        :param str sort_key_name: The name of the sort key.
+        :param str primary_key_name: The name of the partition key. Required.
+        :param str primary_key_value: The partition key. Required.
+        :param str sort_key_name: The name of the sort key. Optional.
+        :param str sort_key_value: The sort key. Optional. Defaults to a UUID.
         :param str region_name: The AWS region name.
         :param str source: A custom identifier for what created the memory object.
         """
@@ -59,12 +59,8 @@ class DynamoDBMemory(BaseMemory):
         self.sort_key_name = sort_key_name
 
         # Primary key counts as session ID
-        self.primary_key_value = (
-            primary_key_value if primary_key_value else str(uuid.uuid4())
-        )
-        self.primary_key_formatted = (
-            f"{primary_key_value_prefix}{self.primary_key_value}"
-        )
+        self.primary_key_value = primary_key_value
+        self.sort_key_value = sort_key_value if sort_key_value else str(uuid.uuid4())
 
         # Check if the table exists
         if self.table.table_status != "ACTIVE":
@@ -115,7 +111,10 @@ class DynamoDBMemory(BaseMemory):
         response = self.table.query(
             KeyConditionExpression=boto3.dynamodb.conditions.Key(
                 f"{self.primary_key_name}"
-            ).eq(self.primary_key_formatted)
+            ).eq(self.primary_key_value)
+            & boto3.dynamodb.conditions.Key(f"{self.sort_key_name}").begins_with(
+                self.sort_key_value
+            )
         )
         items = response.get("Items", [])
         messages = Messages(
@@ -128,10 +127,18 @@ class DynamoDBMemory(BaseMemory):
                 if item["Role"] in ["user", "assistant"]
             ]
         )
-        messages.system = next(
-            (item["Message"] for item in items if item["Role"] == "system"),
-            None,
-        )
+        # Get the latest system message by sorting on the timestamp in the sort key
+        system_messages = [
+            (item["Message"], item[self.sort_key_name])
+            for item in items
+            if item["Role"] == "system"
+        ]
+        if system_messages:
+            # Sort by the timestamp part of the sort key (after the #)
+            latest_system = max(system_messages, key=lambda x: x[1].split("#")[1])[0]
+            messages.system = latest_system
+        else:
+            messages.system = None
 
         # Log the messages
         logger.debug(
@@ -178,8 +185,8 @@ class DynamoDBMemory(BaseMemory):
         :return: The formatted message.
         """
         return {
-            f"{self.primary_key_name}": self.primary_key_formatted,
-            f"{self.sort_key_name}": datetime.now(timezone.utc).isoformat(),
+            f"{self.primary_key_name}": self.primary_key_value,
+            f"{self.sort_key_name}": f"{self.sort_key_value}#{datetime.now(timezone.utc).isoformat()}",
             "Message": content,
             "Role": role,
             "Meta": meta,

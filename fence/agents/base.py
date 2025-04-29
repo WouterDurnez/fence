@@ -134,10 +134,10 @@ agent_description = """{self.description or self.__doc__}"""
         """
 
         # Check if there is a system message in the memory
-        self.memory.system = self.memory.get_system_message()
+        existing_system = self.memory.get_system_message()
 
-        # If no system message is present, add a new one
-        if not self.memory.system:
+        # Only set system message if none exists
+        if not existing_system and self._system_message:
             self.memory.set_system_message(content=self._system_message)
 
         # If we have a prefill, add it

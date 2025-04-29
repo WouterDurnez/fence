@@ -63,7 +63,7 @@ def test_init_failure_inactive_table():
         mock_boto3.resource.return_value = mock_resource
 
         with pytest.raises(ValueError, match="Table test_table is not active"):
-            DynamoDBMemory(table_name="test_table")
+            DynamoDBMemory(table_name="test_table", primary_key_value="test-session")
 
 
 def test_init_failure_connection_error():
@@ -71,7 +71,7 @@ def test_init_failure_connection_error():
         mock_boto3.resource.side_effect = Exception("Connection failed")
 
         with pytest.raises(ValueError, match="Failed to connect to DynamoDB table"):
-            DynamoDBMemory(table_name="test_table")
+            DynamoDBMemory(table_name="test_table", primary_key_value="test-session")
 
 
 def test_add_message_success(memory, mock_boto3):
@@ -117,9 +117,21 @@ def test_set_system_message(memory):
 
 def test_get_messages(memory, mock_boto3):
     mock_messages = [
-        {"Role": "system", "Message": "system message"},
-        {"Role": "user", "Message": "user message"},
-        {"Role": "assistant", "Message": "assistant message"},
+        {
+            "Role": "system",
+            "Message": "system message",
+            "SK": "test-session#2024-01-01T00:00:00+00:00",
+        },
+        {
+            "Role": "user",
+            "Message": "user message",
+            "SK": "test-session#2024-01-01T00:00:01+00:00",
+        },
+        {
+            "Role": "assistant",
+            "Message": "assistant message",
+            "SK": "test-session#2024-01-01T00:00:02+00:00",
+        },
     ]
 
     table = mock_boto3.resource.return_value.Table.return_value
@@ -138,8 +150,21 @@ def test_get_messages(memory, mock_boto3):
 
 def test_get_system_message(memory, mock_boto3):
     mock_messages = [
-        {"Role": "system", "Message": "system message"},
-        {"Role": "user", "Message": "user message"},
+        {
+            "Role": "system",
+            "Message": "system message",
+            "SK": "test-session#2024-01-01T00:00:00+00:00",
+        },
+        {
+            "Role": "system",
+            "Message": "newer system message",
+            "SK": "test-session#2024-01-01T00:00:01+00:00",
+        },
+        {
+            "Role": "user",
+            "Message": "user message",
+            "SK": "test-session#2024-01-01T00:00:02+00:00",
+        },
     ]
 
     table = mock_boto3.resource.return_value.Table.return_value
@@ -149,7 +174,9 @@ def test_get_system_message(memory, mock_boto3):
 
     table.query.assert_called_once()
 
-    assert system_message == "system message"
+    assert (
+        system_message == "newer system message"
+    )  # Should get the latest system message
 
 
 def test_format_message_for_dynamo_db(memory):
@@ -163,7 +190,7 @@ def test_format_message_for_dynamo_db(memory):
 
         assert formatted_message == {
             "PK": "test-session",
-            "SK": "2024-01-01T00:00:00+00:00",
+            "SK": f"{memory.sort_key_value}#2024-01-01T00:00:00+00:00",
             "Message": "test message",
             "Role": "user",
             "Meta": {"key": "value"},
