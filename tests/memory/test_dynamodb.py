@@ -38,6 +38,7 @@ def memory(mock_boto3):
     return DynamoDBMemory(
         table_name="test_table",
         primary_key_value="test-session",
+        sort_key_value_prefix="agent1",
         region_name="us-east-1",
     )
 
@@ -48,9 +49,14 @@ def memory(mock_boto3):
 
 
 def test_init_success(mock_boto3):
-    memory = DynamoDBMemory(table_name="test_table", primary_key_value="test-session")
+    memory = DynamoDBMemory(
+        table_name="test_table",
+        primary_key_value="test-session",
+        sort_key_value_prefix="agent1",
+    )
     assert memory.table_name == "test_table"
     assert memory.primary_key_value == "test-session"
+    assert memory.sort_key_value_prefix == "agent1"
     mock_boto3.resource.assert_called_once_with("dynamodb", region_name="eu-central-1")
 
 
@@ -120,17 +126,17 @@ def test_get_messages(memory, mock_boto3):
         {
             "Role": "system",
             "Message": "system message",
-            "SK": "test-session#2024-01-01T00:00:00+00:00",
+            "SK": "agent1#test-session#2024-01-01T00:00:00+00:00#2024-01-01T00:00:00+00:00",
         },
         {
             "Role": "user",
             "Message": "user message",
-            "SK": "test-session#2024-01-01T00:00:01+00:00",
+            "SK": "agent1#test-session#2024-01-01T00:00:01+00:00#2024-01-01T00:00:01+00:00",
         },
         {
             "Role": "assistant",
             "Message": "assistant message",
-            "SK": "test-session#2024-01-01T00:00:02+00:00",
+            "SK": "agent1#test-session#2024-01-01T00:00:02+00:00#2024-01-01T00:00:02+00:00",
         },
     ]
 
@@ -140,6 +146,10 @@ def test_get_messages(memory, mock_boto3):
     messages = memory.get_messages()
 
     table.query.assert_called_once()
+    assert table.query.call_count == 1
+    # Check that the sort key prefix is used in the query
+    sort_key_prefix = f"{memory.sort_key_value_prefix}#{memory.sort_key_value}"
+    assert sort_key_prefix in memory.sort_key_formatted
 
     assert len(messages) == 2  # system message should not be included
     assert messages[0].role == "user"
@@ -153,17 +163,17 @@ def test_get_system_message(memory, mock_boto3):
         {
             "Role": "system",
             "Message": "system message",
-            "SK": "test-session#2024-01-01T00:00:00+00:00",
+            "SK": "agent1#test-session#2024-01-01T00:00:00+00:00#2024-01-01T00:00:00+00:00",
         },
         {
             "Role": "system",
             "Message": "newer system message",
-            "SK": "test-session#2024-01-01T00:00:01+00:00",
+            "SK": "agent1#test-session#2024-01-01T00:00:01+00:00#2024-01-01T00:00:01+00:00",
         },
         {
             "Role": "user",
             "Message": "user message",
-            "SK": "test-session#2024-01-01T00:00:02+00:00",
+            "SK": "agent1#test-session#2024-01-01T00:00:02+00:00#2024-01-01T00:00:02+00:00",
         },
     ]
 
@@ -173,29 +183,39 @@ def test_get_system_message(memory, mock_boto3):
     system_message = memory.get_system_message()
 
     table.query.assert_called_once()
+    assert table.query.call_count == 1
+    # Check that the sort key prefix is used in the query
+    sort_key_prefix = f"{memory.sort_key_value_prefix}#{memory.sort_key_value}"
+    assert sort_key_prefix in memory.sort_key_formatted
 
     assert (
         system_message == "newer system message"
     )  # Should get the latest system message
 
 
-def test_format_message_for_dynamo_db(memory):
+@pytest.fixture
+def mock_datetime():
     with patch("fence.memory.dynamodb.datetime") as mock_datetime:
         mock_now = datetime(2024, 1, 1, tzinfo=timezone.utc)
         mock_datetime.now.return_value = mock_now
+        yield mock_datetime
 
-        formatted_message = memory._format_message_for_dynamo_db(
-            role="user", content="test message", meta={"key": "value"}
-        )
 
-        assert formatted_message == {
-            "PK": "test-session",
-            "SK": f"{memory.sort_key_value}#2024-01-01T00:00:00+00:00",
-            "Message": "test message",
-            "Role": "user",
-            "Meta": {"key": "value"},
-            "Source": None,
-        }
+def test_format_message_for_dynamo_db(memory, mock_datetime):
+    formatted_message = memory._format_message_for_dynamo_db(
+        role="user", content="test message", meta={"key": "value"}
+    )
+
+    sort_key_base = memory.sort_key_formatted
+
+    assert formatted_message == {
+        "PK": "test-session",
+        "SK": f"{sort_key_base}#2024-01-01T00:00:00+00:00",
+        "Message": "test message",
+        "Role": "user",
+        "Meta": {"key": "value"},
+        "Source": None,
+    }
 
 
 def test_add_messages(memory):

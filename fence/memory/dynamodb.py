@@ -27,8 +27,10 @@ class DynamoDBMemory(BaseMemory):
         sort_key_value: str | None = None,
         primary_key_name: str = "PK",
         sort_key_name: str = "SK",
+        sort_key_value_prefix: str | None = None,
         region_name: str = "eu-central-1",
         source: str = None,
+        extra_fields: dict | None = None,
     ):
         """
         Initialize the DynamoDBMemory object.
@@ -37,8 +39,10 @@ class DynamoDBMemory(BaseMemory):
         :param str primary_key_value: The partition key. Required.
         :param str sort_key_name: The name of the sort key. Optional.
         :param str sort_key_value: The sort key. Optional. Defaults to a UUID.
+        :param str sort_key_value_prefix: The prefix of the sort key value. Optional.
         :param str region_name: The AWS region name.
         :param str source: A custom identifier for what created the memory object.
+        :param dict extra_fields: Extra fields to store in the DynamoDB table with each entry.
         """
 
         self.table_name = table_name
@@ -57,10 +61,15 @@ class DynamoDBMemory(BaseMemory):
         # Set PK and SK
         self.primary_key_name = primary_key_name
         self.sort_key_name = sort_key_name
+        self.sort_key_value_prefix = sort_key_value_prefix
 
-        # Primary key counts as session ID
+        # Secondary key holds the session ID
         self.primary_key_value = primary_key_value
         self.sort_key_value = sort_key_value if sort_key_value else str(uuid.uuid4())
+        self.sort_key_formatted = f"{self.sort_key_value_prefix}#{self.sort_key_value}#{datetime.now(timezone.utc).isoformat()}"
+
+        # Extra fields
+        self.extra_fields = extra_fields if extra_fields else {}
 
         # Check if the table exists
         if self.table.table_status != "ACTIVE":
@@ -113,10 +122,15 @@ class DynamoDBMemory(BaseMemory):
                 f"{self.primary_key_name}"
             ).eq(self.primary_key_value)
             & boto3.dynamodb.conditions.Key(f"{self.sort_key_name}").begins_with(
-                self.sort_key_value
+                self.sort_key_formatted
             )
         )
         items = response.get("Items", [])
+
+        # Sort all messages by the timestamp part of the sort key (after the #)
+        items.sort(key=lambda x: x[self.sort_key_name].split("#")[-1])
+
+        # Create a Messages object
         messages = Messages(
             messages=[
                 Message(
@@ -135,7 +149,7 @@ class DynamoDBMemory(BaseMemory):
         ]
         if system_messages:
             # Sort by the timestamp part of the sort key (after the #)
-            latest_system = max(system_messages, key=lambda x: x[1].split("#")[1])[0]
+            latest_system = max(system_messages, key=lambda x: x[1].split("#")[-1])[0]
             messages.system = latest_system
         else:
             messages.system = None
@@ -184,14 +198,21 @@ class DynamoDBMemory(BaseMemory):
         :param meta: The meta information of the message.
         :return: The formatted message.
         """
-        return {
+        item = {
             f"{self.primary_key_name}": self.primary_key_value,
-            f"{self.sort_key_name}": f"{self.sort_key_value}#{datetime.now(timezone.utc).isoformat()}",
+            f"{self.sort_key_name}": self.sort_key_formatted
+            + f"#{datetime.now(timezone.utc).isoformat()}",
             "Message": content,
             "Role": role,
             "Meta": meta,
             "Source": self.source,
         }
+
+        # Add extra fields
+        if self.extra_fields:
+            item |= self.extra_fields
+
+        return item
 
 
 if __name__ == "__main__":
@@ -200,20 +221,24 @@ if __name__ == "__main__":
 
     # Create a DynamoDBMemory object
     memory = DynamoDBMemory(
-        table_name="fence_test",
-        primary_key_name="session",
-        primary_key_value="08f1201a-d9cd-4ef7-9b63-c26d2c824576",
+        table_name="agent_test",
+        primary_key_name="PK",
+        primary_key_value="org_pid_1234567890#user_id_1234567890",
         # primary_key_value="test_a",
+        extra_fields={"test_a": "test_b"},
     )
 
-    # # Add a system message
-    # memory.set_system_message("This is a system message")
-    #
-    # # Add a user message
-    # memory.add_user_message("This is a user message")
-    #
-    # # Add an assistant message
-    # memory.add_assistant_message("This is an assistant message")
+    # Add a system message
+    memory.set_system_message("This is a system message")
+
+    # Add a later system message
+    memory.set_system_message("This is a later system message")
+
+    # Add a user message
+    memory.add_user_message("This is a user message")
+
+    # Add an assistant message
+    memory.add_assistant_message("This is an assistant message")
 
     # Print the messages
     messages = memory.get_messages()
