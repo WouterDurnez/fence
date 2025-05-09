@@ -66,7 +66,7 @@ class DynamoDBMemory(BaseMemory):
         # Secondary key holds the session ID
         self.primary_key_value = primary_key_value
         self.sort_key_value = sort_key_value if sort_key_value else str(uuid.uuid4())
-        self.sort_key_formatted = f"{self.sort_key_value_prefix}#{self.sort_key_value}#{datetime.now(timezone.utc).isoformat()}"
+        self.sort_key_formatted = f"{self.sort_key_value_prefix}#{self.sort_key_value}"
 
         # Extra fields
         self.extra_fields = extra_fields if extra_fields else {}
@@ -156,7 +156,7 @@ class DynamoDBMemory(BaseMemory):
 
         # Log the messages
         logger.debug(
-            "Messages:\n"
+            f"<SYSTEM>:\t{messages.system}"
             + "\n".join(
                 [
                     f"<{message.role.upper()}>:\t{message.content}"
@@ -217,7 +217,7 @@ class DynamoDBMemory(BaseMemory):
 
 if __name__ == "__main__":
 
-    setup_logging(log_level="info")
+    setup_logging(log_level="debug")
 
     # Create a DynamoDBMemory object
     memory = DynamoDBMemory(
@@ -240,8 +240,17 @@ if __name__ == "__main__":
     # Add an assistant message
     memory.add_assistant_message("This is an assistant message")
 
+    # Add a later user message
+    memory.add_user_message("This is a later user message")
+
+    # Add a later assistant message
+    memory.add_assistant_message("This is a later assistant message")
+
+    # Add a later system message
+    memory.set_system_message("This is a much later system message")
+
     # Print the messages
     messages = memory.get_messages()
     system = memory.get_system_message()
-    logger.info(f"System message <{type(system)}>: {system}")
-    logger.info(f"Messages <{type(messages)}>: {messages}")
+    # logger.info(f"System message <{type(system)}>: {system}")
+    # logger.info(f"Messages <{type(messages)}>: {messages}")
