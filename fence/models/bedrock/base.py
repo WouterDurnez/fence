@@ -8,6 +8,7 @@ from typing import Iterator, Literal
 
 import boto3
 from pydantic import BaseModel, Field
+from pydantic.alias_generators import to_camel
 
 from fence.models.base import LLM, InvokeMixin, MessagesMixin, StreamMixin
 from fence.templates.messages import Messages
@@ -49,6 +50,11 @@ class BedrockInferenceConfig(BaseModel):
         "For example, if you choose a value of 0.8 for topP, the model selects from the top 80% of the probability "
         "distribution of tokens that could be next in the sequence.",
     )
+
+    model_config = {
+        "populate_by_name": True,
+        "alias_generator": to_camel,
+    }
 
 
 class BedrockJSONSchema(BaseModel):
@@ -149,6 +155,7 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         source: str | None = None,
         inferenceConfig: BedrockInferenceConfig | dict | None = None,
         toolConfig: BedrockToolConfig | dict | list[BedrockTool] | None = None,
+        additionalModelRequestFields: dict | None = None,
         full_response: bool = False,
         cross_region: Literal["us", "eu"] | None = None,
         **kwargs,
@@ -158,6 +165,10 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
 
         :param source: An indicator of where (e.g., which feature) the model is operating from. Useful to pass to the logging callback
         :param cross_region: Region prefix for model ID, either "us" or "eu". Use this to switch to an inference profile, for cross-region inference.
+        :param inferenceConfig: Inference configuration for the model
+        :param toolConfig: Tool configuration for the model
+        :param additionalModelRequestFields: Additional model request fields to pass to the Bedrock API
+        :param full_response: Whether to return the full response from the Bedrock API
         :param **kwargs: Additional keyword arguments
         """
         super().__init__(**kwargs)
@@ -196,6 +207,10 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
                 case _:
                     raise ValueError(f"Invalid toolConfig type: {type(toolConfig)}")
 
+        # Additional model request fields
+        self.additionalModelRequestFields = additionalModelRequestFields
+
+        # Full response
         self.full_response = full_response
 
         # AWS
@@ -266,9 +281,17 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
             "messages": messages["messages"],
         }
         if self.inferenceConfig:
-            invoke_params["inferenceConfig"] = self.inferenceConfig.model_dump()
+            invoke_params["inferenceConfig"] = self.inferenceConfig.model_dump(
+                by_alias=True, exclude_none=True
+            )
         if self.toolConfig:
-            invoke_params["toolConfig"] = self.toolConfig.model_dump(by_alias=True)
+            invoke_params["toolConfig"] = self.toolConfig.model_dump(
+                by_alias=True, exclude_none=True
+            )
+        if self.additionalModelRequestFields:
+            invoke_params["additionalModelRequestFields"] = (
+                self.additionalModelRequestFields
+            )
         if "system" in messages and messages["system"] is not None:
             invoke_params["system"] = messages["system"]
         return invoke_params
@@ -410,30 +433,34 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
 
 
 if __name__ == "__main__":
-    tool_config = {
-        "tools": [
-            {
-                "toolSpec": {
-                    "name": "top_song",
-                    "description": "Get the most popular song played on a radio station.",
-                    "inputSchema": {
-                        "json": {
-                            "type": "object",
-                            "properties": {
-                                "sign": {
-                                    "type": "string",
-                                    "description": "The call sign for the radio station for which you want the most popular song. Example calls signs are WZPZ, and WKRP.",
-                                }
-                            },
-                            "required": ["sign"],
-                        }
-                    },
-                }
-            }
-        ]
-    }
-    # Try to parse the tool config
-    try:
-        tool_config = BedrockToolConfig(**tool_config)
-    except Exception as e:
-        print(e)
+    # tool_config = {
+    #     "tools": [
+    #         {
+    #             "toolSpec": {
+    #                 "name": "top_song",
+    #                 "description": "Get the most popular song played on a radio station.",
+    #                 "inputSchema": {
+    #                     "json": {
+    #                         "type": "object",
+    #                         "properties": {
+    #                             "sign": {
+    #                                 "type": "string",
+    #                                 "description": "The call sign for the radio station for which you want the most popular song. Example calls signs are WZPZ, and WKRP.",
+    #                             }
+    #                         },
+    #                         "required": ["sign"],
+    #                     }
+    #                 },
+    #             }
+    #         }
+    #     ]
+    # }
+    # # Try to parse the tool config
+    # try:
+    #     tool_config = BedrockToolConfig(**tool_config)
+    # except Exception as e:
+    #     print(e)
+
+    inferenceConfig = BedrockInferenceConfig(maxTokens=1, temperature=1, topP=1)
+
+    print(inferenceConfig.model_dump())
