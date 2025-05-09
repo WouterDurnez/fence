@@ -4,12 +4,12 @@
 #  / / |  __/ | | | (_|  __/
 #  \/   \___|_| |_|\___\___|
 #
-#  Keep the bloat out! - A lightweight LLM interaction library
+#  The bloat moat! - A lightweight LLM interaction library
 
 [project]
 name = "fence-llm"
-version = "1.0.5"
-description = "Keep the bloat out! - A lightweight LLM interaction library"
+version = "1.0.6"
+description = "The bloat moat! - A lightweight LLM interaction library"
 authors = [
     {name = "wouter.durnez", email = "wouter.durnez@gmail.com"},
 ]
