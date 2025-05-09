@@ -19,6 +19,7 @@ from fence.models.anthropic.claude import Claude35Sonnet as AnthropicClaude35Son
 from fence.models.base import LLM
 from fence.models.bedrock.claude import (
     Claude35Sonnet,
+    Claude37Sonnet,
     ClaudeHaiku,
     ClaudeInstant,
     ClaudeSonnet,
@@ -181,10 +182,10 @@ if __name__ == "__main__":
             ClaudeInstant(),
             ClaudeSonnet(),
             Claude35Sonnet(region="us-east-1"),
-            # Claude35SonnetV2(region="us-east-1"),
-            NovaPro(region="us-east-1"),
-            NovaLite(region="us-east-1"),
-            NovaMicro(region="us-east-1"),
+            Claude37Sonnet(cross_region="eu"),
+            NovaPro(cross_region="eu"),
+            NovaLite(cross_region="eu"),
+            NovaMicro(cross_region="eu"),
         )
     ]
 
