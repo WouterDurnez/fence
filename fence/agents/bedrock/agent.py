@@ -230,7 +230,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             delegate_info = "You can delegate to other agents using <delegate>agent_name:query</delegate> tags. Be sure to include all the necessary information in the query tag, and that the query is in natural language. For example: <delegate>SomeSpecialistAgent:Can you do this specialized task?</delegate>.\n\n"
 
             # Get structured delegate information using a simplified version of the get_representation format
-            delegate_info += "These are the delegate agents available to you:\n\n"
+            delegate_info += "These are the delegate agents available to you, along with the tools that they have available. Note that you need to go through the delegate to access the tools:\n\n"
             for delegate in self.delegates:
                 delegate_info += f"{delegate.get_representation()}"
 
@@ -240,7 +240,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         if self._user_system_message:
             system_message += f"{self._user_system_message}"
 
-        logger.debug(f"System message for {self.identifier}: {system_message}")
+        logger.debug(f"System message for {self.identifier}:\n\n{system_message}")
 
         self._system_message = system_message
         self.memory.set_system_message(system_message)
@@ -373,7 +373,8 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                 handler(*args, **kwargs)
             except Exception as e:
                 logger.warning(
-                    f"Error in {event_name} event handler (args: {args} - kwargs: {kwargs}): {e}"
+                    f"Error in {event_name} event handler (args: {args} - kwargs: {kwargs}): {e}",
+                    exc_info=True,
                 )
 
     ###############
@@ -422,7 +423,9 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                 )
             )
 
+        # Main agentic loop
         while iterations < max_iterations:
+
             # Get messages for the model
             prompt_obj = Messages(
                 system=self.memory.get_system_message(),
@@ -437,10 +440,12 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             all_events.extend(iteration_response["events"])
 
             # First check for answer (highest priority)
+            found_answer = False
             for event in iteration_response["events"]:
                 if isinstance(event, AnswerEvent):
                     answer = event.content
                     # Found an answer, exit the loop
+                    found_answer = True
                     break
 
             # Check for tool use or delegation to continue the loop
@@ -457,13 +462,13 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                 iterations += 1
                 continue
 
-            # If no significant events happened, something went wrong
-            if not iteration_response["events"]:
-                logger.warning("Agentic loop interrupted: no events returned")
+            # ...otherwise, if we found an answer, we're done
+            if found_answer:
                 break
 
             # If we got here without an answer or tool/delegate use,
             # we're done because the model has nothing more to add
+            logger.warning("Agentic loop interrupted: no events returned")
             break
 
         # Call on_stop event handler
@@ -635,7 +640,9 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             (tool for tool in self.tools if tool.get_tool_name() == tool_name), None
         )
         if not tool:
-            return {"error": f"[Tool Error: {tool_name}] Tool not found"}
+            return {
+                "error": f"[Tool Error: {tool_name}] Tool not found. Available tools: {self.tools}"
+            }
 
         try:
 
@@ -797,9 +804,9 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         """
         # Get response from the model
         logger.debug(
-            f"Agent {self.identifier} is invoking the model:\n"
-            f"\t[toolConfig]:\n{pformat(self.model.toolConfig, indent=4)}\n"
-            f"\t[prompt]:\n{pformat(prompt_obj.model_dump(), indent=4)}"
+            f"Agent {self.identifier} is invoking the model:\n\n"
+            f"\t[toolConfig]:\n\n{(pformat(self.model.toolConfig.model_dump(), indent=4) if self.model.toolConfig else 'No tools available')}\n"
+            f"\t[prompt]:\n\n{pformat(prompt_obj.model_dump(), indent=4)}"
         )
 
         # Initialize event list for this iteration
@@ -939,7 +946,9 @@ if __name__ == "__main__":
     from fence.utils.logger import setup_logging
 
     MODEL = Claude35Sonnet(region="us-east-1")
-    MODEL2 = NovaPro(region="us-east-1")
+    MODEL2 = NovaPro(
+        region="us-east-1",
+    )
 
     setup_logging(log_level="kill", are_you_serious=False)
 
