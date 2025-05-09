@@ -13,6 +13,7 @@ MODEL_ID_INSTANT = "anthropic.claude-instant-v1"
 MODEL_ID_SONNET = "anthropic.claude-3-sonnet-20240229-v1:0"
 MODEL_ID_SONNET_3_5_V2 = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 MODEL_ID_SONNET_3_5 = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+MODEL_ID_SONNET_3_7 = "anthropic.claude-3-7-sonnet-20250219-v1:0"
 MODEL_ID_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
 
 
@@ -96,10 +97,27 @@ class Claude35SonnetV2(BedrockBase):
         super().__init__(**kwargs)
 
 
+class Claude37Sonnet(BedrockBase):
+    """Claude 3.7 Sonnet model class"""
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a Claude 3.7 Sonnet model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        self.model_id = MODEL_ID_SONNET_3_7
+        self.model_name = "Claude 3.7 Sonnet"
+
+        super().__init__(**kwargs)
+
+
 if __name__ == "__main__":
 
     # Create model with tools
-    claude_with_tools = Claude35Sonnet(
+    claude_with_tools = Claude37Sonnet(
+        cross_region="eu",
         source="test",
         metric_prefix="supertest",
         extra_tags={"test": "test"},
