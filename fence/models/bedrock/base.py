@@ -310,6 +310,7 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
                 f"Invoking Bedrock model with params: {pformat(invoke_params)}"
             )
             response = self.client.converse(**invoke_params)
+            logger.debug(f"Response: {pformat(response)}")
 
             # Extract and log metrics regardless of full_response setting
             metrics = self._extract_metrics(response.get("usage", {}))
