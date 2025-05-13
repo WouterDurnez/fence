@@ -9,7 +9,19 @@ from datetime import datetime, timezone
 import boto3
 
 from fence.memory.base import BaseMemory
-from fence.templates.models import Message, Messages
+from fence.templates.models import (
+    Content,
+    ImageBlob,
+    ImageContent,
+    Message,
+    Messages,
+    TextContent,
+    ToolResultBlock,
+    ToolResultContent,
+    ToolResultContentBlockText,
+    ToolUseBlock,
+    ToolUseContent,
+)
 from fence.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -75,13 +87,17 @@ class DynamoDBMemory(BaseMemory):
         if self.table.table_status != "ACTIVE":
             raise ValueError(f"Table {table_name} is not active")
 
-    def add_message(self, role: str, content: str, meta: dict | None = None):
+    def add_message(self, role: str, content: str | Content, meta: dict | None = None):
         """
         Add a message to the memory buffer.
         :param role: The role of the message.
         :param content: The content of the message.
         :param meta: The meta information of the message.
         """
+
+        # If we got a str, it's a TextContent object
+        if isinstance(content, str):
+            content = TextContent(text=content)
 
         # Store the message in DynamoDB
         dynamo_response = self.table.put_item(
@@ -94,7 +110,11 @@ class DynamoDBMemory(BaseMemory):
             logger.error(f"Failed to store message in DynamoDB: {dynamo_response}")
             raise ValueError(f"Failed to store message in DynamoDB: {dynamo_response}")
 
-    def add_user_message(self, content: str):
+    def add_user_message(self, content: str | Content):
+        """
+        Add a user message to the memory buffer.
+        :param content: The content of the message, either a string or a Content object.
+        """
         self.add_message(role="user", content=content)
 
     def add_assistant_message(self, content: str):
@@ -127,6 +147,27 @@ class DynamoDBMemory(BaseMemory):
         )
         items = response.get("Items", [])
 
+        # Parse items into content objects based on type in the Message object
+        for item in items:
+            type = item["Message"]["type"]
+            match type:
+                case "text":
+                    item["Message"] = TextContent(text=item["Message"]["text"])
+                case "image":
+                    item["Message"] = ImageContent(image=item["Message"]["image"])
+                case "image_blob":
+                    item["Message"] = ImageBlob(
+                        image_blob=item["Message"]["image_blob"]
+                    )
+                case "toolResult":
+                    item["Message"] = ToolResultContent(
+                        content=item["Message"]["content"]
+                    )
+                case "toolUse":
+                    item["Message"] = ToolUseContent(content=item["Message"]["content"])
+                case _:
+                    raise ValueError(f"Unknown message type: {type}")
+
         # Sort all messages by the timestamp part of the sort key (after the #)
         items.sort(key=lambda x: x[self.sort_key_name].split("#")[-1])
 
@@ -135,7 +176,7 @@ class DynamoDBMemory(BaseMemory):
             messages=[
                 Message(
                     role=item["Role"],
-                    content=item["Message"],
+                    content=[item["Message"]],
                 )
                 for item in items
                 if item["Role"] in ["user", "assistant"]
@@ -150,13 +191,17 @@ class DynamoDBMemory(BaseMemory):
         if system_messages:
             # Sort by the timestamp part of the sort key (after the #)
             latest_system = max(system_messages, key=lambda x: x[1].split("#")[-1])[0]
-            messages.system = latest_system
+            messages.system = (
+                latest_system.text
+                if isinstance(latest_system, TextContent)
+                else latest_system
+            )
         else:
             messages.system = None
 
         # Log the messages
         logger.debug(
-            f"<SYSTEM>:\t{messages.system}"
+            f"<SYSTEM>:\t{messages.system}\n"
             + "\n".join(
                 [
                     f"<{message.role.upper()}>:\t{message.content}"
@@ -188,7 +233,7 @@ class DynamoDBMemory(BaseMemory):
     def _format_message_for_dynamo_db(
         self,
         role: str,
-        content: str,
+        content: Content | str,
         meta: dict | None = None,
     ) -> dict:
         """
@@ -198,11 +243,14 @@ class DynamoDBMemory(BaseMemory):
         :param meta: The meta information of the message.
         :return: The formatted message.
         """
+        if isinstance(content, str):
+            content = TextContent(text=content)
+
         item = {
             f"{self.primary_key_name}": self.primary_key_value,
             f"{self.sort_key_name}": self.sort_key_formatted
             + f"#{datetime.now(timezone.utc).isoformat()}",
-            "Message": content,
+            "Message": content.model_dump(),
             "Role": role,
             "Meta": meta,
             "Source": self.source,
@@ -249,8 +297,29 @@ if __name__ == "__main__":
     # Add a later system message
     memory.set_system_message("This is a much later system message")
 
+    # Add a tool use block
+    memory.add_user_message(
+        ToolUseContent(
+            content=ToolUseBlock(
+                toolUseId="1234567890", input={"test": "test"}, name="test"
+            )
+        )
+    )
+    # Add a tool result message
+    memory.add_assistant_message(
+        ToolResultContent(
+            content=ToolResultBlock(
+                content=[
+                    ToolResultContentBlockText(text="This is a tool result message")
+                ],
+                toolUseId="1234567890",
+                status="success",
+            )
+        )
+    )
+
     # Print the messages
     messages = memory.get_messages()
     system = memory.get_system_message()
-    # logger.info(f"System message <{type(system)}>: {system}")
-    # logger.info(f"Messages <{type(messages)}>: {messages}")
+    logger.info(f"System message <{type(system)}>: {system}")
+    logger.info(f"Messages <{type(messages)}>: {messages}")
