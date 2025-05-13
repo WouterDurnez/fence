@@ -211,5 +211,5 @@ if __name__ == "__main__":
     # Print the messages
     messages = memory.get_messages()
     system = memory.get_system_message()
-    logger.info(f"System message <{type(system)}>: {system}")
-    logger.info(f"Messages <{type(messages)}>: {messages}")
+    logger.info(f"System message <{type(system).__name__}>: {system}")
+    logger.info(f"Messages <{type(messages).__name__}>: {messages}")

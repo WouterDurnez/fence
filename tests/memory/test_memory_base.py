@@ -29,7 +29,7 @@ def test_add_user_message(memory):
     messages = memory.get_messages()
     assert len(messages) == 1
     assert messages[0].role == "user"
-    assert messages[0].content == user_message
+    assert messages[0].content[0].text == user_message
 
 
 def test_add_assistant_message(memory):
@@ -41,7 +41,7 @@ def test_add_assistant_message(memory):
     messages = memory.get_messages()
     assert len(messages) == 1
     assert messages[0].role == "assistant"
-    assert messages[0].content == assistant_message
+    assert messages[0].content[0].text == assistant_message
 
 
 def test_add_multiple_messages(memory):
@@ -56,9 +56,9 @@ def test_add_multiple_messages(memory):
 
     assert len(messages) == 2
     assert messages[0].role == "user"
-    assert messages[0].content == user_message
+    assert messages[0].content[0].text == user_message
     assert messages[1].role == "assistant"
-    assert messages[1].content == assistant_message
+    assert messages[1].content[0].text == assistant_message
 
 
 def test_invalid_role_raises_error(memory):
