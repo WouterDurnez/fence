@@ -102,6 +102,57 @@ class ImageContent(BaseModel):
     source: Source = Field(..., description="The source of the image.")
 
 
+class ToolUseBlock(BaseModel):
+    """A model representing a tool use block."""
+
+    toolUseId: str = Field(..., description="The tool use id.")
+    input: dict = Field(..., description="The input to pass to the tool.")
+    name: str = Field(..., description="The name of the tool the model wants to use.")
+
+
+class ToolResultContentBlockText(BaseModel):
+    """A model representing a tool result content block."""
+
+    text: str = Field(..., description="The text content of the tool result.")
+
+
+class ToolResultContentBlockJson(BaseModel):
+    """A model representing a tool result content block."""
+
+    json_field: dict = Field(
+        ..., alias="json", description="The JSON content of the tool result."
+    )
+
+
+ToolResultContentBlock = ToolResultContentBlockText | ToolResultContentBlockJson
+
+
+class ToolResultBlock(BaseModel):
+    """A model representing a tool result block."""
+
+    content: list[ToolResultContentBlock] = Field(
+        ..., description="The content of the tool result."
+    )
+    toolUseId: str = Field(..., description="The tool use id.")
+    status: Literal["success", "error"] | None = Field(
+        None, description="The status of the tool result."
+    )
+
+
+class ToolResultContent(BaseModel):
+    """A model representing a tool result."""
+
+    type: Literal["toolResult"] = "toolResult"
+    content: ToolResultBlock
+
+
+class ToolUseContent(BaseModel):
+    """A model representing a tool use."""
+
+    type: Literal["toolUse"] = "toolUse"
+    content: ToolUseBlock
+
+
 class ImageBlob(BaseModel):
     """A model representing image content."""
 
@@ -111,7 +162,7 @@ class ImageBlob(BaseModel):
 
 
 # Content can be either text or image
-Content = TextContent | ImageContent | ImageBlob
+Content = TextContent | ImageContent | ImageBlob | ToolResultContent | ToolUseContent
 
 
 class Message(BaseModel):
@@ -191,6 +242,14 @@ class Messages(BaseModel):
                             }
 
                             content.append({"image": package})
+                        case "toolUse":
+                            content.append(
+                                {"toolUse": content_object.content.model_dump()}
+                            )
+                        case "toolResult":
+                            content.append(
+                                {"toolResult": content_object.content.model_dump()}
+                            )
                         case _:
                             raise ValueError(
                                 f"Content type '{content_object.type}' not recognized or supported (yet)."
@@ -219,7 +278,7 @@ class Messages(BaseModel):
           {
             "role": "user",
             "content": [
-              {"type": "text", "text": "What’s in this image?"},
+              {"type": "text", "text": "What's in this image?"},
               {
                 "type": "image_url",
                 "image_url": {
@@ -265,6 +324,16 @@ class Messages(BaseModel):
                                 "image_url": {
                                     "url": f"data:image/{content_object.source.media_type};base64,{content_object.source.data}",
                                 },
+                            }
+                        case "toolUse":
+                            message = {
+                                "type": "tool_use",
+                                "tool_use": content_object.content.model_dump(),
+                            }
+                        case "toolResult":
+                            message = {
+                                "type": "tool_result",
+                                "tool_result": content_object.content.model_dump(),
                             }
                         case _:
                             raise ValueError(
@@ -325,6 +394,16 @@ class Messages(BaseModel):
                                 "image_url": {
                                     "url": f"data:image/{content_object.source.media_type};base64,{content_object.source.data}",
                                 },
+                            }
+                        case "toolUse":
+                            message = {
+                                "type": "tool_use",
+                                "tool_use": content_object.content.model_dump(),
+                            }
+                        case "toolResult":
+                            message = {
+                                "type": "tool_result",
+                                "tool_result": content_object.content.model_dump(),
                             }
                         case _:
                             raise ValueError(
@@ -477,6 +556,7 @@ class Messages(BaseModel):
             messages.append({"role": role, "content": content})
 
         return messages
+
 
 if __name__ == "__main__":
     # Example messages
