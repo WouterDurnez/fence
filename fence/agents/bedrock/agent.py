@@ -30,7 +30,17 @@ from fence.models.base import LLM
 from fence.models.bedrock.base import BedrockTool, BedrockToolConfig
 from fence.models.bedrock.claude import Claude35Sonnet
 from fence.models.bedrock.nova import NovaPro
-from fence.templates.models import Messages
+from fence.templates.models import (
+    Content,
+    Messages,
+    TextContent,
+    ToolResultBlock,
+    ToolResultContent,
+    ToolResultContentBlockJson,
+    ToolResultContentBlockText,
+    ToolUseBlock,
+    ToolUseContent,
+)
 from fence.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
@@ -610,9 +620,12 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             f"Agent {self.identifier}: Registered {len(bedrock_tools)} tools with Bedrock model: {tool_names}"
         )
 
-    def _execute_tool(self, tool_name: str, tool_parameters: dict) -> dict:
+    def _execute_tool(
+        self, tool_use_id: str, tool_name: str, tool_parameters: dict
+    ) -> dict:
         """Execute a tool with the given parameters.
 
+        :param tool_use_id: ID of the tool use
         :param tool_name: Name of the tool to call
         :param tool_parameters: Parameters for the tool
         :return: Dictionary with event and formatted result
@@ -647,7 +660,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         try:
 
             logger.debug(
-                f"🔨 Executing tool: {tool_name} with params: {tool_parameters}"
+                f"🔨 Executing tool: [{tool_use_id}] {tool_name} with params: {tool_parameters}"
             )
             # Execute the tool
             tool_result = tool.run(environment=self.environment, **tool_parameters)
@@ -679,7 +692,20 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             # Add to memory
             self.memory.add_message(
                 role="user",
-                content=f"[SYSTEM DIRECTIVE] Tool <{tool_name}> was requested with params <{tool_parameters}> and returned: <{tool_result}>. DO NOT ACKNOWLEDGE THIS MESSAGE. FIRST THINK, THEN PROCEED IMMEDIATELY to either: (1) Call the next required tool without any introduction or transition phrases, or (2) If all necessary tools have been used, provide your final answer. Think back to the original user prompt and use that to guide your response.",
+                content=ToolResultContent(
+                    type="toolResult",
+                    content=ToolResultBlock(
+                        content=[
+                            (
+                                ToolResultContentBlockJson(json_field=tool_result)
+                                if isinstance(tool_result, dict)
+                                else ToolResultContentBlockText(text=tool_result)
+                            ),
+                        ],
+                        toolUseId=tool_use_id,
+                        status="success",
+                    ),
+                ),
             )
 
             return {
@@ -709,13 +735,19 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
     # Content Processing #
     ######################
 
-    def _process_content(self, content: str) -> list[AgentEvent]:
+    def _process_content(self, content: list[Content]) -> list[AgentEvent]:
         """Process the content to extract thinking, answer, and delegate parts in chronological order.
         Any text not inside thinking or delegate tags will be treated as answer text.
 
         :param content: The content to process
         :return: A list of events
         """
+
+        # Get the text content
+        text_content = [block for block in content if isinstance(block, TextContent)]
+        content = "".join([block.text for block in text_content])
+
+        # Initialize events list
         events: list[AgentEvent] = []
 
         # Find all thinking and delegate tags
@@ -818,6 +850,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
             # Initialize variables
             content = ""
+            tool_use_id = None
             tool_name = None
             tool_parameters = None
 
@@ -827,17 +860,18 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
                 # Process content blocks
                 if "content" in message and isinstance(message["content"], list):
-                    content = ""
+                    content = []
                     for item in message["content"]:
 
                         # Extract text content
                         if "text" in item:
                             logger.debug(f"Text found: {item}")
-                            content += item["text"]
+                            content.append(TextContent(text=item["text"]))
 
                         # Extract tool use information
                         if "toolUse" in item:
                             logger.debug(f"Tool use found: {item}")
+                            tool_use_id = item["toolUse"]["toolUseId"]
                             tool_info = item["toolUse"]
                             tool_name = tool_info.get("name")
 
@@ -847,11 +881,22 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                             ):
                                 tool_parameters = tool_info["input"]
 
+                            # Add tool use to content
+                            content.append(
+                                ToolUseContent(
+                                    content=ToolUseBlock(
+                                        toolUseId=tool_use_id,
+                                        name=tool_name,
+                                        input=tool_parameters,
+                                    )
+                                )
+                            )
+
             elif isinstance(response, str):
-                content = response
+                content.append(TextContent(text=response))
 
             # Process content for thinking/delegate tags
-            if content.strip():
+            if content:
 
                 # Process the content for thinking/delegate tags and trigger event handlers
                 try:
@@ -861,7 +906,8 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                     events = []
 
                 # Add response to memory
-                self.memory.add_message(role="assistant", content=content)
+                for block in content:
+                    self.memory.add_message(role="assistant", content=block)
 
                 # If a delegate event is found, we need to execute the delegate
                 for i, event in enumerate(events):
@@ -885,7 +931,9 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
             # Process tool call if found
             if tool_name and tool_parameters is not None:
-                tool_result = self._execute_tool(tool_name, tool_parameters)
+                tool_result = self._execute_tool(
+                    tool_use_id, tool_name, tool_parameters
+                )
                 if "events" in tool_result:
                     self._current_iteration_events.extend(tool_result["events"])
                 elif "error" in tool_result:
