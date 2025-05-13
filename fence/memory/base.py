@@ -6,7 +6,18 @@ import logging
 from abc import ABC, abstractmethod
 
 from fence.templates.messages import MessagesTemplate
-from fence.templates.models import Message, Messages
+from fence.templates.models import (
+    Content,
+    Message,
+    Messages,
+    TextContent,
+    ToolResultBlock,
+    ToolResultContent,
+    ToolResultContentBlockText,
+    ToolUseBlock,
+    ToolUseContent,
+)
+from fence.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -21,21 +32,26 @@ class BaseMemory(ABC):
     ###########
 
     @abstractmethod
-    def add_message(self, role: str, content: str):
+    def add_message(self, role: str, content: str | Content, meta: dict | None = None):
         """
         Add a message to the memory buffer.
+        :param role: The role of the message.
+        :param content: The content of the message.
+        :param meta: The meta information of the message.
         """
         pass
 
-    def add_user_message(self, content: str):
+    def add_user_message(self, content: str | Content):
         """
         Add a user message to the memory buffer.
+        :param content: The content of the message, either a string or a Content object.
         """
         self.add_message(role="user", content=content)
 
-    def add_assistant_message(self, content: str):
+    def add_assistant_message(self, content: str | Content):
         """
         Add an assistant message to the memory buffer.
+        :param content: The content of the message, either a string or a Content object.
         """
         self.add_message(role="assistant", content=content)
 
@@ -43,6 +59,7 @@ class BaseMemory(ABC):
     def set_system_message(self, content: str):
         """
         Add a system message to the memory buffer.
+        :param content: The content of the system message.
         """
         pass
 
@@ -57,6 +74,7 @@ class BaseMemory(ABC):
     def get_system_message(self):
         """
         Get the system message from the memory buffer.
+        :return: The system message as a string or None if not set.
         """
         pass
 
@@ -86,31 +104,64 @@ class FleetingMemory(BaseMemory):
         self.system = None
         self.messages = []
 
-    def add_message(self, role: str, content: str):
+    def add_message(self, role: str, content: str | Content, meta: dict | None = None):
+        """
+        Add a message to the memory buffer.
+        :param role: The role of the message.
+        :param content: The content of the message, either a string or a Content object.
+        :param meta: The meta information of the message, not used in FleetingMemory.
+        """
+        # If we got a str, it's a TextContent object
+        if isinstance(content, str):
+            content = TextContent(text=content)
 
         if role == "system":
             self.system = content
         elif role in ["user", "assistant"]:
-            self.messages.append(Message(role=role, content=content))
+            self.messages.append(Message(role=role, content=[content]))
         else:
             raise ValueError(
                 f"Role must be 'system', 'user', or 'assistant'. Got {role}"
             )
 
     def set_system_message(self, content: str):
+        """
+        Add a system message to the memory buffer.
+        :param content: The content of the system message.
+        """
         self.add_message(role="system", content=content)
 
     def add_messages(self, messages: list[Message]):
+        """
+        Add a list of messages to the memory buffer.
+        :param messages: The list of messages to add.
+        """
         self.messages.extend(messages)
 
     def get_messages(self):
+        """
+        Get the messages from the memory buffer.
+        :return: The list of messages.
+        """
         return self.messages
 
     def get_system_message(self):
-        return self.system if hasattr(self, "system") else None
+        """
+        Get the system message from the memory buffer.
+        :return: The system message as a string or None if not set.
+        """
+        if not hasattr(self, "system") or self.system is None:
+            return None
+
+        # Extract text from TextContent if needed
+        if isinstance(self.system, TextContent):
+            return self.system.text
+        return self.system
 
 
 if __name__ == "__main__":
+
+    logger = setup_logging(log_level="debug", are_you_serious=False)
 
     # Create memory object
     memory = FleetingMemory()
@@ -118,14 +169,47 @@ if __name__ == "__main__":
     # Add a system message
     memory.set_system_message("This is a system message")
 
+    # Add a later system message
+    memory.set_system_message("This is a later system message")
+
     # Add a user message
     memory.add_user_message("This is a user message")
 
     # Add an assistant message
     memory.add_assistant_message("This is an assistant message")
 
-    # Print the messages
-    logger.info(
-        f"System message <{type(memory.get_system_message())}>: {memory.get_system_message()}"
+    # Add a later user message
+    memory.add_user_message("This is a later user message")
+
+    # Add a later assistant message
+    memory.add_assistant_message("This is a later assistant message")
+
+    # Add a later system message
+    memory.set_system_message("This is a much later system message")
+
+    # Add a tool use block
+    memory.add_user_message(
+        ToolUseContent(
+            content=ToolUseBlock(
+                toolUseId="1234567890", input={"test": "test"}, name="test"
+            )
+        )
     )
-    logger.info(f"Messages <{type(memory.get_messages())}>: {memory.get_messages()}")
+    # Add a tool result message
+    memory.add_assistant_message(
+        ToolResultContent(
+            content=ToolResultBlock(
+                content=[
+                    ToolResultContentBlockText(text="This is a tool result message")
+                ],
+                toolUseId="1234567890",
+                status="success",
+            )
+        )
+    )
+
+    # Print the messages
+    messages = memory.get_messages()
+    system = memory.get_system_message()
+    logger.info(f"System message <{type(system)}>: {system}")
+    logger.info(f"Messages <{type(messages)}>: {messages}")
