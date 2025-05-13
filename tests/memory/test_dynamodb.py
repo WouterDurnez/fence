@@ -89,7 +89,8 @@ def test_add_message_success(memory, mock_boto3):
     table.put_item.assert_called_once()
     call_args = table.put_item.call_args[1]["Item"]
     assert call_args["Role"] == "user"
-    assert call_args["Message"] == "test message"
+    assert call_args["Message"]["type"] == "text"
+    assert call_args["Message"]["text"] == "test message"
     assert call_args["PK"] == "test-session"
 
 
@@ -125,17 +126,17 @@ def test_get_messages(memory, mock_boto3):
     mock_messages = [
         {
             "Role": "system",
-            "Message": "system message",
+            "Message": {"type": "text", "text": "system message"},
             "SK": "agent1#test-session#2024-01-01T00:00:00+00:00#2024-01-01T00:00:00+00:00",
         },
         {
             "Role": "user",
-            "Message": "user message",
+            "Message": {"type": "text", "text": "user message"},
             "SK": "agent1#test-session#2024-01-01T00:00:01+00:00#2024-01-01T00:00:01+00:00",
         },
         {
             "Role": "assistant",
-            "Message": "assistant message",
+            "Message": {"type": "text", "text": "assistant message"},
             "SK": "agent1#test-session#2024-01-01T00:00:02+00:00#2024-01-01T00:00:02+00:00",
         },
     ]
@@ -153,26 +154,26 @@ def test_get_messages(memory, mock_boto3):
 
     assert len(messages) == 2  # system message should not be included
     assert messages[0].role == "user"
-    assert messages[0].content == "user message"
+    assert messages[0].content[0].text == "user message"
     assert messages[1].role == "assistant"
-    assert messages[1].content == "assistant message"
+    assert messages[1].content[0].text == "assistant message"
 
 
 def test_get_system_message(memory, mock_boto3):
     mock_messages = [
         {
             "Role": "system",
-            "Message": "system message",
+            "Message": {"type": "text", "text": "system message"},
             "SK": "agent1#test-session#2024-01-01T00:00:00+00:00#2024-01-01T00:00:00+00:00",
         },
         {
             "Role": "system",
-            "Message": "newer system message",
+            "Message": {"type": "text", "text": "newer system message"},
             "SK": "agent1#test-session#2024-01-01T00:00:01+00:00#2024-01-01T00:00:01+00:00",
         },
         {
             "Role": "user",
-            "Message": "user message",
+            "Message": {"type": "text", "text": "user message"},
             "SK": "agent1#test-session#2024-01-01T00:00:02+00:00#2024-01-01T00:00:02+00:00",
         },
     ]
@@ -211,7 +212,7 @@ def test_format_message_for_dynamo_db(memory, mock_datetime):
     assert formatted_message == {
         "PK": "test-session",
         "SK": f"{sort_key_base}#2024-01-01T00:00:00+00:00",
-        "Message": "test message",
+        "Message": {"type": "text", "text": "test message"},
         "Role": "user",
         "Meta": {"key": "value"},
         "Source": None,

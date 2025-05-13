@@ -89,6 +89,10 @@ class MockTool(BaseTool):
         self.description = description
         self.run_called = False
         self.run_args = None
+        self.environment = {}  # Add environment attribute
+        # Set up default run method if not mocked elsewhere
+        if not hasattr(self, "run") or not callable(self.run):
+            self.run = self._default_run
 
     def execute_tool(self, environment: dict = None, **kwargs):
         """
@@ -100,10 +104,11 @@ class MockTool(BaseTool):
         """
         return f"Result from {self._name}"
 
-    def run(self, **kwargs):
-        """Mock implementation of run."""
+    def _default_run(self, environment: dict = None, **kwargs):
+        """Default implementation of run."""
         self.run_called = True
         self.run_args = kwargs
+        self.environment = environment or {}
         return f"Result from {self._name}"
 
     def get_tool_name(self):
@@ -323,22 +328,29 @@ class TestBedrockAgent:
 
     def test_execute_tool(self, agent_with_tools, mock_tool):
         """Test the _execute_tool method."""
-        # Call _execute_tool directly
-        result = agent_with_tools._execute_tool("test_tool", {"param": "value"})
+        # Mock the memory add_message to avoid validation errors
+        with patch.object(agent_with_tools.memory, "add_message") as mock_add_message:
+            # Call _execute_tool directly
+            result = agent_with_tools._execute_tool(
+                "test_tool_id", "test_tool", {"param": "value"}
+            )
 
-        # Check the result
-        assert "error" not in result
-        assert "events" in result
-        assert len(result["events"]) == 2  # should have start and stop events
+            # Check the result
+            assert "error" not in result
+            assert "events" in result
+            assert len(result["events"]) == 2  # should have start and stop events
 
-        # Check start event
-        assert result["events"][0].content.tool_name == "test_tool"
-        assert result["events"][0].content.parameters == {"param": "value"}
+            # Check start event
+            assert result["events"][0].content.tool_name == "test_tool"
+            assert result["events"][0].content.parameters == {"param": "value"}
 
-        # Check stop event
-        assert result["events"][1].content.tool_name == "test_tool"
-        assert result["events"][1].content.parameters == {"param": "value"}
-        assert "Result from test_tool" in result["events"][1].content.result
+            # Check stop event
+            assert result["events"][1].content.tool_name == "test_tool"
+            assert result["events"][1].content.parameters == {"param": "value"}
+            assert "Result from test_tool" in result["events"][1].content.result
+
+            # Verify memory.add_message was called
+            mock_add_message.assert_called_once()
 
     def test_execute_tool_error(self, agent_with_tools):
         """Test executing a tool that raises an error."""
@@ -347,14 +359,21 @@ class TestBedrockAgent:
         error_tool.run = Mock(side_effect=Exception("Test error"))
         agent_with_tools.tools = [error_tool]
 
-        # Call _execute_tool
-        result = agent_with_tools._execute_tool("error_tool", {"param": "value"})
+        # Mock the memory add_message to avoid validation errors
+        with patch.object(agent_with_tools.memory, "add_message") as mock_add_message:
+            # Call _execute_tool
+            result = agent_with_tools._execute_tool(
+                "error_tool_id", "error_tool", {"param": "value"}
+            )
 
-        # Check the result includes the error message
-        assert "error" in result
-        assert "Tool Error" in result["error"]
-        assert "error_tool" in result["error"]
-        assert "Test error" in result["error"]
+            # Check the result includes the error message
+            assert "error" in result
+            assert "Tool Error" in result["error"]
+            assert "error_tool" in result["error"]
+            assert "Test error" in result["error"]
+
+            # Verify memory.add_message was called
+            mock_add_message.assert_called_once()
 
     def test_invoke_basic(self, agent, mock_llm):
         """Test the basic invoke functionality."""
