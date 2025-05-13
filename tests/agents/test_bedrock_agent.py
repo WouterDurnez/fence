@@ -402,7 +402,7 @@ class TestBedrockAgent:
                 len(messages) == 1
             )  # User prompt (assistant response handled in invoke_iteration mock)
             assert messages[0].role == "user"
-            assert messages[0].content == "Hello"
+            assert messages[0].content[0].text == "Hello"
 
     def test_invoke_with_tool_call(self, agent_with_tools, mock_llm, mock_tool):
         """Test invoke with a tool call."""
@@ -549,9 +549,9 @@ class TestBedrockAgent:
             messages = agent.memory.get_messages()
             assert len(messages) == 2  # User message and assistant response
             assert messages[0].role == "user"
-            assert messages[0].content == "New message"
+            assert messages[0].content[0].text == "New message"
             assert messages[1].role == "assistant"
-            assert messages[1].content == "Response"
+            assert messages[1].content[0].text == "Response"
 
     def test_multiple_iterations(self, agent_with_tools, mock_llm):
         """Test multiple iterations with tool calls."""
