@@ -3,11 +3,12 @@ This module contains data models used in the API formatting.
 """
 
 import base64
+from decimal import Decimal
 from mimetypes import guess_type
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 ##########
 # Models #
@@ -108,6 +109,14 @@ class ToolUseBlock(BaseModel):
     toolUseId: str = Field(..., description="The tool use id.")
     input: dict = Field(..., description="The input to pass to the tool.")
     name: str = Field(..., description="The name of the tool the model wants to use.")
+
+    # Loop over input values and convert to builtin types
+    @field_validator("input", mode="before")
+    def convert_to_builtin(cls, input):
+        for parameter, value in input.items():
+            if isinstance(value, Decimal):
+                input[parameter] = float(value)
+        return input
 
 
 class ToolResultContentBlockText(BaseModel):
