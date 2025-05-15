@@ -8,7 +8,7 @@
 
 [project]
 name = "fence-llm"
-version = "1.0.8"
+version = "1.0.9"
 description = "The bloat moat! - A lightweight LLM interaction library"
 authors = [
     {name = "wouter.durnez", email = "wouter.durnez@gmail.com"},
@@ -31,7 +31,6 @@ classifiers = [
     ]
 dependencies = [
     "boto3>=1.34.100",
-    "pydantic>=2.7.1",
     "requests>=2.32.3",
     "numexpr>=2.10.1",
 ]

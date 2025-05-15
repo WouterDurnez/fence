@@ -86,7 +86,7 @@ class ToolUseData(BaseModel):
 
     tool_name: str
     parameters: dict[str, Any] = Field(default_factory=dict)
-    result: str | None = None
+    result: str | dict | None = None
 
     def __str__(self):
         return f"{self.tool_name} ({self.parameters}) -> {self.result}"
