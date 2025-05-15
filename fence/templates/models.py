@@ -132,6 +132,8 @@ class ToolResultContentBlockJson(BaseModel):
         ..., alias="json", description="The JSON content of the tool result."
     )
 
+    model_config = {"populate_by_name": True}
+
 
 ToolResultContentBlock = ToolResultContentBlockText | ToolResultContentBlockJson
 
