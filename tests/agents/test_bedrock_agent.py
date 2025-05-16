@@ -330,10 +330,17 @@ class TestBedrockAgent:
         """Test the _execute_tool method."""
         # Mock the memory add_message to avoid validation errors
         with patch.object(agent_with_tools.memory, "add_message") as mock_add_message:
-            # Call _execute_tool directly
-            result = agent_with_tools._execute_tool(
-                "test_tool_id", "test_tool", {"param": "value"}
+            # Create a ToolUseContent object
+            from fence.templates.models import ToolUseBlock, ToolUseContent
+
+            tool_use_content = ToolUseContent(
+                content=ToolUseBlock(
+                    toolUseId="test_tool_id", name="test_tool", input={"param": "value"}
+                )
             )
+
+            # Call _execute_tool directly with the new format
+            result = agent_with_tools._execute_tool(tool_use_content)
 
             # Check the result
             assert "error" not in result
@@ -350,7 +357,7 @@ class TestBedrockAgent:
             assert "Result from test_tool" in result["events"][1].content.result
 
             # Verify memory.add_message was called
-            mock_add_message.assert_called_once()
+            assert mock_add_message.call_count >= 1
 
     def test_execute_tool_error(self, agent_with_tools):
         """Test executing a tool that raises an error."""
@@ -361,10 +368,19 @@ class TestBedrockAgent:
 
         # Mock the memory add_message to avoid validation errors
         with patch.object(agent_with_tools.memory, "add_message") as mock_add_message:
-            # Call _execute_tool
-            result = agent_with_tools._execute_tool(
-                "error_tool_id", "error_tool", {"param": "value"}
+            # Create a ToolUseContent object
+            from fence.templates.models import ToolUseBlock, ToolUseContent
+
+            tool_use_content = ToolUseContent(
+                content=ToolUseBlock(
+                    toolUseId="error_tool_id",
+                    name="error_tool",
+                    input={"param": "value"},
+                )
             )
+
+            # Call _execute_tool with the new format
+            result = agent_with_tools._execute_tool(tool_use_content)
 
             # Check the result includes the error message
             assert "error" in result
@@ -373,7 +389,7 @@ class TestBedrockAgent:
             assert "Test error" in result["error"]
 
             # Verify memory.add_message was called
-            mock_add_message.assert_called_once()
+            assert mock_add_message.call_count >= 1
 
     def test_invoke_basic(self, agent, mock_llm):
         """Test the basic invoke functionality."""

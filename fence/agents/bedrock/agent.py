@@ -620,9 +620,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             f"Agent {self.identifier}: Registered {len(bedrock_tools)} tools with Bedrock model: {tool_names}"
         )
 
-    def _execute_tool(
-        self, tool_use_id: str, tool_name: str, tool_parameters: dict
-    ) -> dict:
+    def _execute_tool(self, tool_use_item: ToolUseContent) -> dict:
         """Execute a tool with the given parameters.
 
         :param tool_use_id: ID of the tool use
@@ -630,22 +628,32 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         :param tool_parameters: Parameters for the tool
         :return: Dictionary with event and formatted result
         """
-        logger.debug(
-            f" Trying to execute tool: {tool_name} with params: {tool_parameters}"
-        )
+
+        # Extract commonly used values
+        tool_name = tool_use_item.content.name
+        tool_params = tool_use_item.content.input
+        tool_use_id = tool_use_item.content.toolUseId
+
+        logger.debug(f" Trying to execute tool: {tool_name} with params: {tool_params}")
 
         # Call event handler before execution
         self._safe_event_handler(
             event_name="on_tool_use_start",
             tool_name=tool_name,
-            parameters=tool_parameters,
+            parameters=tool_params,
         )
 
         # Set start event
         tool_start_event = ToolUseStartEvent(
             agent_name=self.identifier,
             type=AgentEventTypes.TOOL_USE_START,
-            content=ToolUseData(tool_name=tool_name, parameters=tool_parameters),
+            content=ToolUseData(tool_name=tool_name, parameters=tool_params),
+        )
+
+        # Add tool use request to memory first
+        self.memory.add_message(
+            role="assistant",
+            content=tool_use_item,
         )
 
         # Find the tool
@@ -653,29 +661,28 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             (tool for tool in self.tools if tool.get_tool_name() == tool_name), None
         )
         if not tool:
-            return {
-                "error": f"[Tool Error: {tool_name}] Tool not found. Available tools: {self.tools}"
-            }
+            error_msg = f"[Tool Error: {tool_name}] Tool not found. Available tools: {[t.get_tool_name() for t in self.tools]}"
+            self.memory.add_message(role="user", content=error_msg)
+            return {"error": error_msg}
 
         try:
-
             logger.debug(
-                f"🔨 Executing tool: [{tool_use_id}] {tool_name} with params: {tool_parameters}"
+                f"🔨 Executing tool: [{tool_use_id}] {tool_name} with params: {tool_params}"
             )
             # Execute the tool
-            tool_result = tool.run(environment=self.environment, **tool_parameters)
+            tool_result = tool.run(environment=self.environment, **tool_params)
 
             # Call event handler
             self._safe_event_handler(
                 event_name="on_tool_use_stop",
                 tool_name=tool_name,
-                parameters=tool_parameters,
+                parameters=tool_params,
                 result=tool_result,
             )
 
             # Create formatted result for logs
             formatted_result = (
-                f"[Tool used] {tool_name}({tool_parameters}) -> {tool_result}"
+                f"[Tool used] {tool_name}({tool_params}) -> {tool_result}"
             )
 
             # Store structured tool data as an event
@@ -684,12 +691,12 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                 type=AgentEventTypes.TOOL_USE_STOP,
                 content=ToolUseData(
                     tool_name=tool_name,
-                    parameters=tool_parameters,
+                    parameters=tool_params,
                     result=tool_result,
                 ),
             )
 
-            # Add to memory
+            # Then add the tool result
             self.memory.add_message(
                 role="user",
                 content=ToolResultContent(
@@ -713,23 +720,12 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                 "events": [tool_start_event, tool_stop_event],
             }
         except Exception as e:
-            error_msg = self._handle_tool_error(tool_name, tool_parameters, e)
+            error_msg = (
+                f"[Tool Error: {tool_name}] Error with parameters {tool_params}: {e}"
+            )
+            logger.error(error_msg)
+            self.memory.add_message(role="user", content=error_msg)
             return {"error": error_msg}
-
-    def _handle_tool_error(
-        self, tool_name: str, tool_parameters: dict, error: Exception
-    ) -> str:
-        """Handle an error that occurred during tool execution.
-
-        :param tool_name: Name of the tool that failed
-        :param tool_parameters: Parameters that were passed to the tool
-        :param error: Error that occurred during tool execution
-        :return: Error message to be returned to the user
-        """
-        error_msg = f"[Tool Error: {tool_name}] Error with parameters {tool_parameters}: {error}"
-        logger.error(error_msg)
-        self.memory.add_message(role="user", content=error_msg)
-        return error_msg
 
     ######################
     # Content Processing #
@@ -849,10 +845,8 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             logger.debug(f"Agent got response:\n{pformat(response)}")
 
             # Initialize variables
-            content = ""
-            tool_use_id = None
-            tool_name = None
-            tool_parameters = None
+            tool_use = []
+            content = []
 
             # Extract message content
             if "output" in response and "message" in response["output"]:
@@ -860,7 +854,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
 
                 # Process content blocks
                 if "content" in message and isinstance(message["content"], list):
-                    content = []
+
                     for item in message["content"]:
 
                         # Extract text content
@@ -871,23 +865,14 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                         # Extract tool use information
                         if "toolUse" in item:
                             logger.debug(f"Tool use found: {item}")
-                            tool_use_id = item["toolUse"]["toolUseId"]
-                            tool_info = item["toolUse"]
-                            tool_name = tool_info.get("name")
-
-                            # Extract parameters
-                            if "input" in tool_info and isinstance(
-                                tool_info["input"], dict
-                            ):
-                                tool_parameters = tool_info["input"]
 
                             # Add tool use to content
-                            content.append(
+                            tool_use.append(
                                 ToolUseContent(
                                     content=ToolUseBlock(
-                                        toolUseId=tool_use_id,
-                                        name=tool_name,
-                                        input=tool_parameters,
+                                        toolUseId=item["toolUse"]["toolUseId"],
+                                        name=item["toolUse"]["name"],
+                                        input=item["toolUse"]["input"],
                                     )
                                 )
                             )
@@ -930,10 +915,9 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                 self._current_iteration_events.extend(events)
 
             # Process tool call if found
-            if tool_name and tool_parameters is not None:
-                tool_result = self._execute_tool(
-                    tool_use_id, tool_name, tool_parameters
-                )
+            if tool_use:
+                for tool_use_item in tool_use:
+                    tool_result = self._execute_tool(tool_use_item)
                 if "events" in tool_result:
                     self._current_iteration_events.extend(tool_result["events"])
                 elif "error" in tool_result:
@@ -1002,9 +986,14 @@ if __name__ == "__main__":
 
     # Create a test tool
     @tool(description="Returns the age of the user")
-    def age_lookup_tool(name: str) -> str:
+    def age_lookup_tool() -> str:
         """Test tool"""
-        return f"Hello, {name}! You are 25 years old."
+        return "You are 25 years old."
+
+    @tool(description="Returns the name of the current user")
+    def name_lookup_tool() -> str:
+        """Test tool"""
+        return "Hello, Max! Your name is Max."
 
     @tool(description="Checks eligibility for a loan")
     def check_eligibility(name: str, age: int) -> str:
@@ -1027,17 +1016,21 @@ if __name__ == "__main__":
     bank_agent = BedrockAgent(
         identifier="BankAgent",
         model=MODEL,
-        tools=[age_lookup_tool],
-        delegates=[eligibility_agent],
+        tools=[age_lookup_tool, name_lookup_tool],
+        # delegates=[eligibility_agent],
         description="A helpful assistant that can check eligibility for a loan.",
         log_agentic_response=True,
     )
 
     # Invoke demo
-    response = bank_agent.run(
-        "Hello, my name is Max. Can you check if I am eligible for a loan?",
-        max_iterations=4,
-    )
+    response = None
+    while response != "exit":
+        user_query = input("🤺 ")
+        response = bank_agent.run(
+            user_query,
+            max_iterations=4,
+        )
+        print(response.answer)
     # pprint(response.answer)
     # pprint(response.events)
 
