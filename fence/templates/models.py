@@ -6,7 +6,7 @@ import base64
 from decimal import Decimal
 from mimetypes import guess_type
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -133,6 +133,13 @@ class ToolResultContentBlockJson(BaseModel):
     )
 
     model_config = {"populate_by_name": True}
+
+    def model_dump(
+        self,
+        by_alias: bool = True,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        return super().model_dump(by_alias=by_alias, **kwargs)
 
 
 ToolResultContentBlock = ToolResultContentBlockText | ToolResultContentBlockJson
