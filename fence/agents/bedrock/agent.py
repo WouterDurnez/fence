@@ -704,7 +704,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                     content=ToolResultBlock(
                         content=[
                             (
-                                ToolResultContentBlockJson(json_field=tool_result)
+                                ToolResultContentBlockJson(json=tool_result)
                                 if isinstance(tool_result, dict)
                                 else ToolResultContentBlockText(text=tool_result)
                             ),
