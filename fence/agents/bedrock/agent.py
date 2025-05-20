@@ -982,13 +982,13 @@ if __name__ == "__main__":
         region="us-east-1",
     )
 
-    setup_logging(log_level="kill", are_you_serious=False)
+    setup_logging(log_level="info", are_you_serious=False)
 
     # Create a test tool
     @tool(description="Returns the age of the user")
     def age_lookup_tool() -> str:
         """Test tool"""
-        return "You are 25 years old."
+        return {"result": "You are 25 years old."}
 
     @tool(description="Returns the name of the current user")
     def name_lookup_tool() -> str:

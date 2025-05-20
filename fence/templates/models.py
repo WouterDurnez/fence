@@ -266,7 +266,11 @@ class Messages(BaseModel):
                             )
                         case "toolResult":
                             content.append(
-                                {"toolResult": content_object.content.model_dump()}
+                                {
+                                    "toolResult": content_object.content.model_dump(
+                                        by_alias=True
+                                    )
+                                }
                             )
                         case _:
                             raise ValueError(
