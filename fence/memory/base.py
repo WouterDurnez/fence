@@ -5,6 +5,7 @@ Memory classes.
 import logging
 from abc import ABC, abstractmethod
 
+from fence.models.base import LLM
 from fence.templates.messages import MessagesTemplate
 from fence.templates.models import (
     Content,
@@ -92,6 +93,43 @@ class BaseMemory(ABC):
             )
         )
         return template
+
+    def generate_summary(self, model: LLM, n_messages: int = 10):
+        """
+        Generate a summary of the memory.
+        :param model: The model to use for the summary.
+        """
+
+        # Get the last n messages
+        messages = self.get_messages()[-n_messages:]
+
+        # Create a prompt for the summary
+        prompt = f"""
+        Generate a summary of the following conversation:
+        {messages}
+
+        Do not return anything other than the summary.
+        """
+        response = model.invoke(prompt)
+        return response
+
+    def generate_title(self, model: LLM, n_messages: int = 10):
+        """
+        Generate a title for the memory.
+        :param model: The model to use for the title.
+        """
+        # Get the last n messages
+        messages = self.get_messages()[-n_messages:]
+
+        # Create a prompt for the title
+        prompt = f"""
+        Generate a title for the following conversation:
+        {messages}
+
+        Do not return anything other than the title. Use 3 words maximum.
+        """
+        response = model.invoke(prompt)
+        return response
 
 
 class FleetingMemory(BaseMemory):

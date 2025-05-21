@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import boto3
 
 from fence.memory.base import BaseMemory
+from fence.models.anthropic.claude import Claude35Sonnet
 from fence.templates.models import (
     Content,
     ImageBlob,
@@ -323,3 +324,12 @@ if __name__ == "__main__":
     system = memory.get_system_message()
     logger.info(f"System message <{type(system)}>: {system}")
     logger.info(f"Messages <{type(messages)}>: {messages}")
+
+    # Generate a summary
+    model = Claude35Sonnet(model="claude-3-5-sonnet-20240620")
+    summary = memory.generate_summary(model=model)
+    logger.info(f"\n\nSummary: {summary}\n\n")
+
+    # Generate a title
+    title = memory.generate_title(model=model)
+    logger.info(f"\n\nTitle: {title}\n\n")
