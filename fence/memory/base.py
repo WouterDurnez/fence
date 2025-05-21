@@ -113,13 +113,26 @@ class BaseMemory(ABC):
         response = model.invoke(prompt)
         return response
 
-    def generate_title(self, model: LLM, n_messages: int = 10):
+    def generate_title(self, model: LLM, n_messages: int | None = None):
         """
         Generate a title for the memory.
         :param model: The model to use for the title.
+        :param n_messages: The number of messages to use for the title. If None, all messages are used. If negative, the last n messages are used. If positive, the first n messages are used.
         """
-        # Get the last n messages
-        messages = self.get_messages()[-n_messages:]
+        if n_messages == 0:
+            logger.warning("`n_messages` cannot be 0, using all messages")
+            n_messages = None
+
+        # Get messages based on n_messages parameter
+        messages = (
+            self.get_messages()[:n_messages]
+            if n_messages and n_messages > 0
+            else (
+                self.get_messages()[-n_messages:]
+                if n_messages and n_messages < 0
+                else self.get_messages()
+            )
+        )
 
         # Create a prompt for the title
         prompt = f"""
