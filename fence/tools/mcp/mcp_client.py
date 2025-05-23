@@ -124,7 +124,7 @@ class MCPClient:
         """
         self._log_debug_with_thread("listing MCP tools synchronously")
         if not self._is_session_active():
-            raise "the client session is not running"
+            raise RuntimeError("the client session is not running")
 
         async def _list_tools_async() -> ListToolsResult:
             return await self._background_thread_session.list_tools()
@@ -159,7 +159,7 @@ class MCPClient:
         """
         self._log_debug_with_thread("calling MCP tool '%s' synchronously with tool_use_id=%s", name, tool_use_id)
         if not self._is_session_active():
-            raise "the client session is not running"
+            raise RuntimeError("the client session is not running")
 
         async def _call_tool_async() -> MCPCallToolResult:
             return await self._background_thread_session.call_tool(name, arguments, read_timeout_seconds)
@@ -277,7 +277,7 @@ class MCPClient:
 
     def _invoke_on_background_thread(self, coro: Coroutine[Any, Any, T]) -> T:
         if self._background_thread_session is None or self._background_thread_event_loop is None:
-            raise MCPClientInitializationError("the client session was not initialized")
+            raise RuntimeError("the client session was not initialized")
 
         future = asyncio.run_coroutine_threadsafe(coro=coro, loop=self._background_thread_event_loop)
         return future.result()

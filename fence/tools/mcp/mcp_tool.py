@@ -1,6 +1,8 @@
+import inspect
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional
 
 from mcp.types import Tool as MCPTool
 
@@ -32,6 +34,59 @@ class MCPAgentTool(BaseTool):
         :return: The name of the MCP tool
         """
         return self.mcp_tool.name
+    
+    def get_tool_signature(self) -> Mapping[str, inspect.Parameter]:
+        schema = self.mcp_tool.inputSchema
+        parameters = []
+
+        properties = schema.get("properties", {})
+        required = set(schema.get("required", []))
+
+        for name, prop in properties.items():
+            # Map JSON Schema types to Python types
+            json_type = prop.get("type", "string")
+            annotation = {
+                "string": str,
+                "integer": int,
+                "boolean": bool,
+                "number": float
+            }.get(json_type, str)
+
+            if name in required:
+                param = inspect.Parameter(
+                    name,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    annotation=annotation
+                )
+            else:
+                default_value = 7 if name == "days" else None
+                param = inspect.Parameter(
+                    name,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                    annotation=annotation,
+                    default=default_value
+                )
+
+            parameters.append(param)
+
+        # Add **kwargs
+        parameters.append(inspect.Parameter(
+            "kwargs",
+            inspect.Parameter.VAR_KEYWORD
+        ))
+
+        return MappingProxyType({p.name: p for p in parameters})
+    
+    def get_tool_params(self):
+        """
+        Get the parameters of the tool.
+
+        :return: mappingproxy object containing the parameters of the tool
+        """
+        # return self.mcp_tool.inputSchema.get("parameters", {}).copy()
+        return self.get_tool_signature()
+    
+
 
     def model_dump_bedrock_converse(self) -> Dict[str, Any]:
         """
@@ -67,8 +122,6 @@ class MCPAgentTool(BaseTool):
             name=self.get_tool_name(),
             arguments=kwargs
         )
-
-        print(response)
 
         return response
 
