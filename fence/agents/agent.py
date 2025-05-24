@@ -243,6 +243,8 @@ class Agent(BaseAgent):
                     # Handle tool actions
                     case response if "[ACTION]" in response:
                         tool_response = self._handle_tool_action(response)
+                        logger.info(f"Tool response: {tool_response}")
+                        logger.info("reponse_type: " + str(type(tool_response)))
                         self.log(message=tool_response, type="observation")
                         if tool_response:
                             self.memory.add_message(

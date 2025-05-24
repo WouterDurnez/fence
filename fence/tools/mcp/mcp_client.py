@@ -113,7 +113,7 @@ class MCPClient:
         self._background_thread = None
         self._session_id = uuid.uuid4()
 
-    def list_tools(self):
+    def list_tools_sync(self):
         """Synchronously retrieves the list of available tools from the MCP server.
 
         This method calls the asynchronous list_tools method on the MCP session
@@ -177,9 +177,11 @@ class MCPClient:
             status = "error" if call_tool_result.isError else "success"
             self._log_debug_with_thread("tool execution completed with status: %s", status)
             
+            self._log_debug_with_thread("mapped content: %s", mapped_content)
+
             # Return the mapped content as a string
             if len(mapped_content) == 1:
-                return json.dumps(mapped_content[0])
+                return mapped_content[0]['text']
             elif len(mapped_content) > 1:
                 return json.dumps({"content": mapped_content})
             else:
