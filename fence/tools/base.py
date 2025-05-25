@@ -151,7 +151,7 @@ class BaseTool(ABC):
 
         # Format the TOML representation of the tool for the agent
         toml_string = f"""[[tools]]
-tool_name = "{self.__class__.__name__}"
+tool_name = "{self.get_tool_name()}"
 tool_description = "{tool_description}"
 {argument_string}"""
 
