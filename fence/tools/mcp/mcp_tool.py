@@ -36,6 +36,26 @@ class MCPAgentTool(BaseTool):
         return self.mcp_tool.name
     
     def get_tool_signature(self) -> Mapping[str, inspect.Parameter]:
+        """
+        Get the tool signature as a mapping of parameter names to Parameter objects.
+        
+        This method parses the inputSchema of the MCP tool and converts it to a set of
+        inspect.Parameter objects that define the signature of the tool function.
+        
+        It maps JSON Schema types to Python types:
+        - string -> str
+        - integer -> int
+        - boolean -> bool
+        - number -> float
+        - others -> str (default)
+        
+        Required parameters are included without default values.
+        Optional parameters are included with None as default value.
+        A **kwargs parameter is always added to support additional arguments.
+
+        Returns:
+            Mapping[str, inspect.Parameter]: A read-only mapping of parameter names to Parameter objects
+        """
         schema = self.mcp_tool.inputSchema
         parameters = []
 
@@ -59,7 +79,7 @@ class MCPAgentTool(BaseTool):
                     annotation=annotation
                 )
             else:
-                default_value = 7 if name == "days" else None
+                default_value = prop.get("default", None)
                 param = inspect.Parameter(
                     name,
                     inspect.Parameter.POSITIONAL_OR_KEYWORD,
@@ -77,13 +97,15 @@ class MCPAgentTool(BaseTool):
 
         return MappingProxyType({p.name: p for p in parameters})
     
-    def get_tool_params(self):
+    def get_tool_params(self) -> Mapping[str, inspect.Parameter]:
         """
         Get the parameters of the tool.
 
-        :return: mappingproxy object containing the parameters of the tool
+        This is a convenience method that calls get_tool_signature().
+        
+        Returns:
+            Mapping[str, inspect.Parameter]: A read-only mapping of parameter names to Parameter objects
         """
-        # return self.mcp_tool.inputSchema.get("parameters", {}).copy()
         return self.get_tool_signature()
     
 
@@ -124,4 +146,3 @@ class MCPAgentTool(BaseTool):
         )
 
         return response
-

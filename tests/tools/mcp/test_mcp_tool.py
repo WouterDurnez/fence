@@ -82,11 +82,6 @@ def test_get_tool_signature(mcp_agent_tool):
     assert param2.annotation == int
     assert param2.default is None
     
-    # Check days parameter (special case with default value 7)
-    days = signature["days"]
-    assert days.annotation == float
-    assert days.default == 7
-    
     # Check boolean parameter
     bool_param = signature["bool_param"]
     assert bool_param.annotation == bool

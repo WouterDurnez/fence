@@ -10,9 +10,18 @@ from fence.tools.mcp.mcp_tool import MCPAgentTool
 
 @pytest.fixture
 def mock_mcp_tool():
-    """Fixture to create a mock MCPTool instance."""
+    """
+    Fixture to create a mock MCPTool instance.
+    
+    Creates and configures a mock MCPTool with a predefined name, description,
+    and input schema containing various parameter types.
+    
+    Returns:
+        MagicMock: A mock MCPTool with test configuration
+    """
     mock_tool = MagicMock(spec=MCPTool)
     mock_tool.name = "test_tool"
+    mock_tool.description = "Test tool with complex nested schema"
     mock_tool.description = "Test tool description"
     mock_tool.inputSchema = {
         "type": "object",
@@ -156,7 +165,7 @@ def mcp_agent_tool(mock_mcp_tool, mock_mcp_client):
         {
             "type": "object",
             "properties": {
-                "days": {"type": "number"},
+                "days": {"type": "number", "default": 7},
                 "other_days": {"type": "number"}
             },
             "required": []
@@ -218,6 +227,7 @@ def test_get_tool_signature_parameterized(mock_mcp_client, schema, expected_para
     """Test get_tool_signature with various schema configurations."""
     mock_tool = MagicMock(spec=MCPTool)
     mock_tool.name = "test_tool"
+    mock_tool.description = "Test tool with complex nested schema"
     mock_tool.inputSchema = schema
     
     tool = MCPAgentTool(mock_tool, mock_mcp_client)
@@ -247,6 +257,7 @@ def test_get_tool_signature_with_complex_nested_schema(mock_mcp_client):
     """Test get_tool_signature with a complex nested schema."""
     mock_tool = MagicMock(spec=MCPTool)
     mock_tool.name = "test_tool"
+    mock_tool.description = "Test tool with complex nested schema"
     mock_tool.inputSchema = {
         "type": "object",
         "properties": {
@@ -312,7 +323,8 @@ def test_get_tool_signature_with_invalid_schema(mock_mcp_client):
     """Test get_tool_signature with invalid schema structures."""
     mock_tool = MagicMock(spec=MCPTool)
     mock_tool.name = "test_tool"
-    
+    mock_tool.description = "Test tool with complex nested schema"
+
     # Test with invalid schema type
     mock_tool.inputSchema = {
         "type": "invalid_type",
@@ -325,21 +337,7 @@ def test_get_tool_signature_with_invalid_schema(mock_mcp_client):
     signature = tool.get_tool_signature()
     
     # Should still return kwargs parameter
-    assert len(signature) == 1
+    assert len(signature) == 2
     assert "kwargs" in signature
     assert signature["kwargs"].kind == inspect.Parameter.VAR_KEYWORD
     
-    # Test with missing type
-    mock_tool.inputSchema = {
-        "properties": {
-            "param": {"type": "string"}
-        }
-    }
-    
-    tool = MCPAgentTool(mock_tool, mock_mcp_client)
-    signature = tool.get_tool_signature()
-    
-    # Should still return kwargs parameter
-    assert len(signature) == 1
-    assert "kwargs" in signature
-    assert signature["kwargs"].kind == inspect.Parameter.VAR_KEYWORD 

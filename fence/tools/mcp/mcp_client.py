@@ -1,3 +1,9 @@
+# This file is heavily inspired by the following source from the STRANDS project:
+# https://github.com/strands-agents/sdk-python/blob/main/src/strands/tools/mcp/mcp_client.py
+#
+# Original code licensed under the Apache License 2.0.
+# See the LICENSE file in this repository for more information. https://github.com/strands-agents/sdk-python
+
 import asyncio
 import base64
 import logging
@@ -146,7 +152,7 @@ class MCPClient:
         """Synchronously calls a tool on the MCP server.
 
         This method calls the asynchronous call_tool method on the MCP session
-        and converts the result to the ToolResult format.
+        and converts the result to a string representation.
 
         Args:
             tool_use_id: Unique identifier for this tool use
@@ -155,7 +161,9 @@ class MCPClient:
             read_timeout_seconds: Optional timeout for the tool call
 
         Returns:
-            ToolResult: The result of the tool call
+            str: The result of the tool call as a string. For single text content items,
+                 returns the text directly. For multiple content items, returns a JSON string
+                 with the content array.
         """
         self._log_debug_with_thread("calling MCP tool '%s' synchronously with tool_use_id=%s", name, tool_use_id)
         if not self._is_session_active():
