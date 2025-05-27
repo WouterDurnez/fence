@@ -234,6 +234,101 @@ class Claude35Sonnet(Claude):
         )
 
 
+class Claude4Opus(Claude):
+    """
+    Claude 4 Opus model - Our most capable and intelligent model yet
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a Claude 4 Opus model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(
+            model_id="claude-opus-4-20250514",
+            model_name="Claude 4 Opus [Anthropic]",
+            **kwargs,
+        )
+
+
+class Claude4Sonnet(Claude):
+    """
+    Claude 4 Sonnet model - High-performance model with exceptional reasoning capabilities
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a Claude 4 Sonnet model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(
+            model_id="claude-sonnet-4-20250514",
+            model_name="Claude 4 Sonnet [Anthropic]",
+            **kwargs,
+        )
+
+
+class Claude37Sonnet(Claude):
+    """
+    Claude 3.7 Sonnet model - High-performance model with early extended thinking
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a Claude 3.7 Sonnet model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(
+            model_id="claude-3-7-sonnet-20250219",
+            model_name="Claude 3.7 Sonnet [Anthropic]",
+            **kwargs,
+        )
+
+
+class Claude3Opus(Claude):
+    """
+    Claude 3 Opus model - Powerful model for complex tasks
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a Claude 3 Opus model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(
+            model_id="claude-3-opus-20240229",
+            model_name="Claude 3 Opus [Anthropic]",
+            **kwargs,
+        )
+
+
+class Claude3Haiku(Claude):
+    """
+    Claude 3 Haiku model - Fast and compact model for near-instant responsiveness
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a Claude 3 Haiku model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(
+            model_id="claude-3-haiku-20240307",
+            model_name="Claude 3 Haiku [Anthropic]",
+            **kwargs,
+        )
+
+
 if __name__ == "__main__":
 
     setup_logging(log_level="DEBUG")
@@ -254,4 +349,18 @@ if __name__ == "__main__":
 
     # Call the model
     response_rude = model(messages)
-    logger.info(f"GPT response: {response_rude}")
+    logger.info(f"Claude35Haiku response: {response_rude}")
+
+    # Test Claude 4 Sonnet
+    logger.info("Testing Claude 4 Sonnet...")
+    claude4_model = Claude4Sonnet()
+    response_claude4 = claude4_model("Explain quantum computing in simple terms.")
+    logger.info(f"Claude4Sonnet response: {response_claude4}")
+
+    # Test Claude 4 Opus
+    logger.info("Testing Claude 4 Opus...")
+    claude4_opus = Claude4Opus()
+    response_opus = claude4_opus(
+        "Write a Python function to calculate fibonacci numbers."
+    )
+    logger.info(f"Claude4Opus response: {response_opus}")

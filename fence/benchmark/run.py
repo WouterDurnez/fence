@@ -14,10 +14,16 @@ from fence.benchmark.prompts import (
 )
 from fence.links import Link
 from fence.links import logger as link_logger
+from fence.models.anthropic.claude import Claude3Haiku as AnthropicClaude3Haiku
+from fence.models.anthropic.claude import Claude3Opus as AnthropicClaude3Opus
+from fence.models.anthropic.claude import Claude4Opus as AnthropicClaude4Opus
+from fence.models.anthropic.claude import Claude4Sonnet as AnthropicClaude4Sonnet
 from fence.models.anthropic.claude import Claude35Haiku as AnthropicClaude35Haiku
 from fence.models.anthropic.claude import Claude35Sonnet as AnthropicClaude35Sonnet
+from fence.models.anthropic.claude import Claude37Sonnet as AnthropicClaude37Sonnet
 from fence.models.base import LLM
 from fence.models.bedrock.claude import (
+    Claude4Sonnet,
     Claude35Sonnet,
     Claude37Sonnet,
     ClaudeHaiku,
@@ -62,7 +68,7 @@ template = MessagesTemplate(
 
 # Single model run
 @parallelize(max_workers=10)
-@retry(max_retries=3, delay=60)
+@retry(max_retries=5, delay=20)
 def test_model(index: int, model: LLM):
     start_time = time.time()
     link = Link(template=template, model=model)
@@ -183,6 +189,7 @@ if __name__ == "__main__":
             ClaudeSonnet(),
             Claude35Sonnet(region="us-east-1"),
             Claude37Sonnet(cross_region="eu"),
+            Claude4Sonnet(cross_region="us", region="us-east-1"),
             NovaPro(cross_region="eu"),
             NovaLite(cross_region="eu"),
             NovaMicro(cross_region="eu"),
@@ -196,14 +203,25 @@ if __name__ == "__main__":
     models += [model() for model in (Gemini1_5_Pro, GeminiFlash1_5, GeminiFlash2_0)]
 
     # Add Anthropic models
-    models += [model() for model in (AnthropicClaude35Haiku, AnthropicClaude35Sonnet)]
+    models += [
+        model()
+        for model in (
+            AnthropicClaude35Haiku,
+            AnthropicClaude35Sonnet,
+            AnthropicClaude4Opus,
+            AnthropicClaude4Sonnet,
+            AnthropicClaude37Sonnet,
+            AnthropicClaude3Opus,
+            AnthropicClaude3Haiku,
+        )
+    ]
 
     # Add source to all models
     for model in models:
         model.source = "benchmark"
 
     # Run the benchmark for each model
-    timings = benchmark(models, n_calls=5)
+    timings = benchmark(models, n_calls=3)
 
     # Visualize the results
     viz(timings, target_folder="figures")
