@@ -189,11 +189,12 @@ class MCPClient:
 
             # Return the mapped content as a string
             if len(mapped_content) == 1:
-                return mapped_content[0]['text']
+                response = mapped_content[0]['text']
             elif len(mapped_content) > 1:
-                return json.dumps({"content": mapped_content})
+                response =  json.dumps({"content": mapped_content})
             else:
-                return "No content returned from tool execution"
+                response =  "No content returned from tool execution"
+            return response
 
 
         except Exception as e:

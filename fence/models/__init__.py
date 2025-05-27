@@ -10,6 +10,7 @@ from .gemini.gemini import (  # noqa: F401
     GeminiFlash1_5,
     GeminiFlash2_0,
 )
+from .mistral.mistral import Mistral  # noqa: F401
 from .ollama.ollama import Llama3_1, Ollama, OllamaBase  # noqa: F401
 from .openai.gpt import GPT4o, GPTBase  # noqa: F401
 
@@ -29,4 +30,5 @@ __all__ = [
     "Gemini1_5_Pro",
     "GeminiFlash1_5",
     "GeminiFlash2_0",
+    "Mistral",
 ]

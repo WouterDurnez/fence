@@ -4,7 +4,7 @@ Base class for Bedrock foundation models
 
 import logging
 from pprint import pformat
-from typing import Iterator, Literal, Union
+from typing import Iterator, Literal, Union, Any
 
 import boto3
 from pydantic import BaseModel, Field
@@ -77,7 +77,7 @@ class BedrockJSONSchema(BaseModel):
     """
 
     type: Literal["object"] = Field(..., description="The type of the schema.")
-    properties: dict[str, dict[str, Union[str, int]]] = Field(
+    properties: dict[str, dict[str, Union[str, Any]]] = Field(
         ..., description="The properties of the schema."
     )
     required: list[str] = Field(

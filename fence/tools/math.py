@@ -77,4 +77,4 @@ class CalculatorTool(BaseTool):
             logger.error(f"Error evaluating expression: {e}", exc_info=True)
             return f"Error evaluating expression {expression} - {e}"
 
-        return result
+        return str(result)
