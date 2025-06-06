@@ -3,10 +3,13 @@ PARSERS
 transform LLM output (a string) into a more useful format (e.g. int, bool, dict)
 """
 
+import json
 import logging
 import re
 import tomllib
 from abc import ABC, abstractmethod
+
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -236,3 +239,106 @@ class TOMLParser(BaseParser):
                 toml_dict[key] = value.strip()
 
         return toml_dict
+
+
+class PydanticParser(BaseParser):
+    """
+    A class to parse a string containing JSON data into a pydantic model.
+
+    Example:
+    ```json
+    {
+        "name": "John Doe",
+        "age": 30,
+        "email": "john@example.com"
+    }
+    ```
+
+    With a corresponding pydantic model, returns an instance of that model.
+    """
+
+    def __init__(
+        self, model_class, triple_backticks: bool = True, prefill: str | None = None
+    ):
+        """
+        Initialize the PydanticParser with the given parameters.
+
+        :param model_class: Pydantic model class to parse the data into
+        :param triple_backticks: Whether to extract JSON from triple backticks
+        :param prefill: String to prefill the JSON with (assistant prefill)
+        """
+        super().__init__()
+        self.model_class = model_class
+        self.triple_backticks = triple_backticks
+        self.prefill = prefill
+
+    def parse(self, input_string: str):
+        """
+        Parse a JSON string into a pydantic model instance.
+
+        :param input_string: Text string containing JSON data
+        :return: Instance of the specified pydantic model
+        """
+        # First, reapply the prefill string to the input string, unless it already starts with it
+        input_string = (
+            self.prefill + input_string
+            if self.prefill and not input_string.startswith(self.prefill)
+            else input_string
+        )
+
+        # If requested, extract the JSON string from within the triple backticks
+        if self.triple_backticks:
+            json_string = self._extract_from_backticks(input_string)
+        else:
+            json_string = input_string
+
+        # Clean the JSON string
+        json_string = self._clean_json_string(json_string)
+
+        try:
+            # Parse the JSON string into a dictionary
+            json_dict = json.loads(json_string)
+
+            # Create and validate the pydantic model instance
+            model_instance = self.model_class(**json_dict)
+
+            return model_instance
+
+        except json.JSONDecodeError as e:
+            logger.error(
+                f"PydanticParser failed to parse JSON: {e}. Input: {json_string}"
+            )
+            raise ValueError(f"PydanticParser failed to parse JSON: {e}")
+
+        except ValidationError as e:
+            logger.error(f"PydanticParser validation failed: {e}. Input: {json_dict}")
+            raise ValueError(f"PydanticParser validation failed: {e}")
+
+        except Exception as e:
+            logger.error(f"PydanticParser unexpected error: {e}. Input: {input_string}")
+            raise ValueError(f"PydanticParser unexpected error: {e}")
+
+    def _extract_from_backticks(self, input_string: str) -> str:
+        """Extract content from triple backticks."""
+        pattern = re.compile(r"```(?:json)?([\s\S]*?)```")
+        match = pattern.search(input_string)
+        if not match:
+            logger.warning(
+                f"PydanticParser expected triple backticks. Received: {input_string}"
+            )
+            raise ValueError("PydanticParser found no triple backticks.")
+        return match.group(1).strip()
+
+    def _clean_json_string(self, json_string: str) -> str:
+        """Clean the JSON string of common issues."""
+        # Strip the JSON string of language prefix
+        if json_string.startswith("json"):
+            json_string = json_string[4:].strip()
+
+        # Define a regular expression to match non-printable characters (except newlines and tabs)
+        non_printable_regex = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\r]")
+
+        # Replace non-printable characters with a space
+        json_string = non_printable_regex.sub(" ", json_string)
+
+        return json_string.strip()
