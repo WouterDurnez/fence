@@ -49,6 +49,8 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]
+norecursedirs = ["playground", "demo", "notebooks", "docs", "dist", "build", ".git", ".tox", ".venv"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["fence"]
