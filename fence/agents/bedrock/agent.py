@@ -672,6 +672,10 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
             # Execute the tool
             tool_result = tool.run(environment=self.environment, **tool_params)
 
+            # If the result is not a dict or a string, convert it to a string
+            if not isinstance(tool_result, dict) and not isinstance(tool_result, str):
+                tool_result = str(tool_result)
+
             # Call event handler
             self._safe_event_handler(
                 event_name="on_tool_use_stop",
