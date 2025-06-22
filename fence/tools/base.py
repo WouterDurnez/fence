@@ -242,14 +242,19 @@ tool_description = "{tool_description}"
 ##############
 
 
-def tool(description: str = None):
+def tool(func_or_description=None):
     """
     A decorator to turn a function into a tool that can be executed with the BaseTool interface.
 
-    :param description: A description of the tool.
+    Can be used as:
+    - @tool (uses function's docstring)
+    - @tool() (uses function's docstring)
+    - @tool("custom description") (uses provided description)
+
+    :param func_or_description: Either a function (when used without parentheses) or a description string
     """
 
-    def decorator(func: Callable):
+    def decorator(func: Callable, description: str = None):
         # Dynamically create the class with the capitalized function name
         class_name = "".join(
             [element.capitalize() for element in func.__name__.split("_")]
@@ -287,17 +292,50 @@ def tool(description: str = None):
 
         return ToolClass()
 
-    return decorator
+    # Handle different usage patterns
+    if func_or_description is None:
+        # @tool() - return decorator that uses docstring
+        return lambda func: decorator(func, None)
+    elif isinstance(func_or_description, str):
+        # @tool("description") - return decorator that uses provided description
+        return lambda func: decorator(func, func_or_description)
+    elif callable(func_or_description):
+        # @tool - direct decoration, use docstring
+        return decorator(func_or_description, None)
+    else:
+        raise ValueError("Invalid usage of @tool decorator")
 
 
 if __name__ == "__main__":
 
-    # Create a tool from a function
-    @tool(description="A tool that returns the current time")
+    # Test different usage patterns
+
+    # 1. @tool with description
+    @tool("A tool that returns the current time")
     def get_current_time(location: str):
+        """Get current time for a location."""
         return f"The current time in {location} is 12:00 PM"
 
-    print(get_current_time.get_tool_description())
-    print(get_current_time.get_tool_params())
+    # 2. @tool() without description (uses docstring)
+    @tool()
+    def get_weather(city: str):
+        """Get weather information for a city."""
+        return f"The weather in {city} is sunny"
 
+    # 3. @tool without parentheses (uses docstring)
+    @tool
+    def calculate_sum(a: int, b: int):
+        """Calculate the sum of two numbers."""
+        return a + b
+
+    print("=== Tool with description ===")
+    print(get_current_time.get_tool_description())
     print(get_current_time.run(location="New York"))
+
+    print("\n=== Tool with empty parentheses (docstring) ===")
+    print(get_weather.get_tool_description())
+    print(get_weather.run(city="Paris"))
+
+    print("\n=== Tool without parentheses (docstring) ===")
+    print(calculate_sum.get_tool_description())
+    print(calculate_sum.run(a=5, b=3))
