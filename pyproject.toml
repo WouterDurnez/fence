@@ -34,6 +34,7 @@ dependencies = [
     "requests>=2.32.3",
     "numexpr>=2.10.1",
     "pydantic>=2.11.4",
+    "mcp>=1.9.4",
 ]
 keywords = ["openai", "llm", "gpt", "ai", "nlp", "language", "model", "api", "anthropic", "claude", "wrapper", "fence"]
 requires = "python>=3.11"
