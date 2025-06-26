@@ -402,3 +402,150 @@ def test_bedrock_converse_fallback_descriptions():
         properties["message"]["description"]
         == "Parameter message for the UndocumentedTool tool"
     )
+
+
+def test_explicit_param_descriptions():
+    """Test that explicit parameter descriptions are used instead of docstring parsing."""
+
+    class ExplicitTool(BaseTool):
+        """A tool with explicit parameter descriptions."""
+
+        def execute_tool(
+            self,
+            name: str,
+            age: int,
+            active: bool = True,
+            environment: dict = None,
+            **kwargs,
+        ):
+            """Execute the tool.
+
+            :param name: This docstring description should be ignored
+            :param age: This docstring description should also be ignored
+            """
+            return f"Hello {name}"
+
+    # Create tool with explicit parameter descriptions
+    explicit_descriptions = {
+        "name": "Explicit name description",
+        "age": "Explicit age description",
+        "active": "Explicit active description",
+    }
+
+    tool = ExplicitTool(param_descriptions=explicit_descriptions)
+    descriptions = tool.get_tool_param_descriptions()
+
+    # Should use explicit descriptions, not docstring
+    assert descriptions["name"] == "Explicit name description"
+    assert descriptions["age"] == "Explicit age description"
+    assert descriptions["active"] == "Explicit active description"
+    assert descriptions["environment"] is None  # Not in explicit descriptions
+    assert descriptions["kwargs"] is None  # Not in explicit descriptions
+
+
+def test_explicit_param_descriptions_partial():
+    """Test that partial explicit parameter descriptions work correctly."""
+
+    class PartialTool(BaseTool):
+        """A tool with partial explicit descriptions."""
+
+        def execute_tool(self, name: str, age: int, environment: dict = None, **kwargs):
+            return f"Hello {name}"
+
+    # Only provide description for some parameters
+    partial_descriptions = {
+        "name": "Explicit name description"
+        # age intentionally omitted
+    }
+
+    tool = PartialTool(param_descriptions=partial_descriptions)
+    descriptions = tool.get_tool_param_descriptions()
+
+    # Should use explicit for provided, None for others
+    assert descriptions["name"] == "Explicit name description"
+    assert descriptions["age"] is None  # Not provided
+    assert descriptions["environment"] is None
+    assert descriptions["kwargs"] is None
+
+
+def test_explicit_param_descriptions_in_representation():
+    """Test that explicit parameter descriptions appear in tool representation."""
+
+    class RepresentationTool(BaseTool):
+        """A tool for testing representation with explicit descriptions."""
+
+        def execute_tool(
+            self, city: str, temperature: float, environment: dict = None, **kwargs
+        ):
+            return f"Weather in {city}: {temperature}°C"
+
+    explicit_descriptions = {
+        "city": "The name of the city for weather lookup",
+        "temperature": "Current temperature in Celsius",
+    }
+
+    tool = RepresentationTool(param_descriptions=explicit_descriptions)
+    representation = tool.get_representation()
+
+    # Check that explicit descriptions are included
+    assert (
+        "city: str (required) - The name of the city for weather lookup"
+        in representation
+    )
+    assert (
+        "temperature: float (required) - Current temperature in Celsius"
+        in representation
+    )
+
+
+def test_explicit_param_descriptions_bedrock_converse():
+    """Test that explicit parameter descriptions are used in Bedrock Converse format."""
+
+    class BedrockTool(BaseTool):
+        """A tool for testing Bedrock format with explicit descriptions."""
+
+        def execute_tool(
+            self, query: str, max_results: int = 10, environment: dict = None, **kwargs
+        ):
+            return f"Search results for {query}"
+
+    explicit_descriptions = {
+        "query": "The search query string",
+        "max_results": "Maximum number of results to return",
+    }
+
+    tool = BedrockTool(param_descriptions=explicit_descriptions)
+    bedrock_format = tool.model_dump_bedrock_converse()
+
+    properties = bedrock_format["toolSpec"]["inputSchema"]["json"]["properties"]
+
+    assert properties["query"]["description"] == "The search query string"
+    assert (
+        properties["max_results"]["description"]
+        == "Maximum number of results to return"
+    )
+
+
+def test_no_param_descriptions_fallback():
+    """Test that when param_descriptions is None, it falls back to docstring parsing."""
+
+    class FallbackTool(BaseTool):
+        """A tool that should fall back to docstring parsing."""
+
+        def execute_tool(self, name: str, age: int, environment: dict = None, **kwargs):
+            """Execute the tool.
+
+            :param name: Name from docstring
+            :param age: Age from docstring
+            """
+            return f"Hello {name}"
+
+    # Explicitly pass None (default behavior)
+    tool = FallbackTool(param_descriptions=None)
+    descriptions = tool.get_tool_param_descriptions()
+
+    # Should fall back to docstring parsing
+    assert descriptions["name"] == "Name from docstring"
+    assert descriptions["age"] == "Age from docstring"
+    assert descriptions["environment"] is None
+    assert descriptions["kwargs"] is None

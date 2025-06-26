@@ -18,15 +18,23 @@ logger = logging.getLogger(__name__)
 
 class BaseTool(ABC):
 
-    def __init__(self, description: str | None = None, params: dict | None = None):
+    def __init__(
+        self,
+        description: str | None = None,
+        params: dict | None = None,
+        param_descriptions: dict[str, str] | None = None,
+    ):
         """
         Initialize the BaseTool object.
 
         :param description: A description of the tool (if not provided, the docstring will be used)
+        :param params: Parameters dict (if not provided, will be extracted from execute_tool signature)
+        :param param_descriptions: Explicit parameter descriptions dict (if not provided, will be parsed from docstring)
         """
         self.description = description
         self.environment = {}
         self.params = params or self.get_tool_params()
+        self.param_descriptions = param_descriptions
 
     def run(self, environment: dict = None, **kwargs):
         """
@@ -74,10 +82,20 @@ class BaseTool(ABC):
 
     def get_tool_param_descriptions(self):
         """
-        Get parameter descriptions from the execute_tool method's docstring.
+        Get parameter descriptions from explicit param_descriptions or execute_tool method's docstring.
 
         :return: A dict of param name -> description, None if no description found.
         """
+        # Use explicitly provided descriptions if available
+        if self.param_descriptions is not None:
+            # Get all parameters to ensure we return a complete dict
+            params = self.get_tool_params()
+            result = {param: None for param in params}
+            # Update with explicitly provided descriptions
+            result.update(self.param_descriptions)
+            return result
+
+        # Fall back to parsing docstring
         parser = DocstringParser()
         return parser.parse(self.execute_tool)
 
@@ -131,29 +149,31 @@ class BaseTool(ABC):
         of the `run` method.
         """
         # Get the arguments of the run method
-        run_args = self.get_tool_params()
+        tool_params = self.get_tool_params()
+        tool_param_descriptions = self.get_tool_param_descriptions()
 
         # Add all arguments, and ensure that the argument
         # is annotated with str if no type is provided
-        run_args = {
+        tool_params = {
             arg_name: (
                 arg_type.annotation
                 if arg_type.annotation != inspect.Parameter.empty
                 else str
             )
-            for arg_name, arg_type in run_args.items()
+            for arg_name, arg_type in tool_params.items()
         }
-        run_args.pop("environment", None)
-        run_args.pop("kwargs", None)
+        tool_params.pop("environment", None)
+        tool_params.pop("kwargs", None)
 
         # Preformat the arguments
         argument_string = ""
-        if run_args:
-            for arg_name, arg_type in run_args.items():
+        if tool_params:
+            for arg_name, arg_type in tool_params.items():
                 argument_string += (
                     f"[[tools.tool_params]]\n"
                     f'name = "{arg_name}"\n'
                     f'type = "{arg_type.__name__ or str}"\n'
+                    f'description = "{tool_param_descriptions.get(arg_name)}"\n'
                 )
         else:
             argument_string = "# No arguments"
@@ -201,12 +221,12 @@ tool_description = "{tool_description}"
         ```
         """
         # Get the tool's parameters from its execute_tool method
-        run_args = self.get_tool_params()
-        param_descriptions = self.get_tool_param_descriptions()
+        tool_params = self.get_tool_params()
+        tool_param_descriptions = self.get_tool_param_descriptions()
         properties = {}
         required = []
 
-        for arg_name, arg_type in run_args.items():
+        for arg_name, arg_type in tool_params.items():
             if arg_name in ["environment", "kwargs"]:
                 continue
 
@@ -233,7 +253,7 @@ tool_description = "{tool_description}"
             }.get(type_name, "string")
 
             # Use actual parameter description if available, otherwise fallback to generic description
-            param_desc = param_descriptions.get(arg_name)
+            param_desc = tool_param_descriptions.get(arg_name)
             description = (
                 param_desc
                 or f"Parameter {arg_name} for the {self.__class__.__name__} tool"
