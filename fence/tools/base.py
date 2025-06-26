@@ -305,19 +305,21 @@ tool_description = "{tool_description}"
 ##############
 
 
-def tool(func_or_description=None):
+def tool(func_or_description=None, *, description=None):
     """
     A decorator to turn a function into a tool that can be executed with the BaseTool interface.
 
     Can be used as:
     - @tool (uses function's docstring)
     - @tool() (uses function's docstring)
-    - @tool("custom description") (uses provided description)
+    - @tool("custom description") (uses provided description as positional arg)
+    - @tool(description="custom description") (uses provided description as keyword arg)
 
     :param func_or_description: Either a function (when used without parentheses) or a description string
+    :param description: Description string as keyword argument
     """
 
-    def decorator(func: Callable, description: str = None):
+    def decorator(func: Callable, tool_description: str = None):
         # Dynamically create the class with the capitalized function name
         class_name = "".join(
             [element.capitalize() for element in func.__name__.split("_")]
@@ -406,7 +408,7 @@ def tool(func_or_description=None):
             (BaseTool,),
             {
                 "__init__": lambda self: BaseTool.__init__(
-                    self, description=description or func.__doc__
+                    self, description=tool_description or func.__doc__
                 ),
                 "execute_tool": execute_tool_wrapper,
                 "get_tool_params": get_tool_params,
@@ -419,13 +421,17 @@ def tool(func_or_description=None):
 
     # Handle different usage patterns
     if func_or_description is None:
-        # @tool() - return decorator that uses docstring
-        return lambda func: decorator(func, None)
+        # @tool() or @tool(description="...") - return decorator
+        return lambda func: decorator(func, description)
     elif isinstance(func_or_description, str):
         # @tool("description") - return decorator that uses provided description
         return lambda func: decorator(func, func_or_description)
     elif callable(func_or_description):
         # @tool - direct decoration, use docstring
+        if description is not None:
+            raise ValueError(
+                "Cannot use both positional function and keyword description"
+            )
         return decorator(func_or_description, None)
     else:
         raise ValueError("Invalid usage of @tool decorator")
@@ -435,7 +441,7 @@ if __name__ == "__main__":
 
     # Test different usage patterns
 
-    # 1. @tool with description
+    # 1. @tool with positional description
     @tool("A tool that returns the current time")
     def get_current_time(location: str):
         """Get current time for a location."""
@@ -453,7 +459,26 @@ if __name__ == "__main__":
         """Calculate the sum of two numbers."""
         return a + b
 
-    print("=== Tool with description ===")
+    # 4. @tool with keyword description
+    @tool(description="A tool that converts temperature units")
+    def convert_temperature(
+        temp: float, from_unit: str = "celsius", to_unit: str = "fahrenheit"
+    ):
+        """Convert temperature between units.
+
+        :param temp: Temperature value to convert
+        :param from_unit: Source temperature unit
+        :param to_unit: Target temperature unit
+        :return: Converted temperature
+        """
+        if from_unit == "celsius" and to_unit == "fahrenheit":
+            return (temp * 9 / 5) + 32
+        elif from_unit == "fahrenheit" and to_unit == "celsius":
+            return (temp - 32) * 5 / 9
+        else:
+            return temp  # Same unit or unsupported conversion
+
+    print("=== Tool with positional description ===")
     print(get_current_time.get_tool_description())
     print(get_current_time.run(location="New York"))
 
@@ -464,3 +489,7 @@ if __name__ == "__main__":
     print("\n=== Tool without parentheses (docstring) ===")
     print(calculate_sum.get_tool_description())
     print(calculate_sum.run(a=5, b=3))
+
+    print("\n=== Tool with keyword description ===")
+    print(convert_temperature.get_tool_description())
+    print(convert_temperature.run(temp=25.0, from_unit="celsius", to_unit="fahrenheit"))

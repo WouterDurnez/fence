@@ -42,6 +42,7 @@ from fence.templates.models import (
     ToolUseContent,
 )
 from fence.tools.base import BaseTool
+from fence.tools.mcp.client import MCPClient
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +173,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         delegates: list["BedrockAgent"] | None = None,
         system_message: str | None = None,
         event_handlers: EventHandlers | dict[str, HandlerType] | None = None,
+        mcp_clients: MCPClient | list[MCPClient] | None = None,
     ):
         """Initialize the BedrockAgent object.
 
@@ -187,6 +189,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         :param delegates: A list of delegate agents available to the agent
         :param system_message: A system message to set for the agent
         :param event_handlers: Event handlers for different agent events
+        :param mcp_clients: An optional MCP client or list of MCP clients whose tools will be automatically registered
         """
         # Set full_response to True for proper response handling
         if model:
@@ -207,6 +210,19 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         self._user_system_message = system_message
         self.tools = tools or []
         self.delegates = delegates or []
+
+        # Normalize mcp_clients to always be a list
+        if mcp_clients is None:
+            self.mcp_clients = []
+        elif isinstance(mcp_clients, list):
+            self.mcp_clients = mcp_clients
+        else:
+            # Single MCP client provided
+            self.mcp_clients = [mcp_clients]
+
+        # Register MCP tools if MCP clients are provided
+        if self.mcp_clients:
+            self._register_mcp_tools()
 
         # Make sure delegates are marked as delegates
         for delegate in self.delegates:
@@ -974,6 +990,45 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         # If we have a prefill, add it
         if self.prefill:
             self.memory.add_message(role="assistant", content=self.prefill)
+
+    def _register_mcp_tools(self):
+        """Register MCP tools from all provided MCP clients."""
+        if not self.mcp_clients:
+            return
+
+        total_mcp_tools = []
+        mcp_tool_names = []
+
+        for i, mcp_client in enumerate(self.mcp_clients):
+            if not mcp_client._connected:
+                logger.warning(
+                    f"MCP client {i+1} is not connected. Its tools will not be available."
+                )
+                continue
+
+            # Add MCP tools from this client to the agent's tool list
+            client_tools = mcp_client.tools
+            total_mcp_tools.extend(client_tools)
+            client_tool_names = [tool.get_tool_name() for tool in client_tools]
+            mcp_tool_names.extend(client_tool_names)
+
+            logger.info(
+                f"Registered {len(client_tools)} tools from MCP client {i+1}: {client_tool_names}"
+            )
+
+        # Add all MCP tools to the agent's tool list
+        self.tools.extend(total_mcp_tools)
+
+        logger.info(
+            f"Total MCP tools registered with BedrockAgent: {len(total_mcp_tools)} tools from {len(self.mcp_clients)} clients"
+        )
+
+        # Update system message to mention MCP capabilities if tools were added
+        if total_mcp_tools and self._user_system_message:
+            mcp_tools_info = (
+                f" You have access to MCP tools: {', '.join(mcp_tool_names)}."
+            )
+            self._user_system_message += mcp_tools_info
 
 
 if __name__ == "__main__":
