@@ -251,3 +251,154 @@ def test_tool_decorator_invalid_usage():
         @tool(123)  # Invalid type
         def invalid_function():
             pass
+
+
+def test_get_tool_param_descriptions_basetool():
+    """Test parameter description extraction from BaseTool subclass."""
+
+    class DocumentedTool(BaseTool):
+        """A tool with documented parameters."""
+
+        def execute_tool(
+            self,
+            name: str,
+            age: int,
+            active: bool = True,
+            environment: dict = None,
+            **kwargs,
+        ):
+            """Execute the tool with documented parameters.
+
+            :param name: The person's name as a string
+            :param age: The person's age in years
+            :param active: Whether the person is currently active
+                This parameter controls the active state
+            """
+            return f"Hello {name}, age {age}, active: {active}"
+
+    tool = DocumentedTool()
+    descriptions = tool.get_tool_param_descriptions()
+
+    assert descriptions["name"] == "The person's name as a string"
+    assert descriptions["age"] == "The person's age in years"
+    assert (
+        descriptions["active"]
+        == "Whether the person is currently active This parameter controls the active state"
+    )
+    assert descriptions["environment"] is None  # Not documented
+    assert descriptions["kwargs"] is None  # Not documented
+
+
+def test_get_tool_param_descriptions_decorated():
+    """Test parameter description extraction from decorated tool."""
+
+    @tool("A documented tool")
+    def documented_function(city: str, temperature: float, humidity: int = 50):
+        """Get weather information for a city.
+
+        :param city: The name of the city to get weather for
+        :param temperature: The current temperature in degrees
+        :param humidity: The humidity percentage
+        """
+        return f"Weather in {city}: {temperature}°C, {humidity}% humidity"
+
+    descriptions = documented_function.get_tool_param_descriptions()
+
+    assert descriptions["city"] == "The name of the city to get weather for"
+    assert descriptions["temperature"] == "The current temperature in degrees"
+    assert descriptions["humidity"] == "The humidity percentage"
+
+
+def test_get_tool_param_descriptions_no_docstring():
+    """Test parameter description extraction when no docstring exists."""
+
+    class UndocumentedTool(BaseTool):
+        """A tool without parameter documentation."""
+
+        def execute_tool(self, name: str, age: int, environment: dict = None, **kwargs):
+            return f"Hello {name}, age {age}"
+
+    tool = UndocumentedTool()
+    descriptions = tool.get_tool_param_descriptions()
+
+    assert descriptions["name"] is None
+    assert descriptions["age"] is None
+    assert descriptions["environment"] is None
+    assert descriptions["kwargs"] is None
+
+
+def test_get_representation_with_descriptions():
+    """Test that get_representation includes parameter descriptions."""
+
+    class DocumentedTool(BaseTool):
+        """A tool with documented parameters."""
+
+        def execute_tool(
+            self,
+            name: str,
+            age: int,
+            active: bool = True,
+            environment: dict = None,
+            **kwargs,
+        ):
+            """Execute the tool.
+
+            :param name: The person's name
+            :param age: The person's age in years
+            :param active: Whether the person is active
+            """
+            return f"Hello {name}"
+
+    tool = DocumentedTool()
+    representation = tool.get_representation()
+
+    # Check that parameter descriptions are included
+    assert "name: str (required) - The person's name" in representation
+    assert "age: int (required) - The person's age in years" in representation
+    assert "active: bool (optional) - Whether the person is active" in representation
+
+
+def test_bedrock_converse_with_descriptions():
+    """Test that model_dump_bedrock_converse uses parameter descriptions."""
+
+    class DocumentedTool(BaseTool):
+        """A tool with documented parameters."""
+
+        def execute_tool(
+            self, message: str, count: int = 1, environment: dict = None, **kwargs
+        ):
+            """Execute the tool.
+
+            :param message: The message to process
+            :param count: How many times to repeat
+            """
+            return message * count
+
+    tool = DocumentedTool()
+    bedrock_format = tool.model_dump_bedrock_converse()
+
+    properties = bedrock_format["toolSpec"]["inputSchema"]["json"]["properties"]
+
+    assert properties["message"]["description"] == "The message to process"
+    assert properties["count"]["description"] == "How many times to repeat"
+
+
+def test_bedrock_converse_fallback_descriptions():
+    """Test that model_dump_bedrock_converse falls back to generic descriptions."""
+
+    class UndocumentedTool(BaseTool):
+        """A tool without parameter documentation."""
+
+        def execute_tool(self, message: str, environment: dict = None, **kwargs):
+            return message
+
+    tool = UndocumentedTool()
+    bedrock_format = tool.model_dump_bedrock_converse()
+
+    properties = bedrock_format["toolSpec"]["inputSchema"]["json"]["properties"]
+
+    # Should fall back to generic description
+    assert (
+        properties["message"]["description"]
+        == "Parameter message for the UndocumentedTool tool"
+    )

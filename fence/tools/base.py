@@ -7,6 +7,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Callable
 
+from fence.utils.docstring_parser import DocstringParser
+
 logger = logging.getLogger(__name__)
 
 ##############
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class BaseTool(ABC):
 
-    def __init__(self, description: str = None):
+    def __init__(self, description: str | None = None, params: dict | None = None):
         """
         Initialize the BaseTool object.
 
@@ -24,6 +26,7 @@ class BaseTool(ABC):
         """
         self.description = description
         self.environment = {}
+        self.params = params or self.get_tool_params()
 
     def run(self, environment: dict = None, **kwargs):
         """
@@ -69,6 +72,15 @@ class BaseTool(ABC):
         """
         return inspect.signature(self.execute_tool).parameters
 
+    def get_tool_param_descriptions(self):
+        """
+        Get parameter descriptions from the execute_tool method's docstring.
+
+        :return: A dict of param name -> description, None if no description found.
+        """
+        parser = DocstringParser()
+        return parser.parse(self.execute_tool)
+
     def get_representation(self):
         """
         Get the representation of the tool.
@@ -76,6 +88,7 @@ class BaseTool(ABC):
         tool_name = self.get_tool_name()
         tool_description = self.get_tool_description()
         tool_params = self.get_tool_params()
+        tool_param_descriptions = self.get_tool_param_descriptions()
 
         # Format parameters in a more readable way
         formatted_params = []
@@ -94,8 +107,12 @@ class BaseTool(ABC):
             is_optional = param.default != inspect.Parameter.empty
             required_str = "(optional)" if is_optional else "(required)"
 
+            # Get parameter description if available
+            param_desc = tool_param_descriptions.get(name)
+            desc_str = f" - {param_desc}" if param_desc else ""
+
             # Add formatted parameter
-            formatted_params.append(f"{name}: {param_type} {required_str}")
+            formatted_params.append(f"{name}: {param_type} {required_str}{desc_str}")
 
         # Join parameters or show "None" if no parameters
         params_str = (
@@ -185,6 +202,7 @@ tool_description = "{tool_description}"
         """
         # Get the tool's parameters from its execute_tool method
         run_args = self.get_tool_params()
+        param_descriptions = self.get_tool_param_descriptions()
         properties = {}
         required = []
 
@@ -214,9 +232,16 @@ tool_description = "{tool_description}"
                 "dict": "object",
             }.get(type_name, "string")
 
+            # Use actual parameter description if available, otherwise fallback to generic description
+            param_desc = param_descriptions.get(arg_name)
+            description = (
+                param_desc
+                or f"Parameter {arg_name} for the {self.__class__.__name__} tool"
+            )
+
             properties[arg_name] = {
                 "type": json_type,
-                "description": f"Parameter {arg_name} for the {self.__class__.__name__} tool",
+                "description": description,
             }
 
             if arg_type.default == inspect.Parameter.empty:
@@ -277,6 +302,13 @@ def tool(func_or_description=None):
         def get_tool_params(self):
             return func_signature.parameters
 
+        # Custom get_tool_param_descriptions method for the decorated function
+        def get_tool_param_descriptions(self):
+            from fence.utils.docstring_parser import DocstringParser
+
+            parser = DocstringParser()
+            return parser.parse(func)
+
         # Define the class dynamically
         ToolClass = type(
             class_name,
@@ -287,6 +319,7 @@ def tool(func_or_description=None):
                 ),
                 "execute_tool": execute_tool_wrapper,
                 "get_tool_params": get_tool_params,
+                "get_tool_param_descriptions": get_tool_param_descriptions,
             },
         )
 
