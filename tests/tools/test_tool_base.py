@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from fence.tools.base import BaseTool, tool
+from fence.tools.base import BaseTool, ToolParameter, tool
 
 
 class DummyTool(BaseTool):
@@ -21,6 +21,7 @@ def test_base_tool_initialization():
     tool = DummyTool(description="Test tool")
     assert tool.description == "Test tool"
     assert tool.environment == {}
+    assert isinstance(tool.parameters, dict)
 
 
 def test_base_tool_run():
@@ -253,8 +254,11 @@ def test_tool_decorator_invalid_usage():
             pass
 
 
-def test_get_tool_param_descriptions_basetool():
-    """Test parameter description extraction from BaseTool subclass."""
+# Tests for unified parameters approach
+
+
+def test_unified_parameters_basetool():
+    """Test unified parameters extraction from BaseTool subclass."""
 
     class DocumentedTool(BaseTool):
         """A tool with documented parameters."""
@@ -277,20 +281,40 @@ def test_get_tool_param_descriptions_basetool():
             return f"Hello {name}, age {age}, active: {active}"
 
     tool = DocumentedTool()
-    descriptions = tool.get_tool_param_descriptions()
 
-    assert descriptions["name"] == "The person's name as a string"
-    assert descriptions["age"] == "The person's age in years"
+    # Test that parameters are ToolParameter objects
+    assert isinstance(tool.parameters, dict)
+    assert "name" in tool.parameters
+    assert "age" in tool.parameters
+    assert "active" in tool.parameters
+
+    # Test ToolParameter properties
+    name_param = tool.parameters["name"]
+    assert isinstance(name_param, ToolParameter)
+    assert name_param.name == "name"
+    assert name_param.type_annotation == str
+    assert name_param.description == "The person's name as a string"
+    assert name_param.required
+
+    age_param = tool.parameters["age"]
+    assert age_param.name == "age"
+    assert age_param.type_annotation == int
+    assert age_param.description == "The person's age in years"
+    assert age_param.required
+
+    active_param = tool.parameters["active"]
+    assert active_param.name == "active"
+    assert active_param.type_annotation == bool
     assert (
-        descriptions["active"]
+        active_param.description
         == "Whether the person is currently active This parameter controls the active state"
     )
-    assert descriptions["environment"] is None  # Not documented
-    assert descriptions["kwargs"] is None  # Not documented
+    assert not active_param.required
+    assert active_param.default_value
 
 
-def test_get_tool_param_descriptions_decorated():
-    """Test parameter description extraction from decorated tool."""
+def test_unified_parameters_decorated():
+    """Test unified parameters extraction from decorated tool."""
 
     @tool("A documented tool")
     def documented_function(city: str, temperature: float, humidity: int = 50):
@@ -302,15 +326,36 @@ def test_get_tool_param_descriptions_decorated():
         """
         return f"Weather in {city}: {temperature}°C, {humidity}% humidity"
 
-    descriptions = documented_function.get_tool_param_descriptions()
+    # Test that parameters are ToolParameter objects
+    assert isinstance(documented_function.parameters, dict)
+    assert "city" in documented_function.parameters
+    assert "temperature" in documented_function.parameters
+    assert "humidity" in documented_function.parameters
 
-    assert descriptions["city"] == "The name of the city to get weather for"
-    assert descriptions["temperature"] == "The current temperature in degrees"
-    assert descriptions["humidity"] == "The humidity percentage"
+    # Test ToolParameter properties
+    city_param = documented_function.parameters["city"]
+    assert isinstance(city_param, ToolParameter)
+    assert city_param.name == "city"
+    assert city_param.type_annotation == str
+    assert city_param.description == "The name of the city to get weather for"
+    assert city_param.required
+
+    temp_param = documented_function.parameters["temperature"]
+    assert temp_param.name == "temperature"
+    assert temp_param.type_annotation == float
+    assert temp_param.description == "The current temperature in degrees"
+    assert temp_param.required
+
+    humidity_param = documented_function.parameters["humidity"]
+    assert humidity_param.name == "humidity"
+    assert humidity_param.type_annotation == int
+    assert humidity_param.description == "The humidity percentage"
+    assert not humidity_param.required
+    assert humidity_param.default_value == 50
 
 
-def test_get_tool_param_descriptions_no_docstring():
-    """Test parameter description extraction when no docstring exists."""
+def test_unified_parameters_no_docstring():
+    """Test unified parameters extraction when no docstring exists."""
 
     class UndocumentedTool(BaseTool):
         """A tool without parameter documentation."""
@@ -319,16 +364,98 @@ def test_get_tool_param_descriptions_no_docstring():
             return f"Hello {name}, age {age}"
 
     tool = UndocumentedTool()
-    descriptions = tool.get_tool_param_descriptions()
 
-    assert descriptions["name"] is None
-    assert descriptions["age"] is None
-    assert descriptions["environment"] is None
-    assert descriptions["kwargs"] is None
+    # Test that parameters are ToolParameter objects
+    assert isinstance(tool.parameters, dict)
+    assert "name" in tool.parameters
+    assert "age" in tool.parameters
+
+    # Test ToolParameter properties (no descriptions)
+    name_param = tool.parameters["name"]
+    assert isinstance(name_param, ToolParameter)
+    assert name_param.name == "name"
+    assert name_param.type_annotation == str
+    assert name_param.description is None
+    assert name_param.required
 
 
-def test_get_representation_with_descriptions():
-    """Test that get_representation includes parameter descriptions."""
+def test_explicit_parameters():
+    """Test that explicit ToolParameter objects are used."""
+
+    class ExplicitTool(BaseTool):
+        """A tool with explicit parameters."""
+
+        def execute_tool(
+            self,
+            name: str,
+            age: int,
+            active: bool = True,
+            environment: dict = None,
+            **kwargs,
+        ):
+            """Execute the tool.
+
+            :param name: This docstring description should be ignored
+            :param age: This docstring description should also be ignored
+            """
+            return f"Hello {name}"
+
+    # Create tool with explicit ToolParameter objects
+    explicit_parameters = {
+        "name": ToolParameter(
+            name="name",
+            type_annotation=str,
+            description="Explicit name description",
+            required=True,
+        ),
+        "age": ToolParameter(
+            name="age",
+            type_annotation=int,
+            description="Explicit age description",
+            required=True,
+        ),
+        "active": ToolParameter(
+            name="active",
+            type_annotation=bool,
+            description="Explicit active description",
+            required=False,
+            default_value=True,
+        ),
+    }
+
+    tool = ExplicitTool(parameters=explicit_parameters)
+
+    # Should use explicit parameters, not auto-generated ones
+    assert tool.parameters["name"].description == "Explicit name description"
+    assert tool.parameters["age"].description == "Explicit age description"
+    assert tool.parameters["active"].description == "Explicit active description"
+
+
+def test_tool_parameter_json_type():
+    """Test that ToolParameter correctly converts Python types to JSON types."""
+
+    # Test different types
+    str_param = ToolParameter(name="test", type_annotation=str, required=True)
+    assert str_param.json_type == "string"
+
+    int_param = ToolParameter(name="test", type_annotation=int, required=True)
+    assert int_param.json_type == "integer"
+
+    float_param = ToolParameter(name="test", type_annotation=float, required=True)
+    assert float_param.json_type == "number"
+
+    bool_param = ToolParameter(name="test", type_annotation=bool, required=True)
+    assert bool_param.json_type == "boolean"
+
+    list_param = ToolParameter(name="test", type_annotation=list, required=True)
+    assert list_param.json_type == "array"
+
+    dict_param = ToolParameter(name="test", type_annotation=dict, required=True)
+    assert dict_param.json_type == "object"
+
+
+def test_get_representation_with_unified_parameters():
+    """Test that get_representation works with unified parameters."""
 
     class DocumentedTool(BaseTool):
         """A tool with documented parameters."""
@@ -358,8 +485,8 @@ def test_get_representation_with_descriptions():
     assert "active: bool (optional) - Whether the person is active" in representation
 
 
-def test_bedrock_converse_with_descriptions():
-    """Test that model_dump_bedrock_converse uses parameter descriptions."""
+def test_bedrock_converse_with_unified_parameters():
+    """Test that model_dump_bedrock_converse works with unified parameters."""
 
     class DocumentedTool(BaseTool):
         """A tool with documented parameters."""
@@ -380,7 +507,14 @@ def test_bedrock_converse_with_descriptions():
     properties = bedrock_format["toolSpec"]["inputSchema"]["json"]["properties"]
 
     assert properties["message"]["description"] == "The message to process"
+    assert properties["message"]["type"] == "string"
     assert properties["count"]["description"] == "How many times to repeat"
+    assert properties["count"]["type"] == "integer"
+
+    # Check required fields
+    required = bedrock_format["toolSpec"]["inputSchema"]["json"]["required"]
+    assert "message" in required
+    assert "count" not in required  # Has default value
 
 
 def test_bedrock_converse_fallback_descriptions():
@@ -404,87 +538,33 @@ def test_bedrock_converse_fallback_descriptions():
     )
 
 
-def test_explicit_param_descriptions():
-    """Test that explicit parameter descriptions are used instead of docstring parsing."""
-
-    class ExplicitTool(BaseTool):
-        """A tool with explicit parameter descriptions."""
-
-        def execute_tool(
-            self,
-            name: str,
-            age: int,
-            active: bool = True,
-            environment: dict = None,
-            **kwargs,
-        ):
-            """Execute the tool.
-
-            :param name: This docstring description should be ignored
-            :param age: This docstring description should also be ignored
-            """
-            return f"Hello {name}"
-
-    # Create tool with explicit parameter descriptions
-    explicit_descriptions = {
-        "name": "Explicit name description",
-        "age": "Explicit age description",
-        "active": "Explicit active description",
-    }
-
-    tool = ExplicitTool(param_descriptions=explicit_descriptions)
-    descriptions = tool.get_tool_param_descriptions()
-
-    # Should use explicit descriptions, not docstring
-    assert descriptions["name"] == "Explicit name description"
-    assert descriptions["age"] == "Explicit age description"
-    assert descriptions["active"] == "Explicit active description"
-    assert descriptions["environment"] is None  # Not in explicit descriptions
-    assert descriptions["kwargs"] is None  # Not in explicit descriptions
-
-
-def test_explicit_param_descriptions_partial():
-    """Test that partial explicit parameter descriptions work correctly."""
-
-    class PartialTool(BaseTool):
-        """A tool with partial explicit descriptions."""
-
-        def execute_tool(self, name: str, age: int, environment: dict = None, **kwargs):
-            return f"Hello {name}"
-
-    # Only provide description for some parameters
-    partial_descriptions = {
-        "name": "Explicit name description"
-        # age intentionally omitted
-    }
-
-    tool = PartialTool(param_descriptions=partial_descriptions)
-    descriptions = tool.get_tool_param_descriptions()
-
-    # Should use explicit for provided, None for others
-    assert descriptions["name"] == "Explicit name description"
-    assert descriptions["age"] is None  # Not provided
-    assert descriptions["environment"] is None
-    assert descriptions["kwargs"] is None
-
-
-def test_explicit_param_descriptions_in_representation():
-    """Test that explicit parameter descriptions appear in tool representation."""
+def test_explicit_parameters_in_representation():
+    """Test that explicit parameters appear correctly in tool representation."""
 
     class RepresentationTool(BaseTool):
-        """A tool for testing representation with explicit descriptions."""
+        """A tool for testing representation with explicit parameters."""
 
         def execute_tool(
             self, city: str, temperature: float, environment: dict = None, **kwargs
         ):
             return f"Weather in {city}: {temperature}°C"
 
-    explicit_descriptions = {
-        "city": "The name of the city for weather lookup",
-        "temperature": "Current temperature in Celsius",
+    explicit_parameters = {
+        "city": ToolParameter(
+            name="city",
+            type_annotation=str,
+            description="The name of the city for weather lookup",
+            required=True,
+        ),
+        "temperature": ToolParameter(
+            name="temperature",
+            type_annotation=float,
+            description="Current temperature in Celsius",
+            required=True,
+        ),
     }
 
-    tool = RepresentationTool(param_descriptions=explicit_descriptions)
+    tool = RepresentationTool(parameters=explicit_parameters)
     representation = tool.get_representation()
 
     # Check that explicit descriptions are included
@@ -498,36 +578,54 @@ def test_explicit_param_descriptions_in_representation():
     )
 
 
-def test_explicit_param_descriptions_bedrock_converse():
-    """Test that explicit parameter descriptions are used in Bedrock Converse format."""
+def test_explicit_parameters_bedrock_converse():
+    """Test that explicit parameters are used in Bedrock Converse format."""
 
     class BedrockTool(BaseTool):
-        """A tool for testing Bedrock format with explicit descriptions."""
+        """A tool for testing Bedrock format with explicit parameters."""
 
         def execute_tool(
             self, query: str, max_results: int = 10, environment: dict = None, **kwargs
         ):
             return f"Search results for {query}"
 
-    explicit_descriptions = {
-        "query": "The search query string",
-        "max_results": "Maximum number of results to return",
+    explicit_parameters = {
+        "query": ToolParameter(
+            name="query",
+            type_annotation=str,
+            description="The search query string",
+            required=True,
+        ),
+        "max_results": ToolParameter(
+            name="max_results",
+            type_annotation=int,
+            description="Maximum number of results to return",
+            required=False,
+            default_value=10,
+        ),
     }
 
-    tool = BedrockTool(param_descriptions=explicit_descriptions)
+    tool = BedrockTool(parameters=explicit_parameters)
     bedrock_format = tool.model_dump_bedrock_converse()
 
     properties = bedrock_format["toolSpec"]["inputSchema"]["json"]["properties"]
 
     assert properties["query"]["description"] == "The search query string"
+    assert properties["query"]["type"] == "string"
     assert (
         properties["max_results"]["description"]
         == "Maximum number of results to return"
     )
+    assert properties["max_results"]["type"] == "integer"
+
+    # Check required fields
+    required = bedrock_format["toolSpec"]["inputSchema"]["json"]["required"]
+    assert "query" in required
+    assert "max_results" not in required  # Has default value
 
 
-def test_no_param_descriptions_fallback():
-    """Test that when param_descriptions is None, it falls back to docstring parsing."""
+def test_parameters_docstring_fallback():
+    """Test that tools fall back to docstring parsing when no explicit parameters provided."""
 
     class FallbackTool(BaseTool):
         """A tool that should fall back to docstring parsing."""
@@ -540,12 +638,11 @@ def test_no_param_descriptions_fallback():
             """
             return f"Hello {name}"
 
-    # Explicitly pass None (default behavior)
-    tool = FallbackTool(param_descriptions=None)
-    descriptions = tool.get_tool_param_descriptions()
+    # Default behavior should parse docstring
+    tool = FallbackTool()
 
-    # Should fall back to docstring parsing
-    assert descriptions["name"] == "Name from docstring"
-    assert descriptions["age"] == "Age from docstring"
-    assert descriptions["environment"] is None
-    assert descriptions["kwargs"] is None
+    # Should parse docstring automatically
+    assert tool.parameters["name"].description == "Name from docstring"
+    assert tool.parameters["age"].description == "Age from docstring"
+    assert tool.parameters["name"].required
+    assert tool.parameters["age"].required

@@ -5,11 +5,45 @@ Tools for agents
 import inspect
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Any, Callable
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from fence.utils.docstring_parser import DocstringParser
 
 logger = logging.getLogger(__name__)
+
+####################
+# Parameter Models #
+####################
+
+
+class ToolParameter(BaseModel):
+    """A unified model for tool parameters combining type info and descriptions."""
+
+    name: str = Field(..., description="Parameter name")
+    type_annotation: type = Field(..., description="Parameter type annotation")
+    description: str | None = Field(None, description="Parameter description")
+    required: bool = Field(..., description="Whether the parameter is required")
+    default_value: Any = Field(
+        None, description="Default value if parameter is optional"
+    )
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @property
+    def json_type(self) -> str:
+        """Convert Python type to JSON schema type string."""
+        type_name = getattr(self.type_annotation, "__name__", "string")
+        return {
+            "str": "string",
+            "int": "integer",
+            "float": "number",
+            "bool": "boolean",
+            "list": "array",
+            "dict": "object",
+        }.get(type_name, "string")
+
 
 ##############
 # Base class #
@@ -21,20 +55,60 @@ class BaseTool(ABC):
     def __init__(
         self,
         description: str | None = None,
-        params: dict | None = None,
-        param_descriptions: dict[str, str] | None = None,
+        parameters: dict[str, ToolParameter] | None = None,
     ):
         """
         Initialize the BaseTool object.
 
         :param description: A description of the tool (if not provided, the docstring will be used)
-        :param params: Parameters dict (if not provided, will be extracted from execute_tool signature)
-        :param param_descriptions: Explicit parameter descriptions dict (if not provided, will be parsed from docstring)
+        :param parameters: Dict of ToolParameter objects (if not provided, will be extracted from execute_tool signature)
         """
         self.description = description
         self.environment = {}
-        self.params = params or self.get_tool_params()
-        self.param_descriptions = param_descriptions
+
+        # Build unified parameters from inspect signature and descriptions
+        self.parameters = parameters or self._build_unified_parameters()
+
+    def _build_unified_parameters(
+        self, explicit_parameters: dict[str, ToolParameter] | None = None
+    ) -> dict[str, ToolParameter]:
+        """Build unified parameters combining signature inspection and descriptions."""
+        if explicit_parameters:
+            return explicit_parameters
+
+        # Get signature parameters
+        signature_params = self.get_tool_params()
+
+        # Get parameter descriptions from docstring
+        descriptions = self._get_docstring_param_descriptions()
+
+        # Build unified parameters
+        unified_params = {}
+        for param_name, param in signature_params.items():
+            if param_name in ["environment", "kwargs"]:
+                continue
+
+            # Get type annotation
+            type_annotation = (
+                param.annotation if param.annotation != inspect.Parameter.empty else str
+            )
+
+            # Check if required
+            required = param.default == inspect.Parameter.empty
+            default_value = param.default if not required else None
+
+            # Get description
+            description = descriptions.get(param_name)
+
+            unified_params[param_name] = ToolParameter(
+                name=param_name,
+                type_annotation=type_annotation,
+                description=description,
+                required=required,
+                default_value=default_value,
+            )
+
+        return unified_params
 
     def run(self, environment: dict = None, **kwargs):
         """
@@ -76,28 +150,26 @@ class BaseTool(ABC):
 
     def get_tool_params(self):
         """
-        Get the parameters of the tool.
+        Get the raw parameters of the tool from signature inspection.
         """
         return inspect.signature(self.execute_tool).parameters
 
-    def get_tool_param_descriptions(self):
+    def _get_docstring_param_descriptions(self) -> dict[str, str]:
         """
-        Get parameter descriptions from explicit param_descriptions or execute_tool method's docstring.
+        Get parameter descriptions from execute_tool method's docstring.
 
         :return: A dict of param name -> description, None if no description found.
         """
-        # Use explicitly provided descriptions if available
-        if self.param_descriptions is not None:
-            # Get all parameters to ensure we return a complete dict
-            params = self.get_tool_params()
-            result = {param: None for param in params}
-            # Update with explicitly provided descriptions
-            result.update(self.param_descriptions)
-            return result
+        # Get all parameters to ensure complete coverage
+        params = self.get_tool_params()
+        result = {param: None for param in params}
 
-        # Fall back to parsing docstring
+        # Try to get descriptions from docstring parsing
         parser = DocstringParser()
-        return parser.parse(self.execute_tool)
+        docstring_descriptions = parser.parse(self.execute_tool)
+        result.update(docstring_descriptions)
+
+        return result
 
     def get_representation(self):
         """
@@ -105,32 +177,23 @@ class BaseTool(ABC):
         """
         tool_name = self.get_tool_name()
         tool_description = self.get_tool_description()
-        tool_params = self.get_tool_params()
-        tool_param_descriptions = self.get_tool_param_descriptions()
 
-        # Format parameters in a more readable way
+        # Format parameters using unified parameters
         formatted_params = []
-        for name, param in tool_params.items():
-            if name in ["environment", "kwargs"]:
-                continue
-
+        for param_name, param in self.parameters.items():
             # Get parameter type
-            param_type = (
-                param.annotation.__name__
-                if param.annotation != inspect.Parameter.empty
-                else "str"
-            )
+            param_type = param.type_annotation.__name__
 
             # Check if parameter is required
-            is_optional = param.default != inspect.Parameter.empty
-            required_str = "(optional)" if is_optional else "(required)"
+            required_str = "(required)" if param.required else "(optional)"
 
             # Get parameter description if available
-            param_desc = tool_param_descriptions.get(name)
-            desc_str = f" - {param_desc}" if param_desc else ""
+            desc_str = f" - {param.description}" if param.description else ""
 
             # Add formatted parameter
-            formatted_params.append(f"{name}: {param_type} {required_str}{desc_str}")
+            formatted_params.append(
+                f"{param_name}: {param_type} {required_str}{desc_str}"
+            )
 
         # Join parameters or show "None" if no parameters
         params_str = (
@@ -148,32 +211,15 @@ class BaseTool(ABC):
         the description (docstring) of the tool, and the arguments
         of the `run` method.
         """
-        # Get the arguments of the run method
-        tool_params = self.get_tool_params()
-        tool_param_descriptions = self.get_tool_param_descriptions()
-
-        # Add all arguments, and ensure that the argument
-        # is annotated with str if no type is provided
-        tool_params = {
-            arg_name: (
-                arg_type.annotation
-                if arg_type.annotation != inspect.Parameter.empty
-                else str
-            )
-            for arg_name, arg_type in tool_params.items()
-        }
-        tool_params.pop("environment", None)
-        tool_params.pop("kwargs", None)
-
-        # Preformat the arguments
+        # Preformat the arguments using unified parameters
         argument_string = ""
-        if tool_params:
-            for arg_name, arg_type in tool_params.items():
+        if self.parameters:
+            for param_name, param in self.parameters.items():
                 argument_string += (
                     f"[[tools.tool_params]]\n"
-                    f'name = "{arg_name}"\n'
-                    f'type = "{arg_type.__name__ or str}"\n'
-                    f'description = "{tool_param_descriptions.get(arg_name)}"\n'
+                    f'name = "{param_name}"\n'
+                    f'type = "{param.type_annotation.__name__}"\n'
+                    f'description = "{param.description}"\n'
                 )
         else:
             argument_string = "# No arguments"
@@ -220,52 +266,24 @@ tool_description = "{tool_description}"
         }
         ```
         """
-        # Get the tool's parameters from its execute_tool method
-        tool_params = self.get_tool_params()
-        tool_param_descriptions = self.get_tool_param_descriptions()
         properties = {}
         required = []
 
-        for arg_name, arg_type in tool_params.items():
-            if arg_name in ["environment", "kwargs"]:
-                continue
-
-            # Get the type annotation or default to string
-            type_annotation = (
-                arg_type.annotation
-                if arg_type.annotation != inspect.Parameter.empty
-                else str
-            )
-            type_name = (
-                type_annotation.__name__
-                if hasattr(type_annotation, "__name__")
-                else "string"
-            )
-
-            # Convert Python types to JSON schema types
-            json_type = {
-                "str": "string",
-                "int": "integer",
-                "float": "number",
-                "bool": "boolean",
-                "list": "array",
-                "dict": "object",
-            }.get(type_name, "string")
-
+        # Use unified parameters
+        for param_name, param in self.parameters.items():
             # Use actual parameter description if available, otherwise fallback to generic description
-            param_desc = tool_param_descriptions.get(arg_name)
             description = (
-                param_desc
-                or f"Parameter {arg_name} for the {self.__class__.__name__} tool"
+                param.description
+                or f"Parameter {param_name} for the {self.__class__.__name__} tool"
             )
 
-            properties[arg_name] = {
-                "type": json_type,
+            properties[param_name] = {
+                "type": param.json_type,
                 "description": description,
             }
 
-            if arg_type.default == inspect.Parameter.empty:
-                required.append(arg_name)
+            if param.required:
+                required.append(param_name)
 
         return {
             "toolSpec": {
@@ -322,12 +340,65 @@ def tool(func_or_description=None):
         def get_tool_params(self):
             return func_signature.parameters
 
-        # Custom get_tool_param_descriptions method for the decorated function
-        def get_tool_param_descriptions(self):
+        # Custom _get_docstring_param_descriptions method for the decorated function
+        def _get_docstring_param_descriptions_override(self) -> dict[str, str]:
+            """Get parameter descriptions from decorated function's docstring."""
             from fence.utils.docstring_parser import DocstringParser
 
+            # Get all parameters to ensure complete coverage
+            params = func_signature.parameters
+            result = {param: None for param in params}
+
+            # Try to get descriptions from docstring parsing
             parser = DocstringParser()
-            return parser.parse(func)
+            docstring_descriptions = parser.parse(func)
+            result.update(docstring_descriptions)
+
+            return result
+
+        # Custom _build_unified_parameters method for the decorated function
+        def _build_unified_parameters_override(
+            self, explicit_parameters: dict[str, ToolParameter] | None = None
+        ) -> dict[str, ToolParameter]:
+            """Build unified parameters for decorated function."""
+            if explicit_parameters:
+                return explicit_parameters
+
+            # Get signature parameters
+            signature_params = func_signature.parameters
+
+            # Get parameter descriptions using the custom method
+            descriptions = self._get_docstring_param_descriptions()
+
+            # Build unified parameters
+            unified_params = {}
+            for param_name, param in signature_params.items():
+                if param_name in ["environment", "kwargs"]:
+                    continue
+
+                # Get type annotation
+                type_annotation = (
+                    param.annotation
+                    if param.annotation != inspect.Parameter.empty
+                    else str
+                )
+
+                # Check if required
+                required = param.default == inspect.Parameter.empty
+                default_value = param.default if not required else None
+
+                # Get description
+                description = descriptions.get(param_name)
+
+                unified_params[param_name] = ToolParameter(
+                    name=param_name,
+                    type_annotation=type_annotation,
+                    description=description,
+                    required=required,
+                    default_value=default_value,
+                )
+
+            return unified_params
 
         # Define the class dynamically
         ToolClass = type(
@@ -339,7 +410,8 @@ def tool(func_or_description=None):
                 ),
                 "execute_tool": execute_tool_wrapper,
                 "get_tool_params": get_tool_params,
-                "get_tool_param_descriptions": get_tool_param_descriptions,
+                "_get_docstring_param_descriptions": _get_docstring_param_descriptions_override,
+                "_build_unified_parameters": _build_unified_parameters_override,
             },
         )
 
