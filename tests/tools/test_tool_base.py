@@ -292,19 +292,19 @@ def test_unified_parameters_basetool():
     name_param = tool.parameters["name"]
     assert isinstance(name_param, ToolParameter)
     assert name_param.name == "name"
-    assert name_param.type_annotation == str
+    assert name_param.type_annotation is str
     assert name_param.description == "The person's name as a string"
     assert name_param.required
 
     age_param = tool.parameters["age"]
     assert age_param.name == "age"
-    assert age_param.type_annotation == int
+    assert age_param.type_annotation is int
     assert age_param.description == "The person's age in years"
     assert age_param.required
 
     active_param = tool.parameters["active"]
     assert active_param.name == "active"
-    assert active_param.type_annotation == bool
+    assert active_param.type_annotation is bool
     assert (
         active_param.description
         == "Whether the person is currently active This parameter controls the active state"
@@ -336,19 +336,19 @@ def test_unified_parameters_decorated():
     city_param = documented_function.parameters["city"]
     assert isinstance(city_param, ToolParameter)
     assert city_param.name == "city"
-    assert city_param.type_annotation == str
+    assert city_param.type_annotation is str
     assert city_param.description == "The name of the city to get weather for"
     assert city_param.required
 
     temp_param = documented_function.parameters["temperature"]
     assert temp_param.name == "temperature"
-    assert temp_param.type_annotation == float
+    assert temp_param.type_annotation is float
     assert temp_param.description == "The current temperature in degrees"
     assert temp_param.required
 
     humidity_param = documented_function.parameters["humidity"]
     assert humidity_param.name == "humidity"
-    assert humidity_param.type_annotation == int
+    assert humidity_param.type_annotation is int
     assert humidity_param.description == "The humidity percentage"
     assert not humidity_param.required
     assert humidity_param.default_value == 50
@@ -374,7 +374,7 @@ def test_unified_parameters_no_docstring():
     name_param = tool.parameters["name"]
     assert isinstance(name_param, ToolParameter)
     assert name_param.name == "name"
-    assert name_param.type_annotation == str
+    assert name_param.type_annotation is str
     assert name_param.description is None
     assert name_param.required
 
