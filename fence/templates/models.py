@@ -113,10 +113,18 @@ class ToolUseBlock(BaseModel):
     # Loop over input values and convert to builtin types
     @field_validator("input", mode="before")
     def convert_to_builtin(cls, input):
-        for parameter, value in input.items():
-            if isinstance(value, Decimal):
-                input[parameter] = float(value)
-        return input
+        def convert_decimals(obj):
+            """Recursively convert Decimal values to float in nested structures."""
+            if isinstance(obj, dict):
+                return {key: convert_decimals(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_decimals(item) for item in obj]
+            elif isinstance(obj, Decimal):
+                return float(obj)
+            else:
+                return obj
+
+        return convert_decimals(input)
 
 
 class ToolResultContentBlockText(BaseModel):
