@@ -364,7 +364,7 @@ class TestMCPBedrockIntegration:
 
             # Verify warning was logged
             mock_logger.warning.assert_called_with(
-                "MCP client 1 is not connected. Its tools will not be available."
+                "No MCP tools were successfully registered"
             )
 
             # Verify no tools were registered

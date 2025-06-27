@@ -252,9 +252,9 @@ class TestMCPClient:
 
         # Verify cleanup calls
         mock_shutdown_event.set.assert_called_once()
-        mock_connection_task.result.assert_called_once_with(timeout=5)
+        mock_connection_task.result.assert_called_once_with(timeout=3)
         mock_loop.call_soon_threadsafe.assert_called_once()
-        mock_thread_instance.join.assert_called_once_with(timeout=3)
+        mock_thread_instance.join.assert_called_once_with(timeout=2)
 
     def test_context_manager(self, mcp_client):
         """Test client works as context manager."""
