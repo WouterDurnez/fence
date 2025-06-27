@@ -12,8 +12,8 @@ This demo shows how to create a conversational agent that:
 import logging
 
 from fence.agents.bedrock.agent import BedrockAgent
+from fence.mcp.client import MCPClient
 from fence.models.bedrock.claude import Claude37Sonnet
-from fence.tools.mcp.client import MCPClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

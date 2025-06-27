@@ -25,6 +25,7 @@ from fence.agents.bedrock.models import (
     ToolUseStartEvent,
     ToolUseStopEvent,
 )
+from fence.mcp.client import MCPClient
 from fence.memory.base import BaseMemory
 from fence.models.base import LLM
 from fence.models.bedrock.base import BedrockTool, BedrockToolConfig
@@ -42,7 +43,6 @@ from fence.templates.models import (
     ToolUseContent,
 )
 from fence.tools.base import BaseTool
-from fence.tools.mcp.client import MCPClient
 
 logger = logging.getLogger(__name__)
 
