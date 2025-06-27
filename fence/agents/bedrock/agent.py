@@ -676,10 +676,46 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         tool = next(
             (tool for tool in self.tools if tool.get_tool_name() == tool_name), None
         )
+
         if not tool:
-            error_msg = f"[Tool Error: {tool_name}] Tool not found. Available tools: {[t.get_tool_name() for t in self.tools]}"
-            self.memory.add_message(role="user", content=error_msg)
-            return {"error": error_msg}
+            available_tools = [t.get_tool_name() for t in self.tools]
+            error_msg = f"Tool '{tool_name}' not found. Available tools are: {', '.join(available_tools)}. Please use one of the available tool names exactly as listed."
+            logger.error(f"[Tool Error: {tool_name}] {error_msg}")
+
+            # Create proper tool result with error status for Bedrock
+            self.memory.add_message(
+                role="user",
+                content=ToolResultContent(
+                    type="toolResult",
+                    content=ToolResultBlock(
+                        content=[ToolResultContentBlockText(text=error_msg)],
+                        toolUseId=tool_use_id,
+                        status="error",
+                    ),
+                ),
+            )
+
+            # Create events for the error
+            tool_start_event = ToolUseStartEvent(
+                agent_name=self.identifier,
+                type=AgentEventTypes.TOOL_USE_START,
+                content=ToolUseData(tool_name=tool_name, parameters=tool_params),
+            )
+
+            tool_stop_event = ToolUseStopEvent(
+                agent_name=self.identifier,
+                type=AgentEventTypes.TOOL_USE_STOP,
+                content=ToolUseData(
+                    tool_name=tool_name,
+                    parameters=tool_params,
+                    result={"error": error_msg},
+                ),
+            )
+
+            return {
+                "formatted_result": f"[Tool Error] {tool_name}({tool_params}) -> {error_msg}",
+                "events": [tool_start_event, tool_stop_event],
+            }
 
         try:
             logger.debug(
@@ -740,12 +776,37 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                 "events": [tool_start_event, tool_stop_event],
             }
         except Exception as e:
-            error_msg = (
-                f"[Tool Error: {tool_name}] Error with parameters {tool_params}: {e}"
+            error_msg = f"Error executing tool '{tool_name}' with parameters {tool_params}: {str(e)}"
+            logger.error(f"[Tool Error: {tool_name}] {error_msg}")
+
+            # Create proper tool result with error status for Bedrock
+            self.memory.add_message(
+                role="user",
+                content=ToolResultContent(
+                    type="toolResult",
+                    content=ToolResultBlock(
+                        content=[ToolResultContentBlockText(text=error_msg)],
+                        toolUseId=tool_use_id,
+                        status="error",
+                    ),
+                ),
             )
-            logger.error(error_msg)
-            self.memory.add_message(role="user", content=error_msg)
-            return {"error": error_msg}
+
+            # Create events for the error
+            tool_stop_event = ToolUseStopEvent(
+                agent_name=self.identifier,
+                type=AgentEventTypes.TOOL_USE_STOP,
+                content=ToolUseData(
+                    tool_name=tool_name,
+                    parameters=tool_params,
+                    result={"error": error_msg},
+                ),
+            )
+
+            return {
+                "formatted_result": f"[Tool Error] {tool_name}({tool_params}) -> {error_msg}",
+                "events": [tool_start_event, tool_stop_event],
+            }
 
     ######################
     # Content Processing #

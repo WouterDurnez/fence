@@ -67,7 +67,7 @@ class TestMCPClient:
         """Test successful connection to MCP server."""
         with patch.object(mcp_client, "connect") as mock_connect:
             # Mock successful connection
-            def mock_connect_side_effect(command, args):
+            def mock_connect_side_effect(transport_type="stdio", **kwargs):
                 mcp_client._connected = True
                 mcp_client.session = mock_mcp_session
                 mcp_client._loop = Mock()
@@ -77,7 +77,9 @@ class TestMCPClient:
             mock_connect.side_effect = mock_connect_side_effect
 
             # Test connection
-            mcp_client.connect("uvx", ["test-server"])
+            mcp_client.connect(
+                transport_type="stdio", command="uvx", args=["test-server"]
+            )
 
             # Verify connection state
             assert mcp_client._connected is True
@@ -87,7 +89,9 @@ class TestMCPClient:
         """Test that multiple connect calls don't cause issues."""
         with patch.object(mcp_client, "_connected", True):
             # Should return early without doing anything
-            mcp_client.connect("uvx", ["test-server"])
+            mcp_client.connect(
+                transport_type="stdio", command="uvx", args=["test-server"]
+            )
             # No exception should be raised
 
     def test_list_tools_success(self, mcp_client, mock_mcp_session, mock_mcp_tool):
