@@ -6,8 +6,8 @@ import pytest
 from mcp.types import TextContent
 from mcp.types import Tool as MCPTool
 
-from fence.tools.mcp.client import MCPClient
-from fence.tools.mcp.tool import MCPAgentTool
+from fence.mcp.client import MCPClient
+from fence.mcp.tool import MCPAgentTool
 
 
 @pytest.fixture
@@ -72,7 +72,8 @@ class TestMCPClient:
                 mcp_client.session = mock_mcp_session
                 mcp_client._loop = Mock()
                 mcp_client._thread = Mock()
-                mcp_client._executor = Mock()
+                mcp_client._shutdown_event = Mock()
+                mcp_client._connection_task = Mock()
 
             mock_connect.side_effect = mock_connect_side_effect
 
@@ -97,7 +98,7 @@ class TestMCPClient:
     def test_list_tools_success(self, mcp_client, mock_mcp_session, mock_mcp_tool):
         """Test successful tool listing."""
         # Setup connection
-        self._setup_connected_client(mcp_client, mock_mcp_session, None)
+        self._setup_connected_client(mcp_client, mock_mcp_session)
 
         # Mock list_tools method to directly manipulate client state
         with patch.object(mcp_client, "list_tools") as mock_list_tools:
@@ -125,13 +126,13 @@ class TestMCPClient:
         with pytest.raises(RuntimeError, match="MCP Client not connected"):
             mcp_client.list_tools()
 
-    @patch("fence.tools.mcp.client.asyncio.run_coroutine_threadsafe")
+    @patch("fence.mcp.client.asyncio.run_coroutine_threadsafe")
     def test_call_tool_single_response(
         self, mock_run_coroutine, mcp_client, mock_mcp_session
     ):
         """Test calling a tool with single text response."""
         # Setup connection
-        self._setup_connected_client(mcp_client, mock_mcp_session, None)
+        self._setup_connected_client(mcp_client, mock_mcp_session)
 
         # Setup call_tool response with single content
         mock_response = Mock()
@@ -148,13 +149,13 @@ class TestMCPClient:
         # Verify result
         assert result == "Single response"
 
-    @patch("fence.tools.mcp.client.asyncio.run_coroutine_threadsafe")
+    @patch("fence.mcp.client.asyncio.run_coroutine_threadsafe")
     def test_call_tool_multiple_responses(
         self, mock_run_coroutine, mcp_client, mock_mcp_session
     ):
         """Test calling a tool with multiple text responses."""
         # Setup connection
-        self._setup_connected_client(mcp_client, mock_mcp_session, None)
+        self._setup_connected_client(mcp_client, mock_mcp_session)
 
         # Mock the async execution with multiple responses
         mock_future = Mock()
@@ -172,13 +173,13 @@ class TestMCPClient:
         assert result["count"] == 3
         assert result["results"] == ["Response 1", "Response 2", "Response 3"]
 
-    @patch("fence.tools.mcp.client.asyncio.run_coroutine_threadsafe")
+    @patch("fence.mcp.client.asyncio.run_coroutine_threadsafe")
     def test_call_tool_empty_response(
         self, mock_run_coroutine, mcp_client, mock_mcp_session
     ):
         """Test calling a tool with empty response."""
         # Setup connection
-        self._setup_connected_client(mcp_client, mock_mcp_session, None)
+        self._setup_connected_client(mcp_client, mock_mcp_session)
 
         # Mock the async execution with empty response
         mock_future = Mock()
@@ -196,13 +197,13 @@ class TestMCPClient:
         with pytest.raises(RuntimeError, match="MCP Client not connected"):
             mcp_client.call_tool("test_tool", {"query": "test"})
 
-    @patch("fence.tools.mcp.client.asyncio.run_coroutine_threadsafe")
+    @patch("fence.mcp.client.asyncio.run_coroutine_threadsafe")
     def test_call_tool_exception(
         self, mock_run_coroutine, mcp_client, mock_mcp_session
     ):
         """Test call_tool handles exceptions properly."""
         # Setup connection
-        self._setup_connected_client(mcp_client, mock_mcp_session, None)
+        self._setup_connected_client(mcp_client, mock_mcp_session)
 
         # Setup call_tool to raise exception
         mock_future = Mock()
@@ -218,7 +219,7 @@ class TestMCPClient:
         # Should not raise any exceptions
         mcp_client.disconnect()
 
-    @patch("fence.tools.mcp.client.threading.Thread")
+    @patch("fence.mcp.client.threading.Thread")
     def test_disconnect_success(self, mock_thread, mcp_client):
         """Test successful disconnection."""
         # Setup mock loop and thread
@@ -230,12 +231,18 @@ class TestMCPClient:
         mock_thread_instance.is_alive.return_value = True
         mock_thread_instance.join = Mock()
 
+        mock_connection_task = Mock()
+        mock_connection_task.result = Mock()
+
+        mock_shutdown_event = Mock()
+        mock_shutdown_event.set = Mock()
+
         # Setup client state
         mcp_client._connected = True
         mcp_client._loop = mock_loop
         mcp_client._thread = mock_thread_instance
-        mcp_client._executor = Mock()
-        mcp_client._executor.shutdown = Mock()
+        mcp_client._connection_task = mock_connection_task
+        mcp_client._shutdown_event = mock_shutdown_event
 
         # Test disconnect
         mcp_client.disconnect()
@@ -244,20 +251,49 @@ class TestMCPClient:
         assert mcp_client._connected is False
 
         # Verify cleanup calls
+        mock_shutdown_event.set.assert_called_once()
+        mock_connection_task.result.assert_called_once_with(timeout=5)
         mock_loop.call_soon_threadsafe.assert_called_once()
         mock_thread_instance.join.assert_called_once_with(timeout=3)
-        mcp_client._executor.shutdown.assert_called_once_with(wait=False)
 
-    def _setup_connected_client(self, client, session, mock_exit_stack):
+    def test_context_manager(self, mcp_client):
+        """Test client works as context manager."""
+        with patch.object(mcp_client, "disconnect") as mock_disconnect:
+            with mcp_client:
+                pass
+            mock_disconnect.assert_called_once()
+
+    def test_connect_stdio_convenience_method(self, mcp_client):
+        """Test the stdio convenience method."""
+        with patch.object(mcp_client, "connect") as mock_connect:
+            mcp_client.connect_stdio("python", ["server.py"])
+            mock_connect.assert_called_once_with(
+                transport_type="stdio", command="python", args=["server.py"]
+            )
+
+    def test_connect_sse_convenience_method(self, mcp_client):
+        """Test the SSE convenience method."""
+        with patch.object(mcp_client, "connect") as mock_connect:
+            mcp_client.connect_sse("http://localhost:8000/sse", {"auth": "token"})
+            mock_connect.assert_called_once_with(
+                transport_type="sse",
+                url="http://localhost:8000/sse",
+                headers={"auth": "token"},
+            )
+
+    def test_connect_streamable_http_convenience_method(self, mcp_client):
+        """Test the streamable HTTP convenience method."""
+        with patch.object(mcp_client, "connect") as mock_connect:
+            mcp_client.connect_streamable_http("http://localhost:8000/mcp")
+            mock_connect.assert_called_once_with(
+                transport_type="streamable_http",
+                url="http://localhost:8000/mcp",
+                headers=None,
+            )
+
+    def _setup_connected_client(self, client, session):
         """Helper to setup a connected client for testing."""
         client._connected = True
         client.session = session
         client._loop = Mock()
         client._thread = Mock()
-
-        # Setup exit stack
-        if mock_exit_stack:
-            mock_exit_stack_instance = AsyncMock()
-            client.exit_stack = mock_exit_stack_instance
-        else:
-            client.exit_stack = AsyncMock()

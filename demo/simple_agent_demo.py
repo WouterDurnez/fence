@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 def create_mcp_client() -> MCPClient:
     """Create and connect to the MCP server via streamable HTTP."""
-    client = MCPClient()
+    # Create client with longer timeout
+    client = MCPClient(read_timeout_seconds=60)  # Increased from default 30 seconds
 
     try:
         client.connect(
@@ -46,6 +47,7 @@ def create_mcp_client() -> MCPClient:
 
     except Exception as e:
         logger.error(f"Failed to connect to MCP server: {e}")
+        client.disconnect()  # Ensure cleanup on error
         raise
 
 
@@ -92,52 +94,70 @@ def main():
     print("🚀 Simple Agent Demo with BedrockAgent and MCP")
     print("=" * 50)
 
-    # Create MCP client
-    print("Connecting to MCP server...")
-    mcp_client = create_mcp_client()
-
-    # Create Bedrock agent
-    print("Creating BedrockAgent...")
-    agent = create_bedrock_agent(mcp_client)
-
-    print("\n🎯 Agent ready! You can now chat with the agent.")
-    print("The agent has access to Showpad CRM tools through MCP.")
-    print("Type 'quit' or 'exit' to stop the demo.\n")
+    mcp_client = None
+    agent = None
 
     try:
-        while True:
-            # Get user input
-            user_input = input("You: ").strip()
+        # Create MCP client without context manager to let BedrockAgent manage it
+        print("Connecting to MCP server...")
+        mcp_client = create_mcp_client()
 
-            if user_input.lower() in ["quit", "exit", "q"]:
-                break
+        print("Creating BedrockAgent...")
+        agent = create_bedrock_agent(mcp_client)
 
-            if not user_input:
-                continue
+        print("\n🎯 Agent ready! You can now chat with the agent.")
+        print("The agent has access to Showpad CRM tools through MCP.")
+        print("Type 'quit' or 'exit' to stop the demo.\n")
 
-            print(f"\n🤖 Agent processing: {user_input}")
-            print("-" * 30)
+        try:
+            while True:
+                # Get user input
+                user_input = input("You: ").strip()
 
-            try:
-                # Run the agent
-                response = agent.run(user_input, max_iterations=5)
+                if user_input.lower() in ["quit", "exit", "q"]:
+                    break
 
-                print(f"\n🎉 Agent: {response.answer}")
-                print("-" * 50)
+                if not user_input:
+                    continue
 
-            except Exception as e:
-                print(f"❌ Error: {e}")
-                logger.error(f"Error during agent execution: {e}")
+                print(f"\n🤖 Agent processing: {user_input}")
+                print("-" * 30)
 
-    except KeyboardInterrupt:
-        print("\n\n👋 Demo interrupted by user")
+                try:
+                    # Run the agent
+                    response = agent.run(user_input, max_iterations=5)
 
+                    print(f"\n🎉 Agent: {response.answer}")
+                    print("-" * 50)
+
+                except Exception as e:
+                    print(f"❌ Error: {e}")
+                    logger.error(f"Error during agent execution: {e}")
+
+        except KeyboardInterrupt:
+            print("\n\n👋 Demo interrupted by user")
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        logger.error(f"Error during setup: {e}")
+        return
     finally:
-        # Clean up
-        print("\nCleaning up...")
-        mcp_client.disconnect()
-        print("✅ MCP client disconnected")
-        print("Demo completed!")
+        # Clean up resources
+        if agent:
+            try:
+                agent.cleanup()
+                print("Agent cleaned up successfully")
+            except Exception as e:
+                logger.warning(f"Error cleaning up agent: {e}")
+
+        if mcp_client:
+            try:
+                mcp_client.disconnect()
+                print("MCP client disconnected successfully")
+            except Exception as e:
+                logger.warning(f"Error disconnecting MCP client: {e}")
+
+    print("\nDemo completed!")
 
 
 if __name__ == "__main__":

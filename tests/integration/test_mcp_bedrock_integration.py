@@ -6,8 +6,8 @@ import pytest
 from mcp.types import Tool as MCPTool
 
 from fence.agents.bedrock import BedrockAgent
-from fence.tools.mcp.client import MCPClient
-from fence.tools.mcp.tool import MCPAgentTool
+from fence.mcp.client import MCPClient
+from fence.mcp.tool import MCPAgentTool
 
 
 @pytest.fixture

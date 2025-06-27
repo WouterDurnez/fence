@@ -5,8 +5,8 @@ from unittest.mock import Mock
 import pytest
 from mcp.types import Tool as MCPTool
 
+from fence.mcp.tool import MCPAgentTool
 from fence.tools.base import ToolParameter
-from fence.tools.mcp.tool import MCPAgentTool
 
 
 @pytest.fixture

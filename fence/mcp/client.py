@@ -80,6 +80,8 @@ class MCPClient:
 
         # Create a single long-running task that manages the entire connection lifecycle
         async def _connection_lifecycle():
+            transport = None
+            session = None
             try:
                 # Create transport based on type
                 if transport_type == "stdio":
@@ -104,22 +106,62 @@ class MCPClient:
                 else:
                     raise ValueError(f"Unsupported transport type: {transport_type}")
 
-                # Use proper async context managers
-                async with transport as (read_stream, write_stream):
-                    async with ClientSession(read_stream, write_stream) as session:
-                        await session.initialize()
-                        self.session = session
-                        self._connected = True
-                        logger.info(
-                            f"MCP server connected using {transport_type} transport"
-                        )
+                # Use proper async context managers with explicit error handling
+                try:
+                    transport_context = transport.__aenter__()
+                    transport_result = await transport_context
 
-                        # Wait for shutdown signal
-                        while not self._shutdown_event.is_set():
-                            await asyncio.sleep(0.1)
+                    # Handle different transport types that may return different numbers of values
+                    if transport_type == "streamable_http":
+                        # streamable_http may return more than 2 values, we need the first two
+                        if (
+                            isinstance(transport_result, (list, tuple))
+                            and len(transport_result) >= 2
+                        ):
+                            read_stream, write_stream = (
+                                transport_result[0],
+                                transport_result[1],
+                            )
+                        else:
+                            raise ValueError(
+                                f"Unexpected transport result format: {transport_result}"
+                            )
+                    else:
+                        # stdio and sse transports return exactly 2 values
+                        read_stream, write_stream = transport_result
 
-                        # Connection will be cleaned up automatically when exiting context managers
-                        logger.debug("MCP client lifecycle ending")
+                    session_context = ClientSession(
+                        read_stream, write_stream
+                    ).__aenter__()
+                    session = await session_context
+
+                    await session.initialize()
+                    self.session = session
+                    self._connected = True
+                    logger.info(
+                        f"MCP server connected using {transport_type} transport"
+                    )
+
+                    # Wait for shutdown signal
+                    while not self._shutdown_event.is_set():
+                        await asyncio.sleep(0.1)
+
+                except Exception as e:
+                    logger.error(f"Error during session initialization: {e}")
+                    raise
+                finally:
+                    # Clean up session and transport in reverse order
+                    if session:
+                        try:
+                            await session.__aexit__(None, None, None)
+                        except Exception as e:
+                            logger.warning(f"Error closing session: {e}")
+
+                    if transport:
+                        try:
+                            await transport.__aexit__(None, None, None)
+                        except Exception as e:
+                            logger.warning(f"Error closing transport: {e}")
 
             except Exception as e:
                 logger.error(f"Error in MCP client lifecycle: {e}")
@@ -172,27 +214,40 @@ class MCPClient:
             raise RuntimeError("MCP Client not connected. Call connect() first.")
 
         async def _call():
-            result = await self.session.call_tool(
-                name=name,
-                arguments=arguments,
-                read_timeout_seconds=timedelta(seconds=self.read_timeout_seconds),
-            )
-            logger.info(f"MCP Tool <{name}> executed successfully")
+            try:
+                result = await self.session.call_tool(
+                    name=name,
+                    arguments=arguments,
+                    read_timeout_seconds=timedelta(seconds=self.read_timeout_seconds),
+                )
+                logger.info(f"MCP Tool <{name}> executed successfully")
 
-            content = result.content
-            text_content = [
-                item.text for item in content if isinstance(item, TextContent)
-            ]
+                content = result.content
+                text_content = [
+                    item.text for item in content if isinstance(item, TextContent)
+                ]
 
-            if len(text_content) > 1:
-                return {"results": text_content, "count": len(text_content)}
-            elif len(text_content) == 1:
-                return text_content[0]
-            else:
-                return "No content returned from MCP tool"
+                if len(text_content) > 1:
+                    return {"results": text_content, "count": len(text_content)}
+                elif len(text_content) == 1:
+                    return text_content[0]
+                else:
+                    return "No content returned from MCP tool"
+            except Exception as e:
+                logger.error(f"Error calling MCP tool {name}: {e}")
+                raise
 
         future = asyncio.run_coroutine_threadsafe(_call(), self._loop)
-        return future.result()
+        try:
+            return future.result(
+                timeout=self.read_timeout_seconds + 5
+            )  # Add buffer for processing
+        except concurrent.futures.TimeoutError:
+            logger.error(f"Timeout while calling MCP tool {name}")
+            raise RuntimeError(f"Timeout while calling MCP tool {name}")
+        except Exception as e:
+            logger.error(f"Error in call_tool for {name}: {e}")
+            raise
 
     def list_tools(self):
         """Get a list of MCP tools synchronously."""
@@ -200,14 +255,27 @@ class MCPClient:
             raise RuntimeError("MCP Client not connected. Call connect() first.")
 
         async def _list_tools():
-            mcp_tools = await self.session.list_tools()
-            self.tools.clear()
-            for tool in mcp_tools.tools:
-                self.tools.append(MCPAgentTool(mcp_tool=tool, mcp_client=self))
-            return mcp_tools
+            try:
+                mcp_tools = await self.session.list_tools()
+                self.tools.clear()
+                for tool in mcp_tools.tools:
+                    self.tools.append(MCPAgentTool(mcp_tool=tool, mcp_client=self))
+                return mcp_tools
+            except Exception as e:
+                logger.error(f"Error listing MCP tools: {e}")
+                # Clear tools on error to prevent stale state
+                self.tools.clear()
+                raise
 
         future = asyncio.run_coroutine_threadsafe(_list_tools(), self._loop)
-        return future.result()
+        try:
+            return future.result(timeout=self.read_timeout_seconds)
+        except concurrent.futures.TimeoutError:
+            logger.error("Timeout while listing MCP tools")
+            raise RuntimeError("Timeout while listing MCP tools")
+        except Exception as e:
+            logger.error(f"Error in list_tools: {e}")
+            raise
 
     def disconnect(self):
         """Disconnect from the MCP server synchronously."""
@@ -223,20 +291,32 @@ class MCPClient:
         # Wait for the connection task to complete (it handles cleanup via context managers)
         if self._connection_task:
             try:
-                self._connection_task.result(timeout=5)
+                # Use a shorter timeout to avoid hanging
+                self._connection_task.result(timeout=3)
                 logger.info("MCP client disconnected successfully")
             except concurrent.futures.TimeoutError:
-                logger.warning("MCP client disconnect timed out")
+                logger.warning("MCP client disconnect timed out - forcing cleanup")
+                # Cancel the task if it's still running
+                if not self._connection_task.done():
+                    self._connection_task.cancel()
             except Exception as e:
                 logger.warning(f"Error during disconnect: {e}")
+                # Try to cancel the task if there was an error
+                if not self._connection_task.done():
+                    self._connection_task.cancel()
 
-        # Stop the event loop
+        # Stop the event loop gracefully
         if self._loop and not self._loop.is_closed():
-            self._loop.call_soon_threadsafe(self._loop.stop)
+            try:
+                self._loop.call_soon_threadsafe(self._loop.stop)
+            except Exception as e:
+                logger.warning(f"Error stopping event loop: {e}")
 
-        # Wait for thread to finish
+        # Wait for thread to finish with timeout
         if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=3)
+            self._thread.join(timeout=2)
+            if self._thread.is_alive():
+                logger.warning("MCP client thread did not terminate within timeout")
 
         # Reset state
         self._connected = False

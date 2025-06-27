@@ -1061,35 +1061,83 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         mcp_tool_names = []
 
         for i, mcp_client in enumerate(self.mcp_clients):
-            if not mcp_client._connected:
-                logger.warning(
-                    f"MCP client {i+1} is not connected. Its tools will not be available."
+            try:
+                # Check if already connected
+                if not mcp_client._connected:
+                    logger.info(f"Connecting MCP client {i+1}...")
+                    mcp_client.connect()
+
+                if not mcp_client._connected:
+                    logger.warning(
+                        f"MCP client {i+1} failed to connect. Its tools will not be available."
+                    )
+                    continue
+
+                # Call list_tools() to populate the client's tools list
+                logger.debug(f"Listing tools for MCP client {i+1}...")
+                mcp_client.list_tools()
+
+                # Add MCP tools from this client to the agent's tool list
+                client_tools = mcp_client.tools
+                if not client_tools:
+                    logger.warning(f"MCP client {i+1} returned no tools")
+                    continue
+
+                total_mcp_tools.extend(client_tools)
+                client_tool_names = [tool.get_tool_name() for tool in client_tools]
+                mcp_tool_names.extend(client_tool_names)
+
+                logger.info(
+                    f"Registered {len(client_tools)} tools from MCP client {i+1}: {client_tool_names}"
                 )
+            except Exception as e:
+                logger.error(f"Failed to register tools from MCP client {i+1}: {e}")
+                # Try to disconnect the problematic client to prevent resource leaks
+                try:
+                    mcp_client.disconnect()
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Failed to cleanup MCP client {i+1}: {cleanup_error}"
+                    )
                 continue
 
-            # Add MCP tools from this client to the agent's tool list
-            client_tools = mcp_client.tools
-            total_mcp_tools.extend(client_tools)
-            client_tool_names = [tool.get_tool_name() for tool in client_tools]
-            mcp_tool_names.extend(client_tool_names)
-
-            logger.info(
-                f"Registered {len(client_tools)} tools from MCP client {i+1}: {client_tool_names}"
-            )
-
         # Add all MCP tools to the agent's tool list
-        self.tools.extend(total_mcp_tools)
-
-        logger.info(
-            f"Total MCP tools registered with BedrockAgent: {len(total_mcp_tools)} tools from {len(self.mcp_clients)} clients"
-        )
-
-        # Update system message to mention MCP capabilities if tools were added
-        if total_mcp_tools and self._user_system_message:
-            mcp_tools_info = (
-                f" You have access to MCP tools: {', '.join(mcp_tool_names)}."
+        if total_mcp_tools:
+            self.tools.extend(total_mcp_tools)
+            logger.info(
+                f"Total MCP tools registered with BedrockAgent: {len(total_mcp_tools)} tools from {len(self.mcp_clients)} clients"
             )
-            self._user_system_message += mcp_tools_info
+
+            # Update system message to mention MCP capabilities if tools were added
+            if self._user_system_message:
+                mcp_tools_info = (
+                    f" You have access to MCP tools: {', '.join(mcp_tool_names)}."
+                )
+                self._user_system_message += mcp_tools_info
+        else:
+            logger.warning("No MCP tools were successfully registered")
+
+    def cleanup(self):
+        """Clean up resources, especially MCP clients."""
+        if hasattr(self, "mcp_clients") and self.mcp_clients:
+            logger.info(
+                f"Cleaning up {len(self.mcp_clients)} MCP clients for agent {self.identifier}"
+            )
+            for i, mcp_client in enumerate(self.mcp_clients):
+                try:
+                    if mcp_client._connected:
+                        logger.debug(f"Disconnecting MCP client {i+1}...")
+                        mcp_client.disconnect()
+                except Exception as e:
+                    logger.warning(f"Error cleaning up MCP client {i+1}: {e}")
+
+    def __del__(self):
+        """Destructor to ensure cleanup of MCP clients."""
+        try:
+            self.cleanup()
+        except Exception:
+            # Don't log in destructor as logger might be gone
+            pass
 
 
 if __name__ == "__main__":

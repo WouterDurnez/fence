@@ -134,8 +134,12 @@ class MCPAgentTool(BaseTool):
             f"Executing MCP tool {self.get_tool_name()} with arguments: {kwargs}"
         )
 
-        # Filter kwargs to only include parameters that are defined in the tool schema
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k in self.parameters}
+        # Remove environment from kwargs if it exists to avoid passing it to MCP tool
+        filtered_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k != "environment" and k in self.parameters
+        }
 
         try:
             response = self.mcp_client.call_tool(
