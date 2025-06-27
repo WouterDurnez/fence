@@ -9,53 +9,31 @@ This demo shows how to create a conversational agent that:
 - Demonstrates how the agent can use MCP tools through natural conversation
 """
 
-import logging
 
 from fence.agents.bedrock.agent import BedrockAgent
 from fence.mcp.client import MCPClient
 from fence.models.bedrock.claude import Claude37Sonnet
+from fence.utils.logger import setup_logging
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = setup_logging(log_level="kill")
 
 
-def create_mcp_client() -> MCPClient:
-    """Create and connect to the MCP server via streamable HTTP."""
-    # Create client with longer timeout
-    client = MCPClient(read_timeout_seconds=60)  # Increased from default 30 seconds
-
-    try:
-        client.connect(
-            transport_type="streamable_http",
-            url="https://crm-mcp-ai-innovation-day-2025.internal.showpad.io:1337/mcp",
-            headers={
-                "X-Showpad-context": "eyJpZGVudGl0eSI6eyJ0eXBlIjoidXNlciIsIm9yZ2FuaXNhdGlvbiI6eyJpZCI6IjNhMmVkOGZiNDI4MTFhNzBmMTljZGRkODFiN2FmOTNlNDAwZWMzMjBiZjQ5OWJlYmJmOTBlNGYwODE2YWY4MWIiLCJkYklkIjoiNzcxNDQiLCJ1dWlkIjoiNDhiZGM4NTgtOTZlMC00YWRkLWIxMjQtMThlMzc2YWI0ZWQ5In0sInVzZXIiOnsiaWQiOiI5NDgxYmI1ODBmZTBhMTBjMDJiNWZkOGIzOTE3NjIwNSJ9fSwiYXR0cnMiOnsib2F1dGgyX2NsaWVudF9pZCI6IlNob3dwYWRTZXNzaW9uQ2xpZW50IiwicHJpdmF0ZV9jbGllbnQiOnRydWV9fQ=="
-            },
-        )
-
-        tools = client.list_tools()
-        logger.info(
-            f"Successfully connected to MCP server with {len(tools.tools)} tools"
-        )
-
-        # Log available tools
-        for tool in tools.tools:
-            logger.info(f"  - {tool.name}: {tool.description}")
-
-        return client
-
-    except Exception as e:
-        logger.error(f"Failed to connect to MCP server: {e}")
-        client.disconnect()  # Ensure cleanup on error
-        raise
-
-
-def create_bedrock_agent(mcp_client: MCPClient) -> BedrockAgent:
+def create_bedrock_agent() -> BedrockAgent:
     """Create a BedrockAgent with the MCP client."""
 
     # Create the Claude model
     model = Claude37Sonnet(region="us-east-1", cross_region="us")
+
+    # Create the MCP client with connection parameters passed directly to constructor
+    mcp_client = MCPClient(
+        read_timeout_seconds=60,
+        transport_type="streamable_http",
+        url="https://crm-mcp-ai-innovation-day-2025.internal.showpad.io:1337/mcp",
+        headers={
+            "X-Showpad-context": "eyJpZGVudGl0eSI6eyJ0eXBlIjoidXNlciIsIm9yZ2FuaXNhdGlvbiI6eyJpZCI6IjNhMmVkOGZiNDI4MTFhNzBmMTljZGRkODFiN2FmOTNlNDAwZWMzMjBiZjQ5OWJlYmJmOTBlNGYwODE2YWY4MWIiLCJkYklkIjoiNzcxNDQiLCJ1dWlkIjoiNDhiZGM4NTgtOTZlMC00YWRkLWIxMjQtMThlMzc2YWI0ZWQ5In0sInVzZXIiOnsiaWQiOiI5NDgxYmI1ODBmZTBhMTBjMDJiNWZkOGIzOTE3NjIwNSJ9fSwiYXR0cnMiOnsib2F1dGgyX2NsaWVudF9pZCI6IlNob3dwYWRTZXNzaW9uQ2xpZW50IiwicHJpdmF0ZV9jbGllbnQiOnRydWV9fQ=="
+        },
+    )
 
     # Define event handlers for better user experience
     def on_thinking(text: str):
@@ -69,10 +47,10 @@ def create_bedrock_agent(mcp_client: MCPClient) -> BedrockAgent:
 
     # Create the agent with the MCP client
     agent = BedrockAgent(
-        identifier="ShowpadAgent",
+        identifier="Showpad Assist",
         model=model,
         description="A helpful assistant that can access Showpad CRM data and functionality through MCP tools",
-        mcp_clients=[mcp_client],  # Pass the MCP client here
+        mcp_clients=[mcp_client],
         system_message="""You are a helpful assistant with access to Showpad CRM tools.
         You can help users with CRM-related tasks like looking up accounts, contacts, opportunities, and more.
         Always use the available tools to provide accurate and up-to-date information.
@@ -94,16 +72,11 @@ def main():
     print("🚀 Simple Agent Demo with BedrockAgent and MCP")
     print("=" * 50)
 
-    mcp_client = None
     agent = None
 
     try:
-        # Create MCP client without context manager to let BedrockAgent manage it
-        print("Connecting to MCP server...")
-        mcp_client = create_mcp_client()
-
-        print("Creating BedrockAgent...")
-        agent = create_bedrock_agent(mcp_client)
+        print("Creating BedrockAgent (will connect to MCP server)...")
+        agent = create_bedrock_agent()
 
         print("\n🎯 Agent ready! You can now chat with the agent.")
         print("The agent has access to Showpad CRM tools through MCP.")
@@ -149,13 +122,6 @@ def main():
                 print("Agent cleaned up successfully")
             except Exception as e:
                 logger.warning(f"Error cleaning up agent: {e}")
-
-        if mcp_client:
-            try:
-                mcp_client.disconnect()
-                print("MCP client disconnected successfully")
-            except Exception as e:
-                logger.warning(f"Error disconnecting MCP client: {e}")
 
     print("\nDemo completed!")
 

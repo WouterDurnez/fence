@@ -25,7 +25,12 @@ logging.basicConfig(
 class MCPClient:
     """Synchronous MCP Client that supports multiple transport types with a persistent event loop in a background thread."""
 
-    def __init__(self, read_timeout_seconds: int = 30):
+    def __init__(
+        self,
+        read_timeout_seconds: int = 30,
+        transport_type: str = "stdio",
+        **transport_kwargs,
+    ):
         self.session: ClientSession | None = None
         self.tools: list[BaseTool] = []
         self.read_timeout_seconds = read_timeout_seconds
@@ -34,6 +39,8 @@ class MCPClient:
         self._thread = None
         self._shutdown_event = None
         self._connection_task = None
+        self._transport_type = transport_type
+        self._transport_kwargs = transport_kwargs
 
     def __enter__(self):
         """Context manager entry."""
@@ -43,7 +50,7 @@ class MCPClient:
         """Context manager exit - ensure proper cleanup."""
         self.disconnect()
 
-    def connect(self, transport_type: str = "stdio", **transport_kwargs):
+    def connect(self, transport_type: str = None, **transport_kwargs):
         """Connect to the MCP server using the specified transport type.
 
         :param transport_type: Type of transport ('stdio', 'sse', 'streamable_http')
@@ -59,6 +66,12 @@ class MCPClient:
         """
         if self._connected:
             return
+
+        # Use stored parameters if none provided
+        if transport_type is None:
+            transport_type = self._transport_type
+        if not transport_kwargs:
+            transport_kwargs = self._transport_kwargs
 
         self._shutdown_event = threading.Event()
 
