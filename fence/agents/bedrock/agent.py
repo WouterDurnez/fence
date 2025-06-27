@@ -25,6 +25,7 @@ from fence.agents.bedrock.models import (
     ToolUseStartEvent,
     ToolUseStopEvent,
 )
+from fence.mcp.client import MCPClient
 from fence.memory.base import BaseMemory
 from fence.models.base import LLM
 from fence.models.bedrock.base import BedrockTool, BedrockToolConfig
@@ -172,6 +173,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         delegates: list["BedrockAgent"] | None = None,
         system_message: str | None = None,
         event_handlers: EventHandlers | dict[str, HandlerType] | None = None,
+        mcp_clients: MCPClient | list[MCPClient] | None = None,
     ):
         """Initialize the BedrockAgent object.
 
@@ -187,6 +189,7 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         :param delegates: A list of delegate agents available to the agent
         :param system_message: A system message to set for the agent
         :param event_handlers: Event handlers for different agent events
+        :param mcp_clients: An optional MCP client or list of MCP clients whose tools will be automatically registered
         """
         # Set full_response to True for proper response handling
         if model:
@@ -207,6 +210,19 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         self._user_system_message = system_message
         self.tools = tools or []
         self.delegates = delegates or []
+
+        # Normalize mcp_clients to always be a list
+        if mcp_clients is None:
+            self.mcp_clients = []
+        elif isinstance(mcp_clients, list):
+            self.mcp_clients = mcp_clients
+        else:
+            # Single MCP client provided
+            self.mcp_clients = [mcp_clients]
+
+        # Register MCP tools if MCP clients are provided
+        if self.mcp_clients:
+            self._register_mcp_tools()
 
         # Make sure delegates are marked as delegates
         for delegate in self.delegates:
@@ -660,10 +676,46 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         tool = next(
             (tool for tool in self.tools if tool.get_tool_name() == tool_name), None
         )
+
         if not tool:
-            error_msg = f"[Tool Error: {tool_name}] Tool not found. Available tools: {[t.get_tool_name() for t in self.tools]}"
-            self.memory.add_message(role="user", content=error_msg)
-            return {"error": error_msg}
+            available_tools = [t.get_tool_name() for t in self.tools]
+            error_msg = f"Tool '{tool_name}' not found. Available tools are: {', '.join(available_tools)}. Please use one of the available tool names exactly as listed."
+            logger.error(f"[Tool Error: {tool_name}] {error_msg}")
+
+            # Create proper tool result with error status for Bedrock
+            self.memory.add_message(
+                role="user",
+                content=ToolResultContent(
+                    type="toolResult",
+                    content=ToolResultBlock(
+                        content=[ToolResultContentBlockText(text=error_msg)],
+                        toolUseId=tool_use_id,
+                        status="error",
+                    ),
+                ),
+            )
+
+            # Create events for the error
+            tool_start_event = ToolUseStartEvent(
+                agent_name=self.identifier,
+                type=AgentEventTypes.TOOL_USE_START,
+                content=ToolUseData(tool_name=tool_name, parameters=tool_params),
+            )
+
+            tool_stop_event = ToolUseStopEvent(
+                agent_name=self.identifier,
+                type=AgentEventTypes.TOOL_USE_STOP,
+                content=ToolUseData(
+                    tool_name=tool_name,
+                    parameters=tool_params,
+                    result={"error": error_msg},
+                ),
+            )
+
+            return {
+                "formatted_result": f"[Tool Error] {tool_name}({tool_params}) -> {error_msg}",
+                "events": [tool_start_event, tool_stop_event],
+            }
 
         try:
             logger.debug(
@@ -724,12 +776,37 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
                 "events": [tool_start_event, tool_stop_event],
             }
         except Exception as e:
-            error_msg = (
-                f"[Tool Error: {tool_name}] Error with parameters {tool_params}: {e}"
+            error_msg = f"Error executing tool '{tool_name}' with parameters {tool_params}: {str(e)}"
+            logger.error(f"[Tool Error: {tool_name}] {error_msg}")
+
+            # Create proper tool result with error status for Bedrock
+            self.memory.add_message(
+                role="user",
+                content=ToolResultContent(
+                    type="toolResult",
+                    content=ToolResultBlock(
+                        content=[ToolResultContentBlockText(text=error_msg)],
+                        toolUseId=tool_use_id,
+                        status="error",
+                    ),
+                ),
             )
-            logger.error(error_msg)
-            self.memory.add_message(role="user", content=error_msg)
-            return {"error": error_msg}
+
+            # Create events for the error
+            tool_stop_event = ToolUseStopEvent(
+                agent_name=self.identifier,
+                type=AgentEventTypes.TOOL_USE_STOP,
+                content=ToolUseData(
+                    tool_name=tool_name,
+                    parameters=tool_params,
+                    result={"error": error_msg},
+                ),
+            )
+
+            return {
+                "formatted_result": f"[Tool Error] {tool_name}({tool_params}) -> {error_msg}",
+                "events": [tool_start_event, tool_stop_event],
+            }
 
     ######################
     # Content Processing #
@@ -974,6 +1051,93 @@ You are a helpful assistant. You can think in <thinking> tags. Your answer to th
         # If we have a prefill, add it
         if self.prefill:
             self.memory.add_message(role="assistant", content=self.prefill)
+
+    def _register_mcp_tools(self):
+        """Register MCP tools from all provided MCP clients."""
+        if not self.mcp_clients:
+            return
+
+        total_mcp_tools = []
+        mcp_tool_names = []
+
+        for i, mcp_client in enumerate(self.mcp_clients):
+            try:
+                # Check if already connected
+                if not mcp_client._connected:
+                    logger.info(f"Connecting MCP client {i+1}...")
+                    mcp_client.connect()
+
+                if not mcp_client._connected:
+                    logger.warning(
+                        f"MCP client {i+1} failed to connect. Its tools will not be available."
+                    )
+                    continue
+
+                # Call list_tools() to populate the client's tools list
+                logger.debug(f"Listing tools for MCP client {i+1}...")
+                mcp_client.list_tools()
+
+                # Add MCP tools from this client to the agent's tool list
+                client_tools = mcp_client.tools
+                if not client_tools:
+                    logger.warning(f"MCP client {i+1} returned no tools")
+                    continue
+
+                total_mcp_tools.extend(client_tools)
+                client_tool_names = [tool.get_tool_name() for tool in client_tools]
+                mcp_tool_names.extend(client_tool_names)
+
+                logger.info(
+                    f"Registered {len(client_tools)} tools from MCP client {i+1}: {client_tool_names}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to register tools from MCP client {i+1}: {e}")
+                # Try to disconnect the problematic client to prevent resource leaks
+                try:
+                    mcp_client.disconnect()
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Failed to cleanup MCP client {i+1}: {cleanup_error}"
+                    )
+                continue
+
+        # Add all MCP tools to the agent's tool list
+        if total_mcp_tools:
+            self.tools.extend(total_mcp_tools)
+            logger.info(
+                f"Total MCP tools registered with BedrockAgent: {len(total_mcp_tools)} tools from {len(self.mcp_clients)} clients"
+            )
+
+            # Update system message to mention MCP capabilities if tools were added
+            if self._user_system_message:
+                mcp_tools_info = (
+                    f" You have access to MCP tools: {', '.join(mcp_tool_names)}."
+                )
+                self._user_system_message += mcp_tools_info
+        else:
+            logger.warning("No MCP tools were successfully registered")
+
+    def cleanup(self):
+        """Clean up resources, especially MCP clients."""
+        if hasattr(self, "mcp_clients") and self.mcp_clients:
+            logger.info(
+                f"Cleaning up {len(self.mcp_clients)} MCP clients for agent {self.identifier}"
+            )
+            for i, mcp_client in enumerate(self.mcp_clients):
+                try:
+                    if mcp_client._connected:
+                        logger.debug(f"Disconnecting MCP client {i+1}...")
+                        mcp_client.disconnect()
+                except Exception as e:
+                    logger.warning(f"Error cleaning up MCP client {i+1}: {e}")
+
+    def __del__(self):
+        """Destructor to ensure cleanup of MCP clients."""
+        try:
+            self.cleanup()
+        except Exception:
+            # Don't log in destructor as logger might be gone
+            pass
 
 
 if __name__ == "__main__":

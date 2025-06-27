@@ -382,11 +382,12 @@ class TestBedrockAgent:
             # Call _execute_tool with the new format
             result = agent_with_tools._execute_tool(tool_use_content)
 
-            # Check the result includes the error message
-            assert "error" in result
-            assert "Tool Error" in result["error"]
-            assert "error_tool" in result["error"]
-            assert "Test error" in result["error"]
+            # Check the result includes the error message in formatted_result
+            assert "formatted_result" in result
+            assert "error" in result["formatted_result"]
+            assert "Tool Error" in result["formatted_result"]
+            assert "error_tool" in result["formatted_result"]
+            assert "Test error" in result["formatted_result"]
 
             # Verify memory.add_message was called
             assert mock_add_message.call_count >= 1

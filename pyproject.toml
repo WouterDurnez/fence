@@ -34,6 +34,7 @@ dependencies = [
     "requests>=2.32.3",
     "numexpr>=2.10.1",
     "pydantic>=2.11.4",
+    "mcp>=1.9.4",
 ]
 keywords = ["openai", "llm", "gpt", "ai", "nlp", "language", "model", "api", "anthropic", "claude", "wrapper", "fence"]
 requires = "python>=3.11"
@@ -49,6 +50,9 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-n auto"
+# Alternative: specify exact number of workers with "-n 4"
 
 [tool.hatch.build.targets.wheel]
 packages = ["fence"]
@@ -62,6 +66,7 @@ dev = [
     "ruff>=0.4.3,<1.0.0",
     "isort>=5.13.2,<6.0.0",
     "pytest>=8.2.0,<9.0.0",
+    "pytest-xdist>=3.6.0,<4.0.0",
     "black>=24.4.2,<25.0.0",
     "pre-commit>=3.7.1,<4.0.0",
     "pytest-mock>=3.14.0,<4.0.0",
