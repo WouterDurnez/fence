@@ -40,3 +40,6 @@ __pycache__/
 
 # Figures folders
 **/figures/
+
+# Demo files
+demo/
