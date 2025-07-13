@@ -5,11 +5,16 @@ Tools for agents
 import inspect
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Any, Callable, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from fence.utils.docstring_parser import DocstringParser
+
+# Union: For type hints when we need to reference Union types
+# get_origin: Gets the origin of a type (e.g., Union, List, etc.)
+# get_args: Gets the arguments of a type (e.g., for Union[int, None], returns (int, type(None)))
+
 
 logger = logging.getLogger(__name__)
 
@@ -19,30 +24,81 @@ logger = logging.getLogger(__name__)
 
 
 class ToolParameter(BaseModel):
-    """A unified model for tool parameters combining type info and descriptions."""
+    """A unified model for tool parameters combining type info and descriptions.
+
+    This class represents a single parameter for a tool, including its type information,
+    description, whether it's required, and any default value. It handles both simple
+    types (like `int`, `str`) and complex types (like `int | None`, `list[str]`).
+    """
 
     name: str = Field(..., description="Parameter name")
-    type_annotation: type = Field(..., description="Parameter type annotation")
+    type_annotation: Any = Field(..., description="Parameter type annotation")
     description: str | None = Field(None, description="Parameter description")
     required: bool = Field(..., description="Whether the parameter is required")
     default_value: Any = Field(
         None, description="Default value if parameter is optional"
     )
 
+    # Allow arbitrary types in Pydantic validation to handle complex type annotations
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @property
     def json_type(self) -> str:
-        """Convert Python type to JSON schema type string."""
-        type_name = getattr(self.type_annotation, "__name__", "string")
-        return {
+        """Convert Python type to JSON schema type string.
+
+        This method takes a Python type annotation (which could be a simple type like `int`
+        or a complex type like `int | None`) and converts it to a JSON schema type string
+        that can be used in API specifications.
+
+        Examples:
+            - `int` -> "integer"
+            - `str` -> "string"
+            - `int | None` -> "integer" (takes the first non-None type)
+            - `list[str]` -> "array"
+            - `dict` -> "object"
+            - Unknown types -> "string" (fallback)
+
+        :return: The JSON schema type string
+        """
+
+        # Check if this is a union type (like 'int | None', 'str | int', etc.)
+        # Union types have a '__args__' attribute that contains the individual types
+        if hasattr(self.type_annotation, "__args__"):
+
+            # Extract the individual types from the union using get_args()
+            # For 'int | None', this would return (int, type(None))
+            args = get_args(self.type_annotation)
+
+            # For union types, we want to find the first non-None type
+            # This is useful for cases like 'int | None' where we want 'int'
+            # We iterate through the args and take the first one that isn't None
+            for arg in args:
+                if arg is not type(None):  # Skip None types
+                    type_name = getattr(arg, "__name__", "string")
+                    break
+            else:
+                # If all args are None (unlikely but possible), fallback to string
+                type_name = "string"
+        else:
+            # This is a simple type (like 'int', 'str', etc.)
+            # Get the type name, with 'string' as fallback if __name__ doesn't exist
+            type_name = getattr(self.type_annotation, "__name__", "string")
+
+        # Map Python type names to JSON schema type strings
+        # This mapping is used by various LLM APIs and tools that expect JSON schema
+        # The mapping follows standard JSON schema conventions
+        type_mapping = {
             "str": "string",
             "int": "integer",
             "float": "number",
             "bool": "boolean",
             "list": "array",
             "dict": "object",
-        }.get(type_name, "string")
+        }
+
+        # Return the mapped type, or "string" as fallback for unknown types
+        # This ensures we always return a valid JSON schema type
+        return type_mapping.get(type_name, "string")
 
 
 ##############

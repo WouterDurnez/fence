@@ -454,6 +454,201 @@ def test_tool_parameter_json_type():
     assert dict_param.json_type == "object"
 
 
+def test_tool_parameter_union_types():
+    """Test that ToolParameter correctly handles union types (e.g., int | None)."""
+
+    # Test int | None (should return "integer")
+    int_or_none_param = ToolParameter(
+        name="test", type_annotation=int | None, required=True
+    )
+    assert int_or_none_param.json_type == "integer"
+
+    # Test str | None (should return "string")
+    str_or_none_param = ToolParameter(
+        name="test", type_annotation=str | None, required=True
+    )
+    assert str_or_none_param.json_type == "string"
+
+    # Test float | None (should return "number")
+    float_or_none_param = ToolParameter(
+        name="test", type_annotation=float | None, required=True
+    )
+    assert float_or_none_param.json_type == "number"
+
+    # Test bool | None (should return "boolean")
+    bool_or_none_param = ToolParameter(
+        name="test", type_annotation=bool | None, required=True
+    )
+    assert bool_or_none_param.json_type == "boolean"
+
+    # Test list | None (should return "array")
+    list_or_none_param = ToolParameter(
+        name="test", type_annotation=list | None, required=True
+    )
+    assert list_or_none_param.json_type == "array"
+
+    # Test dict | None (should return "object")
+    dict_or_none_param = ToolParameter(
+        name="test", type_annotation=dict | None, required=True
+    )
+    assert dict_or_none_param.json_type == "object"
+
+
+def test_tool_parameter_complex_union_types():
+    """Test that ToolParameter correctly handles more complex union types."""
+
+    # Test int | str (should return "integer" - first non-None type)
+    int_or_str_param = ToolParameter(
+        name="test", type_annotation=int | str, required=True
+    )
+    assert int_or_str_param.json_type == "integer"
+
+    # Test str | int (should return "string" - first non-None type)
+    str_or_int_param = ToolParameter(
+        name="test", type_annotation=str | int, required=True
+    )
+    assert str_or_int_param.json_type == "string"
+
+    # Test float | int | str (should return "number" - first non-None type)
+    float_or_int_or_str_param = ToolParameter(
+        name="test", type_annotation=float | int | str, required=True
+    )
+    assert float_or_int_or_str_param.json_type == "number"
+
+    # Test None | int (should return "integer" - first non-None type)
+    none_or_int_param = ToolParameter(
+        name="test", type_annotation=None | int, required=True
+    )
+    assert none_or_int_param.json_type == "integer"
+
+    # Test None | int (should return "integer" - first non-None type)
+    none_or_int_param = ToolParameter(
+        name="test", type_annotation=None | int, required=True
+    )
+    assert none_or_int_param.json_type == "integer"
+
+    # Test edge case with just None type (should return "string" as fallback)
+    none_param = ToolParameter(name="test", type_annotation=type(None), required=True)
+    assert none_param.json_type == "string"
+
+
+def test_tool_parameter_union_types_with_tool_decorator():
+    """Test that the @tool decorator correctly handles union types."""
+
+    @tool("A tool with union type parameters")
+    def union_type_tool(
+        required_int: int | None,
+        optional_str: str | None = None,
+        mixed_types: int | str = 42,
+    ):
+        """A tool that uses union types in its parameters."""
+        return f"int: {required_int}, str: {optional_str}, mixed: {mixed_types}"
+
+    # Test that the tool can be created without errors
+    assert union_type_tool.get_tool_name() == "UnionTypeTool"
+    assert union_type_tool.get_tool_description() == "A tool with union type parameters"
+
+    # Test execution with union type parameters
+    result = union_type_tool.run(
+        required_int=10, optional_str="test", mixed_types="hello"
+    )
+    assert result == "int: 10, str: test, mixed: hello"
+
+    # Test with None values
+    result = union_type_tool.run(required_int=None, optional_str=None, mixed_types=123)
+    assert result == "int: None, str: None, mixed: 123"
+
+
+def test_tool_parameter_union_types_in_base_tool():
+    """Test that BaseTool correctly handles union types in parameter extraction."""
+
+    class UnionTypeBaseTool(BaseTool):
+        """A base tool that uses union types in its parameters."""
+
+        def execute_tool(
+            self,
+            user_id: int | None,
+            username: str | None = None,
+            is_active: bool | None = True,
+            environment: dict = None,
+            **kwargs,
+        ):
+            """Execute the tool with union type parameters.
+
+            :param user_id: The user ID (can be None)
+            :param username: The username (can be None)
+            :param is_active: Whether the user is active (can be None)
+            """
+            return f"User {user_id} ({username}) - Active: {is_active}"
+
+    tool = UnionTypeBaseTool()
+
+    # Test that parameters are correctly extracted
+    assert "user_id" in tool.parameters
+    assert "username" in tool.parameters
+    assert "is_active" in tool.parameters
+
+    # Test that union types are correctly handled
+    assert tool.parameters["user_id"].json_type == "integer"
+    assert tool.parameters["username"].json_type == "string"
+    assert tool.parameters["is_active"].json_type == "boolean"
+
+    # Test that required/optional status is correct
+    assert tool.parameters["user_id"].required
+    assert not tool.parameters["username"].required
+    assert not tool.parameters["is_active"].required
+
+    # Test execution
+    result = tool.run(user_id=123, username="john_doe", is_active=True)
+    assert result == "User 123 (john_doe) - Active: True"
+
+    # Test with None values
+    result = tool.run(user_id=None, username=None, is_active=None)
+    assert result == "User None (None) - Active: None"
+
+
+def test_tool_parameter_union_types_bedrock_converse():
+    """Test that union types are correctly handled in Bedrock Converse format."""
+
+    class UnionTypeBedrockTool(BaseTool):
+        """A tool for testing Bedrock format with union types."""
+
+        def execute_tool(
+            self,
+            query: str | None,
+            max_results: int | None = 10,
+            environment: dict = None,
+            **kwargs,
+        ):
+            """Execute the tool.
+
+            :param query: The search query (can be None)
+            :param max_results: Maximum number of results (can be None)
+            """
+            return f"Search: {query}, Max: {max_results}"
+
+    tool = UnionTypeBedrockTool()
+    bedrock_format = tool.model_dump_bedrock_converse()
+
+    properties = bedrock_format["toolSpec"]["inputSchema"]["json"]["properties"]
+
+    # Check that union types are correctly mapped to JSON schema types
+    assert properties["query"]["type"] == "string"
+    assert properties["max_results"]["type"] == "integer"
+
+    # Check descriptions
+    assert properties["query"]["description"] == "The search query (can be None)"
+    assert (
+        properties["max_results"]["description"]
+        == "Maximum number of results (can be None)"
+    )
+
+    # Check required fields
+    required = bedrock_format["toolSpec"]["inputSchema"]["json"]["required"]
+    assert "query" in required
+    assert "max_results" not in required  # Has default value
+
+
 def test_get_representation_with_unified_parameters():
     """Test that get_representation works with unified parameters."""
 
