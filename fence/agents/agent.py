@@ -3,6 +3,7 @@ Agent class to orchestrate a flow that potentially calls tools or other, special
 """
 
 import logging
+
 import threading
 from contextlib import contextmanager
 
@@ -204,9 +205,7 @@ class Agent(BaseAgent):
 
         # Let's go!
         while iteration_count < self.max_iterations:
-
             with self._timeout_handler():
-
                 # Run the model with the current memory state
                 link = Link(
                     name=f"{self.identifier or 'agent'}_step_{iteration_count}",
@@ -224,7 +223,6 @@ class Agent(BaseAgent):
 
                 # Handle the response
                 match response:
-
                     # Best case: we have an answer
                     case response if "[ANSWER]" in response:
                         answer = self._extract_answer(response)
@@ -357,7 +355,6 @@ TimeoutError("Iteration exceeded maximum time")
 
 
 if __name__ == "__main__":
-
     setup_logging(log_level="debug", are_you_serious=False)
 
     # # Create the delegate agent
@@ -444,6 +441,17 @@ if __name__ == "__main__":
     #     response = agent.run(q)
     #     logger.critical(f"Response: {response}")
 
+    class CapitalizeNamesTool(BaseTool):
+        """
+        Tool to capitalize names given as input
+        """
+
+        def execute_tool(self, names: list[str], **kwargs):
+            capitalized_names = []
+            for name in names:
+                capitalized_names.append(name.capitalize())
+            return capitalized_names
+
     class AccountNameRetrieverTool(BaseTool):
         """
         Tool to retrieve the account holder name from a database.
@@ -466,6 +474,7 @@ if __name__ == "__main__":
     # )
 
     # Create the agents
+    # Create the accountant agents
     child_agent = Agent(
         identifier="child_accountant",
         description="An agent that can retrieve the account holder name",
@@ -480,3 +489,14 @@ if __name__ == "__main__":
         memory=FleetingMemory(),
     )
     result = parent_agent.run("what is the current account holders name?")
+
+    # Test agents with tools that take lists as input
+    agent_testing_tools_with_list_input = Agent(
+        identifier="agent_testing",
+        model=GPT4omini(source="agent"),
+        memory=FleetingMemory(),
+        tools=[CapitalizeNamesTool()],
+    )
+    list_input_tool_agent_result = agent_testing_tools_with_list_input.run(
+        "Capitalize these names: sarah, ovi, john."
+    )

@@ -4,17 +4,12 @@ Tools for agents
 
 import inspect
 import logging
+import types
 from abc import ABC, abstractmethod
-from typing import Any, Callable, get_args
-
+from typing import Any, Callable, get_args, get_origin, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from fence.utils.docstring_parser import DocstringParser
-
-# Union: For type hints when we need to reference Union types
-# get_origin: Gets the origin of a type (e.g., Union, List, etc.)
-# get_args: Gets the arguments of a type (e.g., for Union[int, None], returns (int, type(None)))
-
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +57,9 @@ class ToolParameter(BaseModel):
         """
 
         # Check if this is a union type (like 'int | None', 'str | int', etc.)
-        # Union types have a '__args__' attribute that contains the individual types
-        if hasattr(self.type_annotation, "__args__"):
-
+        # Type annotation's origin is Union for Python < 3.10, and types.UnionType for Python >= 3.10
+        origin = get_origin(self.type_annotation)
+        if origin is Union or origin is types.UnionType:
             # Extract the individual types from the union using get_args()
             # For 'int | None', this would return (int, type(None))
             args = get_args(self.type_annotation)
@@ -107,7 +102,6 @@ class ToolParameter(BaseModel):
 
 
 class BaseTool(ABC):
-
     def __init__(
         self,
         description: str | None = None,
@@ -494,7 +488,6 @@ def tool(func_or_description=None, *, description=None):
 
 
 if __name__ == "__main__":
-
     # Test different usage patterns
 
     # 1. @tool with positional description
@@ -534,6 +527,16 @@ if __name__ == "__main__":
         else:
             return temp  # Same unit or unsupported conversion
 
+    @tool(description="A tool that multiplies numbers from a list")
+    def multiply(numbers_to_multiply: list[int]) -> int:
+        """Multiply a list of numbers.
+        :param numbers_to_multiply: List of numbers to multiply
+        """
+        product = 1
+        for num in numbers_to_multiply:
+            product *= num
+        return product
+
     print("=== Tool with positional description ===")
     print(get_current_time.get_tool_description())
     print(get_current_time.run(location="New York"))
@@ -549,3 +552,7 @@ if __name__ == "__main__":
     print("\n=== Tool with keyword description ===")
     print(convert_temperature.get_tool_description())
     print(convert_temperature.run(temp=25.0, from_unit="celsius", to_unit="fahrenheit"))
+
+    print("\n=== Tool with list as argument ===")
+    print(multiply.get_tool_description())
+    print(multiply.run(numbers_to_multiply=[1, 2, 3]))
