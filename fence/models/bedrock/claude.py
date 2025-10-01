@@ -17,6 +17,7 @@ MODEL_ID_SONNET_3_7 = "anthropic.claude-3-7-sonnet-20250219-v1:0"
 MODEL_ID_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
 MODEL_ID_SONNET_4 = "anthropic.claude-sonnet-4-20250514-v1:0"
 MODEL_ID_OPUS_4 = "anthropic.claude-opus-4-20250514-v1:0"
+MODEL_ID_SONNET_4_5 = "anthropic.claude-sonnet-4-5-20250929-v1:0"
 
 
 class ClaudeInstant(BedrockBase):
@@ -143,6 +144,22 @@ class Claude4Opus(BedrockBase):
 
         self.model_id = MODEL_ID_OPUS_4
         self.model_name = "Claude 4 Opus"
+
+        super().__init__(**kwargs)
+
+
+class Claude45Sonnet(BedrockBase):
+    """Claude 4.5 Sonnet model class"""
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a Claude 4.5 Sonnet model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        self.model_id = MODEL_ID_SONNET_4_5
+        self.model_name = "Claude 4.5 Sonnet"
 
         super().__init__(**kwargs)
 
