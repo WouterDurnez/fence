@@ -329,6 +329,25 @@ class Claude3Haiku(Claude):
         )
 
 
+class Claude45Sonnet(Claude):
+    """
+    Claude 4.5 Sonnet model - High-performance model with early extended thinking
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a Claude 4.5 Sonnet model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(
+            model_id="claude-sonnet-4-5-20250929",
+            model_name="Claude 4.5 Sonnet [Anthropic]",
+            **kwargs,
+        )
+
+
 if __name__ == "__main__":
 
     setup_logging(log_level="DEBUG")
@@ -364,3 +383,29 @@ if __name__ == "__main__":
         "Write a Python function to calculate fibonacci numbers."
     )
     logger.info(f"Claude4Opus response: {response_opus}")
+
+    # Test Claude 3.7 Sonnet
+    logger.info("Testing Claude 3.7 Sonnet...")
+    claude37_sonnet = Claude37Sonnet()
+    response_37 = claude37_sonnet("Explain quantum computing in simple terms.")
+    logger.info(f"Claude37Sonnet response: {response_37}")
+
+    # Test Claude 3 Opus
+    logger.info("Testing Claude 3 Opus...")
+    claude3_opus = Claude3Opus()
+    response_3_opus = claude3_opus(
+        "Write a Python function to calculate fibonacci numbers."
+    )
+    logger.info(f"Claude3Opus response: {response_3_opus}")
+
+    # Test Claude 3 Haiku
+    logger.info("Testing Claude 3 Haiku...")
+    claude3_haiku = Claude3Haiku()
+    response_3_haiku = claude3_haiku("Explain quantum computing in simple terms.")
+    logger.info(f"Claude3Haiku response: {response_3_haiku}")
+
+    # Test Claude 4.5 Sonnet
+    logger.info("Testing Claude 4.5 Sonnet...")
+    claude45_sonnet = Claude45Sonnet()
+    response_45 = claude45_sonnet("Explain quantum computing in simple terms.")
+    logger.info(f"Claude45Sonnet response: {response_45}")
