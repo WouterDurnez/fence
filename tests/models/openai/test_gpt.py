@@ -2,14 +2,20 @@
 OpenAI GPT model tests
 """
 
-from unittest.mock import Mock
+import os
+from unittest.mock import Mock, patch
 
 import pytest
 
 from fence.models.openai.gpt import GPT4o
 from fence.templates.messages import Message, Messages
 
+# Check if OpenAI API key is present
+has_openai_api_key = os.environ.get("OPENAI_API_KEY") is not None
 
+
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
 def test_gpt_base_invoke_with_empty_prompt():
     """
     Test case for the invoke method of the GPTBase class with an empty prompt.
@@ -20,6 +26,8 @@ def test_gpt_base_invoke_with_empty_prompt():
         gpt.invoke(prompt="")
 
 
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
 def test_gpt_base_invoke_with_none_prompt():
     """
     Test case for the invoke method of the GPTBase class with a None prompt.
@@ -30,6 +38,8 @@ def test_gpt_base_invoke_with_none_prompt():
         gpt.invoke(prompt=None)
 
 
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
 def test_gpt_base_invoke_with_empty_messages_prompt():
     """
     Test case for the invoke method of the GPTBase class with an empty Messages prompt.
@@ -67,6 +77,8 @@ def test_gpt_base_invoke_with_messages_prompt():
     assert response == "mocked response"
 
 
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
 def test_gpt_base_invoke_with_invalid_prompt():
     """
     Test case for the invoke method of the GPTBase class with an invalid prompt.
@@ -77,6 +89,8 @@ def test_gpt_base_invoke_with_invalid_prompt():
         gpt.invoke(prompt=123)
 
 
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
 def test_gpt4o_init():
     """
     Test case for the __init__ method of the GPT4o class.

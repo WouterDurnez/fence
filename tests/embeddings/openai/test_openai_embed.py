@@ -1,10 +1,17 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from fence.embeddings.openai.openai import OpenAIEmbeddingsBase
 
+# Check if OpenAI API key is present
+has_openai_api_key = os.environ.get("OPENAI_API_KEY") is not None
 
+
+@pytest.mark.skipif(
+    not has_openai_api_key, reason="OpenAI API key not found in environment"
+)
 class MockOpenAIEmbeddings(OpenAIEmbeddingsBase):
     def __init__(self, **kwargs):
         """
