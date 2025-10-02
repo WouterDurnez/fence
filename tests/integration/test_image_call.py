@@ -13,8 +13,27 @@ from fence.models.openai import GPT4omini
 from fence.templates.messages import MessagesTemplate
 from fence.templates.models import ImageContent, Message, Messages, Source
 
-# Check if OpenAI API key is present
+# Check if OpenAI API key is present and valid
 has_openai_api_key = os.environ.get("OPENAI_API_KEY") is not None
+
+# Check if the OpenAI API key is valid and has sufficient quota
+def check_openai_api():
+    if not has_openai_api_key:
+        return False
+    try:
+        # Try a minimal API call to check if the key is valid
+        model = GPT4omini()
+        model("test")
+        return True
+    except ValueError as e:
+        if "insufficient_quota" in str(e) or "invalid_api_key" in str(e):
+            return False
+        raise
+    except Exception:
+        raise
+
+# Verify the OpenAI API key
+has_valid_openai_api = check_openai_api()
 
 
 # Fixture to set up dependencies
@@ -41,7 +60,8 @@ def setup_environment():
 
 # Test function
 @pytest.mark.skipif(
-    not has_openai_api_key, reason="OpenAI API key not found in environment"
+    not has_valid_openai_api,
+    reason="OpenAI API key not found in environment or has insufficient quota"
 )
 def test_image_processing_response(setup_environment):
     """Test that the response is successfully returned without error."""

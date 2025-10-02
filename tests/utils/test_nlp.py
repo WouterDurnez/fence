@@ -9,8 +9,27 @@ import pytest
 from fence.models.openai.gpt import GPT4omini
 from fence.utils.nlp import LLMHelper, TextChunker, get_first_n_words, get_word_count
 
-# Check if OpenAI API key is present
+# Check if OpenAI API key is present and valid
 has_openai_api_key = os.environ.get("OPENAI_API_KEY") is not None
+
+# Check if the OpenAI API key is valid and has sufficient quota
+def check_openai_api():
+    if not has_openai_api_key:
+        return False
+    try:
+        # Try a minimal API call to check if the key is valid
+        model = GPT4omini()
+        model("test")
+        return True
+    except ValueError as e:
+        if "insufficient_quota" in str(e) or "invalid_api_key" in str(e):
+            return False
+        raise
+    except Exception:
+        raise
+
+# Verify the OpenAI API key
+has_valid_openai_api = check_openai_api()
 
 ##############
 # Test Utils #
@@ -164,7 +183,8 @@ def test_remove_text_references(mocker, llm_helper):
 
 
 @pytest.mark.skipif(
-    not has_openai_api_key, reason="OpenAI API key not found in environment"
+    not has_valid_openai_api,
+    reason="OpenAI API key not found in environment or has insufficient quota"
 )
 def test_check_relevancy_using_model(mocker, llm_helper):
     """
