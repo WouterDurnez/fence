@@ -1,5 +1,5 @@
 """
-Memory classes.
+AWS DynamoDB memory class.
 """
 
 import logging
