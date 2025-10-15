@@ -12,42 +12,49 @@
 
 # 🤺 Fence
 
-`Fence` is a simple, lightweight library for LLM communication. A lot of the functionality was inspired by/derived of LangChain (the OG LLM package) basics, since that's how the package was born - as a stripped down version of LangChain functionality, with cooler names.
+**The Bloat Moat!** A lightweight, production-ready library for LLM communication and agentic workflows. Born from the need for something simpler than LangChain, Fence gives you powerful LLM orchestration without the heavyweight dependencies.
 
-## 🤔 Raison d'être
+Think of it as the Swiss Army knife for LLM interactions—sharp, reliable, and it won't weigh down your backpack (or your Docker image).
 
-The simple answer: by accident. The slightly longer answer: LangChain used to be (is?) a pretty big package with a ton of dependencies. The upside is that it's powerful for PoC purposes, because it has it all.
+---
 
-The downsides:
+## 🤔 Why Fence?
 
-- It's **_big_**. It takes up a lot of space (which can be an issue in some environments/runtimes), often for functionality that isn't needed.
-- It's fairly **_complex_**. It's a big package with a lot of functionality, which can be overwhelming for new users.
-- It **_wasn't exactly dependable_** in an industrial setting before. Version jumps were common, and the package was often broken after a new release.
+**The short answer:** By accident.
 
-As a result, many developers (particularly those working in large production environments) have advocated for more lightweight, custom functionality that favors stability and robustness.
+**The slightly longer answer:** LangChain used to be (is?) a pretty big package with a ton of dependencies. Great for PoCs, but in production? Not so much.
 
-### Circling back: why Fence?
+### The problems we faced:
 
-Since our work was in a production environment, mostly dealing with Bedrock, we just started building some **basic components** from scratch. We needed a way to communicate with our models, which turned out to as the `Link` class (_wink wink_).
-Then, some other things were added left and right, and this eventually turned into a miniature package. Not in small part because it was fun to go down this road. But mostly because it strikes the right balance between convenience and flexiblity.
+- **🐘 It's BIG.** Takes up serious space (problematic in Lambda, containers, edge environments)
+- **🌀 It's COMPLEX.** Overwhelming for new users, hard to debug in production
+- **💥 It BREAKS.** Frequent breaking changes, version jumps that made us cry
 
-Naturally, it's nowhere as powerful as, for instance, LangChain. If you want to build a quick PoC with relatively complex logic, maybe go for the OG instead. If you want to be set on your way with a simple, lightweight package that's easy to understand and extend, Fence might be the way to go.
+As a result, many developers (especially those in large production environments) started building lightweight, custom solutions that favor **stability** and **robustness** over feature bloat.
 
-## 🛠️ How do I use it?
+### Enter Fence 🤺
 
-Fence just has a few basic components. See the [notebooks](notebooks) for examples on how to use them. Documentation is coming soon, but for now, you can check out the [source code](fence) for more details.
+We started building basic components from scratch for our Bedrock-heavy production environment. First came the `Link` class (_wink wink_), then templates, then agents... and before we knew it, we had a miniature package that was actually _fun_ to use.
+
+**Fence strikes the perfect balance between convenience and flexibility.**
+
+> **Note:** Fence isn't trying to replace LangChain for complex PoCs. But if you want a simple, lightweight, production-ready package that's easy to understand and extend, you're in the right place.
+
+---
 
 ## 📦 Installation
-
-You can install Fence from PyPI:
 
 ```bash
 pip install fence-llm
 ```
 
-## 👋 Look ma, no dependencies (kinda)!
+That's it. Seriously. No 500MB of transitive dependencies.
 
-Here's a hello world example:
+---
+
+## 🚀 Quick Start
+
+### Hello World (The Obligatory Example)
 
 ```python
 from fence.links import Link
@@ -57,36 +64,191 @@ from fence.models.openai import GPT4omini
 # Create a link
 link = Link(
     model=GPT4omini(),
-    template=StringTemplate("Write a poem about the value of a {topic}!"),
-    name='hello_world_link'
+    template=StringTemplate("Write a haiku about {topic}"),
+    name='haiku_generator'
 )
 
-# Run the link
-output = link.run(topic='fence')['state']
+# Run it
+output = link.run(topic='fencing')['state']
 print(output)
 ```
 
-This will output something like:
+**Output:**
 
-```bash
-[2024-10-04 17:45:15] [ℹ️ INFO] [links.run:203]              Executing <hello_world_link> Link
-Sturdy wood and nails,
-Boundaries draw peace and calm,
-Guarding hearts within.
+```
+[2024-10-04 17:45:15] [ℹ️ INFO] [links.run:203]              Executing <haiku_generator> Link
+Blades flash in the light,
+En garde, the dance begins now,
+Touch—victory's mine.
 ```
 
-Much wow, very next level. There's more in the [notebook](notebooks) section, with a _lot_ more to cover!
+Much wow. Very poetry. 🎭
 
-## 💪 Features
+---
 
-### What can I do with Fence?
+## 💪 What Can Fence Do?
 
-- **Uniform interface for `LLMs`**. Since our main use case was Bedrock, we built Fence to work with Bedrock models. However, it also has openAI support, and it's easy to extend to other models (contributors welcome!)
-- **Links and Chains** help you build complex pipelines with multiple models. This is a feature that's been around since LangChain, and it's still here. You can parametrize templates, and pass the output of one model to another.
-- **Template classes** that handle the basics, and that work across models (e.g., a MessageTemplate can be sent to a Bedrock Claude3 model, _or_ to an openAI model - system/user/assistant formatting is handled under the hood).
-- **Agents** to move on to the sweet, sweet next level of LLM orchestration. Built using the ReAct pattern.
-- **Basic utils on board** for typical tasks like retries, parallelization, logging, output parsers, etc.
+Fence is built around a few core concepts that work together beautifully:
+
+### 🤖 **Multi-Provider LLM Support**
+
+Uniform interface across AWS Bedrock (Claude, Nova), OpenAI (GPT-4o), Anthropic, Google Gemini, Ollama, and Mistral. Switch models with a single line change.
+
+👉 **[See all supported models →](docs/MODELS.md)**
+
+### 🔗 **Links & Chains**
+
+Composable building blocks that combine models, templates, and parsers. Chain them together for complex workflows.
+
+👉 **[Learn about Links & Chains →](docs/LINKS_AND_CHAINS.md)**
+
+### 🤖 **Agentic Workflows** ⭐
+
+The crown jewel! Production-ready agents using the ReAct pattern:
+
+- **`Agent`** - Classic ReAct with tool use and multi-level delegation
+- **`BedrockAgent`** - Native Bedrock tool calling with streaming
+- **`ChatAgent`** - Conversational agents for multi-agent systems
+
+👉 **[Dive into Agents →](docs/AGENTS.md)**
+
+### 🔌 **MCP Integration**
+
+First-class support for the Model Context Protocol. Connect to MCP servers and automatically expose their tools to your agents.
+
+👉 **[Explore MCP Integration →](docs/MCP.md)**
+
+### 🎭 **Multi-Agent Systems**
+
+Build collaborative agent systems with `RoundTable` where multiple agents discuss and solve problems together.
+
+👉 **[Build Multi-Agent Systems →](docs/MULTI_AGENT.md)**
+
+### 🧠 **Memory Systems**
+
+Persistent and ephemeral memory backends (DynamoDB, SQLite, in-memory) for stateful conversations.
+
+👉 **[Configure Memory →](docs/MEMORY.md)**
+
+### 🛠️ **Tools & Utilities**
+
+Custom tool creation, built-in tools, retry logic, parallelization, output parsers, logging callbacks, and benchmarking.
+
+👉 **[Explore Tools & Utilities →](docs/TOOLS_AND_UTILITIES.md)**
+
+---
+
+## 📚 Documentation
+
+- **[Models](docs/MODELS.md)** - All supported LLM providers and how to use them
+- **[Links & Chains](docs/LINKS_AND_CHAINS.md)** - Building blocks for LLM workflows
+- **[Agents](docs/AGENTS.md)** - ReAct agents, tool use, and delegation
+- **[MCP Integration](docs/MCP.md)** - Model Context Protocol support
+- **[Multi-Agent Systems](docs/MULTI_AGENT.md)** - RoundTable and collaborative agents
+- **[Memory](docs/MEMORY.md)** - Persistent and ephemeral memory backends
+- **[Tools & Utilities](docs/TOOLS_AND_UTILITIES.md)** - Custom tools, parsers, and helpers
+
+---
+
+## 🎯 Examples
+
+### Simple Agent with Tools
+
+```python
+from fence.agents import Agent
+from fence.models.openai import GPT4omini
+from fence.tools.math import CalculatorTool
+
+agent = Agent(
+    identifier="math_wizard",
+    model=GPT4omini(source="demo"),
+    tools=[CalculatorTool()],
+)
+
+result = agent.run("What is 1337 * 42 + 999?")
+print(result)  # Agent thinks, uses calculator, and answers!
+```
+
+### BedrockAgent with MCP
+
+```python
+from fence.agents.bedrock import BedrockAgent
+from fence.mcp.client import MCPClient
+from fence.models.bedrock import Claude37Sonnet
+
+# Connect to MCP server
+mcp_client = MCPClient(
+    transport_type="streamable_http",
+    url="https://your-mcp-server.com/mcp"
+)
+
+# Create agent with MCP tools
+agent = BedrockAgent(
+    identifier="mcp_agent",
+    model=Claude37Sonnet(region="us-east-1"),
+    mcp_clients=[mcp_client],  # Tools auto-registered!
+)
+
+result = agent.run("Search for customer data")
+```
+
+### Multi-Agent Collaboration
+
+```python
+from fence.troupe import RoundTable
+from fence.agents import ChatAgent
+from fence.models.openai import GPT4omini
+
+# Create specialized agents
+detective = ChatAgent(
+    identifier="Detective",
+    model=GPT4omini(source="roundtable"),
+    profile="You are a sharp detective."
+)
+
+scientist = ChatAgent(
+    identifier="Scientist",
+    model=GPT4omini(source="roundtable"),
+    profile="You are a forensic scientist."
+)
+
+# Let them collaborate
+round_table = RoundTable(agents=[detective, scientist])
+transcript = round_table.run(
+    prompt="A painting was stolen. Let's investigate!",
+    max_rounds=3
+)
+```
+
+**More examples:**
+
+- 📓 [Jupyter Notebooks](notebooks/) - Interactive tutorials
+- 🎬 [Demo Scripts](demo/) - Runnable examples
+
+---
 
 ## 🤝 Contributing
 
-We welcome contributions! Check out the [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+We welcome contributions! Whether it's:
+
+- 🐛 Bug fixes
+- ✨ New features (especially new model providers!)
+- 📝 Documentation improvements
+- 🧪 More tests
+- 🎨 Better examples
+
+Check out [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+## 📄 License
+
+MIT License - see [LICENSE.txt](LICENSE.txt) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+Inspired by LangChain, built for production, made with ❤️ by developers who got tired of dependency hell.
+
+**Now go build something awesome! 🚀**
