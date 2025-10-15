@@ -191,8 +191,7 @@ def test_add_message_unsupported_content_type(agentcore_memory):
         agentcore_memory.add_message("user", mock_content)
 
 
-@patch("fence.memory.agentcore.logger")
-def test_get_messages(mock_logger, agentcore_memory, mock_client, sample_events):
+def test_get_messages(agentcore_memory, mock_client, sample_events):
     """Test getting messages from AgentCore."""
     mock_client.list_events.return_value = sample_events
 
