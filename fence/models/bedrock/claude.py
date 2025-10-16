@@ -15,6 +15,7 @@ MODEL_ID_SONNET_3_5_V2 = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 MODEL_ID_SONNET_3_5 = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 MODEL_ID_SONNET_3_7 = "anthropic.claude-3-7-sonnet-20250219-v1:0"
 MODEL_ID_HAIKU = "anthropic.claude-3-haiku-20240307-v1:0"
+MODEL_ID_HAIKU_4_5 = "anthropic.claude-haiku-4-5-20251001-v1:0"
 MODEL_ID_SONNET_4 = "anthropic.claude-sonnet-4-20250514-v1:0"
 MODEL_ID_OPUS_4 = "anthropic.claude-opus-4-20250514-v1:0"
 MODEL_ID_SONNET_4_5 = "anthropic.claude-sonnet-4-5-20250929-v1:0"
@@ -48,6 +49,22 @@ class ClaudeHaiku(BedrockBase):
 
         self.model_id = MODEL_ID_HAIKU
         self.model_name = "Claude Haiku"
+
+        super().__init__(**kwargs)
+
+
+class ClaudeHaiku45(BedrockBase):
+    """Claude Haiku 4.5 model class"""
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a Claude Haiku 4.5 model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        self.model_id = MODEL_ID_HAIKU_4_5
+        self.model_name = "Claude Haiku 4.5"
 
         super().__init__(**kwargs)
 

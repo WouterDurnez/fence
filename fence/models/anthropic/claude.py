@@ -328,6 +328,23 @@ class Claude3Haiku(Claude):
             **kwargs,
         )
 
+class Claude45Haiku(Claude):
+    """
+    Claude 4.5 Haiku model - Fast and compact model for near-instant responsiveness
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a Claude 4.5 Haiku model
+        :param str source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+
+        super().__init__(
+            model_id="claude-haiku-4-5-20251001",
+            model_name="Claude 4.5 Haiku [Anthropic]",
+            **kwargs,
+        )
 
 class Claude45Sonnet(Claude):
     """
