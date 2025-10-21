@@ -5,7 +5,7 @@ Tools for agents
 import inspect
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Callable, get_args
+from typing import Any, Callable, get_args, get_origin, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -47,7 +47,7 @@ class ToolParameter(BaseModel):
         """Convert Python type to JSON schema type string.
 
         This method takes a Python type annotation (which could be a simple type like `int`
-        or a complex type like `int | None`) and converts it to a JSON schema type string
+        or a complex type like `int | None` or `list[str]`) and converts it to a JSON schema type string
         that can be used in API specifications.
 
         Examples:
@@ -61,17 +61,12 @@ class ToolParameter(BaseModel):
         :return: The JSON schema type string
         """
 
-        # Check if this is a union type (like 'int | None', 'str | int', etc.)
-        # Union types have a '__args__' attribute that contains the individual types
-        if hasattr(self.type_annotation, "__args__"):
+        origin = get_origin(self.type_annotation)
 
-            # Extract the individual types from the union using get_args()
-            # For 'int | None', this would return (int, type(None))
+        # Handle Union types (int | None, str | int, etc.)
+        if origin is Union:
             args = get_args(self.type_annotation)
-
             # For union types, we want to find the first non-None type
-            # This is useful for cases like 'int | None' where we want 'int'
-            # We iterate through the args and take the first one that isn't None
             for arg in args:
                 if arg is not type(None):  # Skip None types
                     type_name = getattr(arg, "__name__", "string")
@@ -79,9 +74,13 @@ class ToolParameter(BaseModel):
             else:
                 # If all args are None (unlikely but possible), fallback to string
                 type_name = "string"
+
+        # Handle generic types (list[str], dict[str, int], etc.)
+        elif origin is not None:
+            type_name = getattr(origin, "__name__", "string")
+
+        # Handle simple types (int, str, etc.)
         else:
-            # This is a simple type (like 'int', 'str', etc.)
-            # Get the type name, with 'string' as fallback if __name__ doesn't exist
             type_name = getattr(self.type_annotation, "__name__", "string")
 
         # Map Python type names to JSON schema type strings
