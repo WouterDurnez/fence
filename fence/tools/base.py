@@ -6,6 +6,7 @@ import inspect
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, get_args, get_origin, Union
+import types
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -63,13 +64,13 @@ class ToolParameter(BaseModel):
 
         origin = get_origin(self.type_annotation)
 
-        # Handle Union types (int | None, str | int, etc.)
-        if origin is Union:
+        # Handle Union types (both typing.Union and types.UnionType for int | None syntax)
+        if origin in (Union, getattr(types, "UnionType", Union)):
             args = get_args(self.type_annotation)
             # For union types, we want to find the first non-None type
             for arg in args:
                 if arg is not type(None):  # Skip None types
-                    type_name = getattr(arg, "__name__", "string")
+                    type_name = ToolParameter.type_name(arg)
                     break
             else:
                 # If all args are None (unlikely but possible), fallback to string
@@ -77,11 +78,11 @@ class ToolParameter(BaseModel):
 
         # Handle generic types (list[str], dict[str, int], etc.)
         elif origin is not None:
-            type_name = getattr(origin, "__name__", "string")
+            type_name = ToolParameter.type_name(origin)
 
         # Handle simple types (int, str, etc.)
         else:
-            type_name = getattr(self.type_annotation, "__name__", "string")
+            type_name = ToolParameter.type_name(self.type_annotation)
 
         # Map Python type names to JSON schema type strings
         # This mapping is used by various LLM APIs and tools that expect JSON schema
@@ -99,6 +100,12 @@ class ToolParameter(BaseModel):
         # This ensures we always return a valid JSON schema type
         return type_mapping.get(type_name, "string")
 
+    @staticmethod
+    def type_name(tp: Any) -> str:
+        origin = get_origin(tp)
+        if origin:
+            return getattr(origin, "__name__", str(origin))
+        return getattr(tp, "__name__", str(tp))
 
 ##############
 # Base class #
@@ -237,7 +244,7 @@ class BaseTool(ABC):
         formatted_params = []
         for param_name, param in self.parameters.items():
             # Get parameter type
-            param_type = param.type_annotation.__name__
+            param_type = ToolParameter.type_name(param.type_annotation)
 
             # Check if parameter is required
             required_str = "(required)" if param.required else "(optional)"
@@ -260,6 +267,7 @@ class BaseTool(ABC):
 - Parameters: {params_str}
 """
 
+
     def format_toml(self):
         """
         Returns a TOML-formatted key-value pair of the tool name,
@@ -273,7 +281,7 @@ class BaseTool(ABC):
                 argument_string += (
                     f"[[tools.tool_params]]\n"
                     f'name = "{param_name}"\n'
-                    f'type = "{param.type_annotation.__name__}"\n'
+                    f'type = "{ToolParameter.type_name(param.type_annotation)}"\n'
                     f'description = "{param.description}"\n'
                 )
         else:
