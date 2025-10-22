@@ -841,3 +841,104 @@ def test_parameters_docstring_fallback():
     assert tool.parameters["age"].description == "Age from docstring"
     assert tool.parameters["name"].required
     assert tool.parameters["age"].required
+
+
+def test_tool_parameter_generic_types():
+    """Test that ToolParameter correctly handles generic types like list[str], dict[str, int]."""
+
+    # Test list[str] (should return "array")
+    list_str_param = ToolParameter(name="test", type_annotation=list[str], required=True)
+    assert list_str_param.json_type == "array"
+
+    # Test dict[str, int] (should return "object")
+    dict_str_int_param = ToolParameter(name="test", type_annotation=dict[str, int], required=True)
+    assert dict_str_int_param.json_type == "object"
+
+    # Test list[int] (should return "array")
+    list_int_param = ToolParameter(name="test", type_annotation=list[int], required=True)
+    assert list_int_param.json_type == "array"
+
+    # Test dict[str, str] (should return "object")
+    dict_str_str_param = ToolParameter(name="test", type_annotation=dict[str, str], required=True)
+    assert dict_str_str_param.json_type == "object"
+
+
+def test_tool_parameter_generic_types_with_tool_decorator():
+    """Test that the @tool decorator correctly handles generic types."""
+
+    @tool("A tool with generic type parameters")
+    def generic_type_tool(
+        tags: list[str],
+        metadata: dict[str, int],
+        scores: list[float] = None,
+    ):
+        """A tool that uses generic types in its parameters."""
+        return f"tags: {tags}, metadata: {metadata}, scores: {scores}"
+
+    # Test that the tool can be created without errors
+    assert generic_type_tool.get_tool_name() == "GenericTypeTool"
+    assert generic_type_tool.get_tool_description() == "A tool with generic type parameters"
+
+    # Test that parameters have correct JSON types
+    params = generic_type_tool.parameters
+    assert params["tags"].json_type == "array"
+    assert params["metadata"].json_type == "object"
+    assert params["scores"].json_type == "array"
+
+    # Test execution with generic type parameters
+    result = generic_type_tool.run(
+        tags=["python", "testing"],
+        metadata={"count": 5, "priority": 1}
+    )
+    assert "tags: ['python', 'testing']" in result
+    assert "metadata: {'count': 5, 'priority': 1}" in result
+
+
+def test_tool_parameter_generic_types_in_base_tool():
+    """Test that BaseTool correctly handles generic types in parameter extraction."""
+
+    class GenericTypeBaseTool(BaseTool):
+        """A base tool that uses generic types in its parameters."""
+
+        def execute_tool(
+            self,
+            items: list[str],
+            config: dict[str, bool],
+            numbers: list[int] = None,
+            environment: dict = None,
+            **kwargs,
+        ):
+            """Execute the tool with generic type parameters.
+
+            :param items: List of string items
+            :param config: Configuration dictionary
+            :param numbers: Optional list of numbers
+            """
+            return f"Items: {items}, Config: {config}, Numbers: {numbers}"
+
+    tool = GenericTypeBaseTool()
+
+    # Test that parameters are correctly extracted
+    assert "items" in tool.parameters
+    assert "config" in tool.parameters
+    assert "numbers" in tool.parameters
+
+    # Test that generic types are correctly handled
+    assert tool.parameters["items"].json_type == "array"
+    assert tool.parameters["config"].json_type == "object"
+    assert tool.parameters["numbers"].json_type == "array"
+
+    # Test that required/optional status is correct
+    assert tool.parameters["items"].required
+    assert tool.parameters["config"].required
+    assert not tool.parameters["numbers"].required
+
+    # Test execution
+    result = tool.run(
+        items=["a", "b"],
+        config={"enabled": True},
+        numbers=[1, 2, 3]
+    )
+    assert "Items: ['a', 'b']" in result
+    assert "Config: {'enabled': True}" in result
+    assert "Numbers: [1, 2, 3]" in result
