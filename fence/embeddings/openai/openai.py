@@ -89,6 +89,24 @@ class OpenAIEmbeddings(OpenAIEmbeddingsBase):
         self.model_name = f"{model_id.capitalize()}"
 
 
+class TextEmbedding3Large(OpenAIEmbeddings):
+    """
+    Convenience class for text-embedding-3-large
+    """
+
+    def __init__(self, source: str | None = None, **kwargs):
+        super().__init__(model_id="text-embedding-3-large", source=source, **kwargs)
+
+
+class TextEmbedding3Small(OpenAIEmbeddings):
+    """
+    Convenience class for text-embedding-3-small
+    """
+
+    def __init__(self, source: str | None = None, **kwargs):
+        super().__init__(model_id="text-embedding-3-small", source=source, **kwargs)
+
+
 if __name__ == "__main__":
     # Initialize OpenAI embeddings model
     openai = OpenAIEmbeddings(source="openai", model_id="text-embedding-ada-002")

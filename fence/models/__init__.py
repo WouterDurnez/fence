@@ -11,7 +11,17 @@ from .gemini.gemini import (  # noqa: F401
     GeminiFlash2_0,
 )
 from .ollama.ollama import Llama3_1, Ollama, OllamaBase  # noqa: F401
-from .openai.gpt import GPT4o, GPTBase  # noqa: F401
+from .openai.gpt import (  # noqa: F401
+    GPTBase,
+    GPT4o,
+    GPT4,
+    GPT4omini,
+    GPT4_1,
+    GPT4_1Mini,
+    GPT4_1Nano,
+    O3Mini,
+    O4Mini,
+)
 
 __all__ = [
     "LLM",
@@ -22,8 +32,15 @@ __all__ = [
     "Llama3_1",
     "Ollama",
     "OllamaBase",
-    "GPT4o",
     "GPTBase",
+    "GPT4o",
+    "GPT4",
+    "GPT4omini",
+    "GPT4_1",
+    "GPT4_1Mini",
+    "GPT4_1Nano",
+    "O3Mini",
+    "O4Mini",
     "GeminiBase",
     "Gemini",
     "Gemini1_5_Pro",

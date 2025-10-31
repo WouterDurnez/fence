@@ -7,7 +7,17 @@ import os
 
 import requests
 
-__all__ = ["GPT", "GPT4o", "GPT4", "GPT4omini"]
+__all__ = [
+    "GPT",
+    "GPT4o",
+    "GPT4",
+    "GPT4omini",
+    "GPT4_1",
+    "GPT4_1Mini",
+    "GPT4_1Nano",
+    "O3Mini",
+    "O4Mini",
+]
 
 import logging
 
@@ -131,9 +141,10 @@ class GPTBase(LLM, MessagesMixin):
                 f"Prompt must be a string or a list of messages. Got {type(prompt)}"
             )
 
-        # Build request body
+        # Build request body - filter out None values as some models don't accept them
+        filtered_kwargs = {k: v for k, v in self.model_kwargs.items() if v is not None}
         request_body = {
-            **self.model_kwargs,
+            **filtered_kwargs,
             "messages": messages,
             "model": self.model_id,
         }
@@ -227,6 +238,76 @@ class GPT4omini(GPT):
         :param **kwargs: Additional keyword arguments
         """
         super().__init__(model_id="gpt-4o-mini", **kwargs)
+
+
+class GPT4_1(GPT):
+    """
+    GPT-4.1 model
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a GPT-4.1 model
+        :param source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+        super().__init__(model_id="gpt-4.1", **kwargs)
+
+
+class GPT4_1Mini(GPT):
+    """
+    GPT-4.1 Mini model
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a GPT-4.1 Mini model
+        :param source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+        super().__init__(model_id="gpt-4.1-mini", **kwargs)
+
+
+class GPT4_1Nano(GPT):
+    """
+    GPT-4.1 Nano model
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a GPT-4.1 Nano model
+        :param source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+        super().__init__(model_id="gpt-4.1-nano", **kwargs)
+
+
+class O3Mini(GPT):
+    """
+    o3-mini reasoning model
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize an o3-mini model
+        :param source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+        super().__init__(model_id="o3-mini", **kwargs)
+
+
+class O4Mini(GPT):
+    """
+    o4-mini reasoning model
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize an o4-mini model
+        :param source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+        super().__init__(model_id="o4-mini", **kwargs)
 
 
 if __name__ == "__main__":

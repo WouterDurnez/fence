@@ -7,7 +7,14 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from fence.models.openai.gpt import GPT4o
+from fence.models.openai.gpt import (
+    GPT4o,
+    GPT4_1,
+    GPT4_1Mini,
+    GPT4_1Nano,
+    O3Mini,
+    O4Mini,
+)
 from fence.templates.messages import Message, Messages
 
 # Check if OpenAI API key is present
@@ -100,3 +107,129 @@ def test_gpt4o_init():
     assert gpt.source == "test"
     assert gpt.model_id == "gpt-4o"
     assert gpt.model_name == "GPT 4o"
+
+
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
+def test_gpt41_init():
+    gpt = GPT4_1(source="test")
+    assert gpt.source == "test"
+    assert gpt.model_id == "gpt-4.1"
+    assert gpt.model_name == "GPT 4.1"
+
+
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
+def test_gpt41mini_init():
+    gpt = GPT4_1Mini(source="test")
+    assert gpt.source == "test"
+    assert gpt.model_id == "gpt-4.1-mini"
+    assert gpt.model_name == "GPT 4.1 mini"
+
+
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
+def test_o3mini_init():
+    gpt = O3Mini(source="test")
+    assert gpt.source == "test"
+    assert gpt.model_id == "o3-mini"
+    assert gpt.model_name == "o3 mini"
+
+
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
+def test_o4mini_init():
+    gpt = O4Mini(source="test")
+    assert gpt.source == "test"
+    assert gpt.model_id == "o4-mini"
+    assert gpt.model_name == "o4 mini"
+
+
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
+def test_gpt41nano_init():
+    gpt = GPT4_1Nano(source="test")
+    assert gpt.source == "test"
+    assert gpt.model_id == "gpt-4.1-nano"
+    assert gpt.model_name == "GPT 4.1 nano"
+
+
+# Check if the OpenAI API key is valid and has sufficient quota
+def check_openai_api():
+    if not has_openai_api_key:
+        return False
+    try:
+        # Try a minimal API call to check if the key is valid
+        model = GPT4o()
+        model("test")
+        return True
+    except ValueError as e:
+        if "insufficient_quota" in str(e) or "invalid_api_key" in str(e):
+            return False
+        raise
+    except Exception:
+        raise
+
+
+# Verify the OpenAI API key
+has_valid_openai_api = check_openai_api()
+
+
+@pytest.mark.skipif(
+    not has_valid_openai_api,
+    reason="OpenAI API key not found in environment or has insufficient quota"
+)
+def test_gpt41_simple_prompt():
+    """Test GPT4_1 with a simple prompt"""
+    model = GPT4_1(source="test")
+    response = model("Say 'Hello' in one word.")
+    assert isinstance(response, str)
+    assert len(response) > 0
+
+
+@pytest.mark.skipif(
+    not has_valid_openai_api,
+    reason="OpenAI API key not found in environment or has insufficient quota"
+)
+def test_gpt41mini_simple_prompt():
+    """Test GPT4_1Mini with a simple prompt"""
+    model = GPT4_1Mini(source="test")
+    response = model("Say 'Hello' in one word.")
+    assert isinstance(response, str)
+    assert len(response) > 0
+
+
+@pytest.mark.skipif(
+    not has_valid_openai_api,
+    reason="OpenAI API key not found in environment or has insufficient quota"
+)
+def test_gpt41nano_simple_prompt():
+    """Test GPT4_1Nano with a simple prompt"""
+    model = GPT4_1Nano(source="test")
+    response = model("Say 'Hello' in one word.")
+    assert isinstance(response, str)
+    assert len(response) > 0
+
+
+@pytest.mark.skipif(
+    not has_valid_openai_api,
+    reason="OpenAI API key not found in environment or has insufficient quota"
+)
+def test_o3mini_simple_prompt():
+    """Test O3Mini with a simple prompt"""
+    model = O3Mini(source="test")
+    response = model("Say 'Hello' in one word.")
+    assert isinstance(response, str)
+    assert len(response) > 0
+
+
+@pytest.mark.skipif(
+    not has_valid_openai_api,
+    reason="OpenAI API key not found in environment or has insufficient quota"
+)
+def test_o4mini_simple_prompt():
+    """Test O4Mini with a simple prompt"""
+    model = O4Mini(source="test")
+    response = model("Say 'Hello' in one word.")
+    assert isinstance(response, str)
+    assert len(response) > 0
