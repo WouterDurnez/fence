@@ -170,8 +170,8 @@ class Gemini(GeminiBase, MessagesMixin):
 
     def __init__(self, model_id: str, source: str | None = None, **kwargs):
         """
-        Initialize the Ollama model
-        :param str model_id: The model ID as defined in the Ollama service
+        Initialize the Gemini model
+        :param str model_id: The model ID as defined in the Gemini service
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param bool auto_pull: Whether to automatically pull the model if it is not found
         :param **kwargs: Additional keyword arguments
@@ -218,6 +218,13 @@ class Gemini2_5_Flash(Gemini):
 
     def __init__(self, source: str | None = None, **kwargs):
         super().__init__(model_id="gemini-2.5-flash", source=source, **kwargs)
+
+
+class Gemini2_5_FlashLite(Gemini):
+    """Gemini 2.5 Flash-Lite model"""
+
+    def __init__(self, source: str | None = None, **kwargs):
+        super().__init__(model_id="gemini-2.5-flash-lite", source=source, **kwargs)
 
 
 if __name__ == "__main__":
