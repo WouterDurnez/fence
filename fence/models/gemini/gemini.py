@@ -206,6 +206,20 @@ class Gemini1_5_Pro(Gemini):
         super().__init__(model_id="gemini-1.5-pro", source=source, **kwargs)
 
 
+class Gemini2_5_Pro(Gemini):
+    """Gemini 2.5 Pro model"""
+
+    def __init__(self, source: str | None = None, **kwargs):
+        super().__init__(model_id="gemini-2.5-pro", source=source, **kwargs)
+
+
+class Gemini2_5_Flash(Gemini):
+    """Gemini 2.5 Flash model"""
+
+    def __init__(self, source: str | None = None, **kwargs):
+        super().__init__(model_id="gemini-2.5-flash", source=source, **kwargs)
+
+
 if __name__ == "__main__":
 
     gemini = Gemini1_5_Pro(source="test")
