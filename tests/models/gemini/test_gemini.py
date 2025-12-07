@@ -7,7 +7,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from fence.models.gemini.gemini import Gemini
+from fence.models.gemini.gemini import (
+    Gemini,
+    Gemini1_5_Pro,
+    Gemini2_5_Flash,
+    Gemini2_5_Pro,
+    GeminiFlash1_5,
+    GeminiFlash2_0,
+)
 from fence.templates.messages import Message, Messages
 
 # Check if Google Gemini API key is present
@@ -108,7 +115,7 @@ def test_gemini_flash2_0():
     Test case for the GeminiFlash2_0 class.
     This test checks if the model_id is correctly set to "gemini-2.0-flash".
     """
-    gemini = Gemini(source="test", model_id="gemini-2.0-flash")
+    gemini = GeminiFlash2_0(source="test")
     assert gemini.model_id == "gemini-2.0-flash"
 
 
@@ -120,7 +127,7 @@ def test_gemini_flash1_5():
     Test case for the GeminiFlash1_5 class.
     This test checks if the model_id is correctly set to "gemini-1.5-flash".
     """
-    gemini = Gemini(source="test", model_id="gemini-1.5-flash")
+    gemini = GeminiFlash1_5(source="test")
     assert gemini.model_id == "gemini-1.5-flash"
 
 
@@ -132,5 +139,28 @@ def test_gemini_1_5_pro():
     Test case for the Gemini1_5_Pro class.
     This test checks if the model_id is correctly set to "gemini-1.5-pro".
     """
-    gemini = Gemini(source="test", model_id="gemini-1.5-pro")
+    gemini = Gemini1_5_Pro(source="test")
     assert gemini.model_id == "gemini-1.5-pro"
+
+@pytest.mark.skipif(
+    not has_gemini_api_key, reason="Google Gemini API key not found in environment"
+)
+def test_gemini_2_5_pro():
+    """
+    Test case for the Gemini2_5_Pro class.
+    This test checks if the model_id is correctly set to "gemini-2.5-pro".
+    """
+    gemini = Gemini2_5_Pro(source="test")
+    assert gemini.model_id == "gemini-2.5-pro"
+
+
+@pytest.mark.skipif(
+    not has_gemini_api_key, reason="Google Gemini API key not found in environment"
+)
+def test_gemini_2_5_flash():
+    """
+    Test case for the Gemini2_5_Flash class.
+    This test checks if the model_id is correctly set to "gemini-2.5-flash".
+    """
+    gemini = Gemini2_5_Flash(source="test")
+    assert gemini.model_id == "gemini-2.5-flash"

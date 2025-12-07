@@ -159,6 +159,8 @@ from fence.models.gemini import (
     Gemini1_5_Pro,
     GeminiFlash1_5,
     GeminiFlash2_0,
+    Gemini2_5_Pro,
+    Gemini2_5_Flash,
     Gemini  # Generic interface
 )
 
@@ -173,6 +175,8 @@ response = model("What are the benefits of renewable energy?")
 - `Gemini1_5_Pro` - Most capable
 - `GeminiFlash1_5` - Fast, efficient
 - `GeminiFlash2_0` - Latest Flash model
+- `Gemini2_5_Pro` - Gemini 2.5 Pro (experimental)
+- `Gemini2_5_Flash` - Gemini 2.5 Flash (experimental)
 - `Gemini` - Generic interface for any Gemini model
 
 **Configuration:**

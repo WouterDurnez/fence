@@ -57,7 +57,9 @@ We always appreciate improvements to our documentation. Feel free to suggest cha
 3. Install the dependencies:
 
    ```sh
-   poetry install
+   ```sh
+   poetry install --no-root
+   ```
    ```
 
 4. Run the tests to make sure everything is working:
