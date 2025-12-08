@@ -8,7 +8,7 @@
 
 [project]
 name = "fence-llm"
-version = "2.0.5"
+version = "2.1.0"
 description = "The bloat moat! - A lightweight LLM and Agent interaction library"
 authors = [
     {name = "wouter.durnez", email = "wouter.durnez@gmail.com"},
