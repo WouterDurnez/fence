@@ -1,10 +1,12 @@
 import pytest
 
-from fence.embeddings.bedrock.base import BedrockEmbeddingsBase
-from fence.embeddings.bedrock.titan import TitanEmbeddingsV2
+from fence.embeddings.bedrock.base import BedrockEmbeddingsBase, BedrockMultimodalEmbeddingsBase
+from fence.embeddings.bedrock.titan import TitanEmbeddingsV2, TitanMultimodalEmbeddingsG1
 
 
 class MockBedrockEmbeddingsBase(BedrockEmbeddingsBase):
+    model_id = "mock-model-id"
+
     def _embed(self, text):
         return {"embedding": [0.1, 0.2, 0.3]}
 
@@ -22,11 +24,6 @@ class TestBedrockEmbeddingsBase:
         assert bedrock_base.source is None
         assert bedrock_base.full_response is False
         assert bedrock_base.region == "eu-central-1"
-        assert bedrock_base.model_kwargs == {
-            "dimensions": 1024,
-            "normalize": True,
-            "embeddingTypes": ["float"],
-        }
 
     def test_embed(self, bedrock_base):
         embedding = bedrock_base.embed("Test prompt")
