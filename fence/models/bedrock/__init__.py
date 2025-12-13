@@ -1,5 +1,11 @@
 from .claude import Claude35Sonnet, ClaudeHaiku, ClaudeInstant, ClaudeSonnet
-from .nova import NovaLite, NovaMicro, NovaPro
+from .nova import (
+    NovaLite,
+    NovaMicro,
+    NovaPro,
+    Nova2Lite,
+    Nova2Lite256K,
+)
 
 __all__ = [
     "ClaudeInstant",
@@ -14,4 +20,6 @@ __all__ = [
     "NovaLite",
     "NovaMicro",
     "NovaPro",
+    "Nova2Lite",
+    "Nova2Lite256K",
 ]

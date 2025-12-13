@@ -46,12 +46,13 @@ response = model("Explain quantum computing in simple terms")
 #### Nova Models
 
 ```python
-from fence.models.bedrock import NovaLite, NovaMicro, NovaPro
+from fence.models.bedrock import NovaLite, NovaMicro, NovaPro, Nova2Lite
 
-# Amazon's Nova models
+# Amazon's Nova models with optional context window selection
 model = NovaPro(
     source="my_app",
-    cross_region="eu"
+    cross_region="eu",
+    context_window="300k"  # Optional: "24k" or "300k"
 )
 
 response = model("What's the weather like?")
@@ -59,9 +60,27 @@ response = model("What's the weather like?")
 
 **Available Nova Models:**
 
-- `NovaMicro` - Smallest, fastest
-- `NovaLite` - Balanced
-- `NovaPro` - Most capable
+- `NovaMicro` - Smallest, fastest (context windows: "24k", "128k")
+- `NovaLite` - Balanced (context windows: "24k", "300k")
+- `NovaPro` - Most capable (context windows: "24k", "300k")
+- `Nova2Lite` - Nova 2 Lite (context windows: "256k")
+
+**Context Window Usage:**
+
+```python
+# Use default context window
+model = NovaPro(source="my_app")
+
+# Specify a context window
+model_300k = NovaPro(source="my_app", context_window="300k")
+model_24k = NovaPro(source="my_app", context_window="24k")
+
+# Invalid context windows will raise a ValueError
+try:
+    model = NovaPro(source="my_app", context_window="invalid")
+except ValueError as e:
+    print(f"Error: {e}")
+```
 
 #### Bedrock Configuration
 
