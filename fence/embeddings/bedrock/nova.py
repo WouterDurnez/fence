@@ -5,7 +5,9 @@ This module provides the Nova Multimodal Embeddings model which supports:
 - Text embeddings
 - Image embeddings
 - Video embeddings (async)
-- Combined text+image embeddings
+
+Note: Nova generates embeddings for text and images in the same semantic space,
+but does not support combined text+image embeddings in a single request.
 """
 
 import logging

@@ -71,7 +71,6 @@ class MultimodalEmbeddings(Embeddings):
             Embedding as a list of floats.
         """
 
-    @abstractmethod
     def embed_multimodal(
         self,
         text: str | None = None,
@@ -83,6 +82,10 @@ class MultimodalEmbeddings(Embeddings):
         This method embeds text and image inputs into the same semantic space,
         allowing for cross-modal similarity comparisons.
 
+        Note: Not all multimodal embedding models support combined text+image
+        embeddings. This method provides a default implementation that raises
+        NotImplementedError. Models that support this feature should override it.
+
         Args:
             text: Optional text to embed.
             image: Optional image data as bytes or base64-encoded string.
@@ -92,5 +95,10 @@ class MultimodalEmbeddings(Embeddings):
             Embedding as a list of floats.
 
         Raises:
+            NotImplementedError: If the model does not support combined embeddings.
             ValueError: If neither text nor image is provided.
         """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support combined text+image embeddings. "
+            "Use embed() for text or embed_image() for images separately."
+        )
