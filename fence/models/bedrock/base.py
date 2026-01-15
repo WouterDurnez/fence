@@ -3,16 +3,18 @@ Base class for Bedrock foundation models
 """
 
 import logging
+import json
 from pprint import pformat
-from typing import Iterator, Literal
+from typing import Any, Iterator, Literal, Type
 
 import boto3
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from pydantic.alias_generators import to_camel
 
 from fence.models.base import LLM, InvokeMixin, MessagesMixin, StreamMixin
 from fence.templates.messages import Messages
 from fence.tools.base import BaseTool
+from fence.utils.optim import retry
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +79,7 @@ class BedrockJSONSchema(BaseModel):
     """
 
     type: Literal["object"] = Field(..., description="The type of the schema.")
-    properties: dict[str, dict[str, str]] = Field(
+    properties: dict[str, dict[str, Any]] = Field(
         ..., description="The properties of the schema."
     )
     required: list[str] = Field(
@@ -111,12 +113,16 @@ class BedrockToolConfig(BaseModel):
     tools: list[BedrockTool] = Field(
         ..., min_length=1, description="The tools to use for the conversation."
     )
+    toolChoice: dict | None = Field(
+        None, description="The tool choice for the conversation."
+    )
 
     def model_dump_bedrock_converse(self):
         """
         Dump the tool config in the format required by Bedrock Converse.
         """
-        return {
+
+        tools_dict = {
             "tools": [
                 {
                     "toolSpec": {
@@ -134,6 +140,10 @@ class BedrockToolConfig(BaseModel):
                 for tool in self.tools
             ]
         }
+        if self.toolChoice:
+            tools_dict["toolChoice"] = self.toolChoice
+
+        return tools_dict
 
 
 ############################################
@@ -156,6 +166,7 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         inferenceConfig: BedrockInferenceConfig | dict | None = None,
         toolConfig: BedrockToolConfig | dict | list[BedrockTool] | None = None,
         additionalModelRequestFields: dict | None = None,
+        output_structure: Type[BaseModel] | None = None,
         full_response: bool = False,
         cross_region: Literal["us", "eu"] | None = None,
         **kwargs,
@@ -168,6 +179,7 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         :param inferenceConfig: Inference configuration for the model
         :param toolConfig: Tool configuration for the model
         :param additionalModelRequestFields: Additional model request fields to pass to the Bedrock API
+        :param output_structure: Pydantic model class defining the expected output structure
         :param full_response: Whether to return the full response from the Bedrock API
         :param **kwargs: Additional keyword arguments
         """
@@ -206,6 +218,40 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
                         )
                 case _:
                     raise ValueError(f"Invalid toolConfig type: {type(toolConfig)}")
+
+        # Output structure
+        self.output_structure = None
+        if output_structure is not None:
+            if not isinstance(output_structure, type) or not issubclass(
+                output_structure, BaseModel
+            ):
+                raise ValueError("output_structure must be a Pydantic model class")
+
+            try:
+                # Convert the Pydantic model to a JSON schema
+                self.json_output_schema = output_structure.model_json_schema()
+                logger.debug(f"JSON output schema: {pformat(self.json_output_schema)}")
+                self.output_structure = output_structure
+            except Exception as e:
+                raise ValueError(f"Error parsing output structure: {e}")
+
+            # Add structured output tool to tool config
+            structured_tool = BedrockTool(
+                toolSpec=BedrockToolSpec(
+                    name="analyze_information",
+                    description="Analyze the provided information.",
+                    inputSchema=BedrockToolInputSchema(json=self.json_output_schema),
+                )
+            )
+
+            if self.toolConfig:
+                self.toolConfig.tools.append(structured_tool)
+
+            else:
+                self.toolConfig = BedrockToolConfig(tools=[structured_tool])
+
+            # Force tool use
+            self.toolConfig.toolChoice = {"tool": {"name": "analyze_information"}}
 
         # Additional model request fields
         self.additionalModelRequestFields = additionalModelRequestFields
@@ -322,6 +368,14 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
 
             # Process the response for completion text
             completion = self._process_response(response)
+
+            # Validate structured output if present
+            if self.output_structure is not None:
+                try:
+                    self.output_structure.model_validate(completion)
+                except ValidationError as e:
+                    raise ValueError(f"Invalid structured output: {e}")
+
             return completion
 
         except Exception as e:
@@ -356,6 +410,12 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
                         f"Message started. Role: {event['messageStart']['role']}"
                     )
 
+                # Handle content block start for tool use
+                if "contentBlockStart" in event:
+                    start = event["contentBlockStart"]["start"]
+                    if "toolUse" in start:
+                        logger.debug(f"Tool use start: {start["toolUse"]["name"]}")
+
                 # Handle content blocks - both text and tool calls
                 if "contentBlockDelta" in event:
                     delta = event["contentBlockDelta"]["delta"]
@@ -367,6 +427,11 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
                         tool_call = delta["toolCall"]
                         logger.debug(f"Tool call: {tool_call}")
                         yield str(tool_call)
+                    # Handle structured output - output as string
+                    elif "toolUse" in delta and self.output_structure is not None:
+                        tool_use = delta["toolUse"]["input"]
+                        logger.debug(f"Structured output: {tool_use}")
+                        yield tool_use
 
                 # If the event is a message stop, print the stop reason
                 if "messageStop" in event:
@@ -380,11 +445,24 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         except Exception as e:
             raise ValueError(f"Error in streaming response from Bedrock service: {e}")
 
-    def _process_response(self, response: dict) -> str:
+    def _process_response(self, response: dict) -> str | dict:
         """
         Extracts completion text from the response.
+        :param response: response from the Bedrock API
+        :return: completion text or structured output
         """
         response_body = response.get("output", {}).get("message", {})
+
+        if self.output_structure is not None:
+            output = (
+                response_body.get("content", [{}])[0]
+                .get("toolUse", {})
+                .get("input", {})
+            )
+            if isinstance(output, str):
+                output = json.loads(output)
+            return output
+
         completion = response_body.get("content", [{}])[0].get("text", "")
         return completion
 
@@ -431,6 +509,183 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         else:
             raise ValueError("Prompt must be a string or a list of messages")
         return messages
+
+
+class BedrockWithStructuredOutput(BedrockBase):
+    """
+    Bedrock model that returns structured output.
+    :param output_structure: Pydantic model class defining the expected output structure
+    """
+
+    def __init__(self, output_structure: Type[BaseModel], **kwargs):
+        super().__init__(**kwargs)
+
+        if isinstance(output_structure, type) and issubclass(
+            output_structure, BaseModel
+        ):
+            self.output_structure = output_structure
+            try:
+                self.json_output_schema = output_structure.model_json_schema()
+                logger.debug(f"JSON output schema: {pformat(self.json_output_schema)}")
+            except Exception as e:
+                raise ValueError(f"Error parsing output structure: {e}")
+        else:
+            raise ValueError("output_structure must be a Pydantic model class")
+
+        # Add structured output tool to tool config
+        structured_tool = {
+            "toolSpec": {
+                "name": "analyze_information",
+                "description": "Analyze the provided information.",
+                "inputSchema": {"json": self.json_output_schema},
+            }
+        }
+        if self.toolConfig:
+            self.toolConfig.tools.append(structured_tool)
+        else:
+            self.toolConfig = BedrockToolConfig(tools=[structured_tool])
+
+        # Force tool use
+        self.toolConfig.toolChoice = {"tool": {"name": "analyze_information"}}
+
+    def invoke(self, prompt: str | Messages, **kwargs) -> tuple[str, dict]:
+        """
+        Call the model with the given prompt
+        :param prompt: text to feed the model
+        :return: text completion and structured output
+        """
+        completion, output = super()._invoke(prompt=prompt, stream=False, **kwargs)
+        logger.debug(f"Response: {completion} {pformat(output)}")
+
+        # Validate the structured output
+        self._validate_output_structure(output)
+
+        return completion, output
+
+    def _validate_output_structure(self, structured_output: dict):
+        """
+        Validate the structured output against the expected schema.
+        """
+
+        try:
+            self.output_structure.model_validate(structured_output)
+        except ValidationError as e:
+            raise ValueError(f"Invalid structured output: {e}")
+
+    def _process_response(self, response: dict) -> tuple[str, dict]:
+        """
+        Process the response and return the text completion and structured output.
+        """
+
+        response_body = response.get("output", {}).get("message", {})
+        completion = response_body.get("content", [{}])[0].get("text", "")
+        structured_output = (
+            response_body.get("content", [{}])[0].get("toolUse", {}).get("input", {})
+        )
+        return completion, structured_output
+
+    def _handle_invoke(self, invoke_params: dict) -> str | dict:
+        """
+        Handles synchronous invocation.
+
+        :param invoke_params: parameters for the Bedrock API
+        :return: completion text or full response object if full_response is True
+        """
+        try:
+
+            # Call the Bedrock API
+            logger.debug(
+                f"Invoking Bedrock model with params: {pformat(invoke_params)}"
+            )
+            response = self.client.converse(**invoke_params)
+            logger.debug(f"Response: {pformat(response)}")
+
+            # Extract and log metrics regardless of full_response setting
+            metrics = self._extract_metrics(response.get("usage", {}))
+            self._log_callback(**metrics)
+
+            # Return the full response if requested, without processing
+            if self.full_response:
+                return response
+
+            # Process the response for completion text
+            completion, structured_output = self._process_response(response)
+
+            # If structured output is a string, parse it as JSON
+            if isinstance(structured_output, str):
+                structured_output = json.loads(structured_output)
+            return completion, structured_output
+
+        except Exception as e:
+            raise ValueError(f"Error raised by bedrock service: {e}")
+
+    def _handle_stream(self, invoke_params: dict) -> Iterator[str | dict]:
+        """
+        Handles streaming invocation for structured output.
+        """
+        try:
+            response = self.client.converse_stream(**invoke_params)
+            stream = response.get("stream")
+            if not stream:
+                raise ValueError("No stream found in response")
+
+            for event in stream:
+                if self.full_response:
+                    yield event
+                    continue
+
+                if "messageStart" in event:
+                    logger.debug(
+                        f"Message started. Role: {event['messageStart']['role']}"
+                    )
+
+                if "contentBlockStart" in event:
+                    start = event["contentBlockStart"]["start"]
+                    if "toolUse" in start:
+                        current_tool_block = event["contentBlockStart"][
+                            "contentBlockIndex"
+                        ]
+                        tool_buffer = start["toolUse"].copy()
+
+                if "contentBlockDelta" in event:
+                    delta = event["contentBlockDelta"]["delta"]
+                    block_index = event["contentBlockDelta"]["contentBlockIndex"]
+
+                    if "text" in delta:
+                        text = delta["text"]
+                        logger.debug(f"Streaming chunk: {text}")
+                        yield text
+                    elif "toolUse" in delta:
+                        tool_input = delta["toolUse"]["input"]
+                        if isinstance(tool_input, str):
+                            tool_input = json.loads(tool_input)
+                        yield tool_input
+
+                if "contentBlockStop" in event:
+                    block_index = event["contentBlockStop"]["contentBlockIndex"]
+                    if (
+                        block_index == current_tool_block
+                        and tool_buffer
+                        and "input" in tool_buffer
+                    ):
+                        structured_output = tool_buffer["input"]
+                        if isinstance(structured_output, str):
+                            structured_output = json.loads(structured_output)
+                        logger.debug(f"Structured output: {structured_output}")
+                        yield structured_output
+                        tool_buffer = {}
+                        current_tool_block = None
+
+                if "messageStop" in event:
+                    logger.debug(
+                        f"Message stopped. Reason: {event['messageStop']['stopReason']}"
+                    )
+
+                if "metadata" in event:
+                    self._log_callback(**self._extract_metrics(event["metadata"]))
+
+        except Exception as e:
+            raise ValueError(f"Error in streaming response from Bedrock service: {e}")
 
 
 if __name__ == "__main__":
