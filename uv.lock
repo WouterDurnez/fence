@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version < '3.12'",
@@ -516,7 +516,7 @@ wheels = [
 
 [[package]]
 name = "fence-llm"
-version = "2.1.0"
+version = "2.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
