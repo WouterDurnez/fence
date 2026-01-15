@@ -183,6 +183,9 @@ class Claude45Sonnet(BedrockBase):
 
 if __name__ == "__main__":
 
+    import json
+    from pydantic import BaseModel, Field
+
     # Create model with tools
     claude_with_tools = Claude37Sonnet(
         cross_region="eu",
@@ -222,7 +225,22 @@ if __name__ == "__main__":
         region="eu-central-1",
     )
 
+    class CustomerReview(BaseModel):
+        rating: int = Field(..., description="The rating of the review.")
+        comment: str = Field(..., description="The comment of the review.")
+
+    claude_with_structured_output = Claude35Sonnet(
+        source="test",
+        metric_prefix="supertest",
+        extra_tags={"test": "test"},
+        region="eu-central-1",
+        output_structure=CustomerReview,
+    )
+
     prompt = "What is the top music played on WABC?"
+    customer_review = (
+        "I love this product! It works great. Ten out of ten, would recommend."
+    )
 
     # # Test with tools
     # print("\n=== Testing with tools ===")
@@ -239,9 +257,9 @@ if __name__ == "__main__":
     # for chunk in claude_with_tools.stream(prompt):
     #     print(chunk, end="")
 
-    print("\n4. Stream with full_response:")
-    for chunk in claude_with_tools.stream(prompt, full_response=False):
-        print(chunk, end="")
+    # print("\n4. Stream with full_response:")
+    # for chunk in claude_with_tools.stream(prompt, full_response=False):
+    #     print(chunk, end="")
 
     # # Test without tools
     # print("\n=== Testing without tools ===")
@@ -261,3 +279,27 @@ if __name__ == "__main__":
     # print("\n4. Stream with full_response:")
     # for chunk in claude_without_tools.stream(prompt, full_response=True):
     #     print(chunk)
+
+    # Test with structured output
+    print("\n=== Testing with structured output ===")
+
+    # print("\n1. Invoke without full_response:")
+    # response = claude_with_structured_output.invoke(customer_review)
+    # print(response)
+
+    # print("\n2. Invoke with full_response:")
+    # response = claude_with_structured_output.invoke(customer_review, full_response=True)
+    # print(response)
+
+    print("\n3. Stream without full_response:")
+    output_buffer = ""
+    for chunk in claude_with_structured_output.stream(customer_review):
+        print(chunk, end="\n\n")
+        output_buffer += chunk
+    print(CustomerReview(**json.loads(output_buffer)))
+
+    # print("\n4. Stream with full_response:")
+    # for chunk in claude_with_structured_output.stream(
+    #     customer_review, full_response=True
+    # ):
+    #     print(chunk, end="\n\n")

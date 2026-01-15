@@ -26,14 +26,21 @@ logger = logging.getLogger(__name__)
 class NovaPro(BedrockBase):
     """Amazon Nova Pro model class"""
 
-    def __init__(self, context_window: Literal["24k", "300k"] | None = None, **kwargs):
+    def __init__(
+        self,
+        context_window: Literal["24k", "300k"] | None = None,
+        **kwargs,
+    ):
         """
         Initialize a Nova Pro model
         :param context_window: Context window size. Valid options: "24k", "300k". Defaults to None (uses base model).
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
-        if context_window is not None and context_window not in NOVA_PRO_CONTEXT_WINDOWS:
+        if (
+            context_window is not None
+            and context_window not in NOVA_PRO_CONTEXT_WINDOWS
+        ):
             raise ValueError(
                 f"Invalid context_window '{context_window}' for NovaPro. "
                 f"Valid options: {NOVA_PRO_CONTEXT_WINDOWS}"
@@ -60,7 +67,10 @@ class NovaLite(BedrockBase):
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
-        if context_window is not None and context_window not in NOVA_LITE_CONTEXT_WINDOWS:
+        if (
+            context_window is not None
+            and context_window not in NOVA_LITE_CONTEXT_WINDOWS
+        ):
             raise ValueError(
                 f"Invalid context_window '{context_window}' for NovaLite. "
                 f"Valid options: {NOVA_LITE_CONTEXT_WINDOWS}"
@@ -87,7 +97,10 @@ class NovaMicro(BedrockBase):
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
-        if context_window is not None and context_window not in NOVA_MICRO_CONTEXT_WINDOWS:
+        if (
+            context_window is not None
+            and context_window not in NOVA_MICRO_CONTEXT_WINDOWS
+        ):
             raise ValueError(
                 f"Invalid context_window '{context_window}' for NovaMicro. "
                 f"Valid options: {NOVA_MICRO_CONTEXT_WINDOWS}"
@@ -114,7 +127,10 @@ class Nova2Lite(BedrockBase):
         :param str source: An indicator of where (e.g., which feature) the model is operating from.
         :param **kwargs: Additional keyword arguments
         """
-        if context_window is not None and context_window not in NOVA_LITE_2_CONTEXT_WINDOWS:
+        if (
+            context_window is not None
+            and context_window not in NOVA_LITE_2_CONTEXT_WINDOWS
+        ):
             raise ValueError(
                 f"Invalid context_window '{context_window}' for Nova2Lite. "
                 f"Valid options: {NOVA_LITE_2_CONTEXT_WINDOWS}"
@@ -152,8 +168,8 @@ class Nova2Lite256K(BedrockBase):
         super().__init__(**kwargs)
 
 
-
 if __name__ == "__main__":
+    from pydantic import BaseModel, Field
 
     setup_logging(log_level="DEBUG")
 
@@ -188,6 +204,19 @@ if __name__ == "__main__":
         },
     )
 
+    class CustomerReview(BaseModel):
+        rating: int = Field(..., description="The rating of the review.")
+        comment: str = Field(..., description="The comment of the review.")
+
+    nova_with_structured_output = NovaPro(
+        source="test",
+        cross_region="eu",
+        metric_prefix="supertest",
+        extra_tags={"test": "test"},
+        region="eu-central-1",
+        output_structure=CustomerReview,
+    )
+
     # Create model without tools
     nova_without_tools = NovaPro(
         source="test",
@@ -197,41 +226,65 @@ if __name__ == "__main__":
     )
 
     prompt = "What is the top music played on WABC?"
+    customer_review = (
+        "I love this product! It works great. Ten out of ten, would recommend."
+    )
 
-    # Test with tools
-    print("\n=== Testing with tools ===")
+    # # Test with tools
+    # print("\n=== Testing with tools ===")
 
-    print("\n1. Invoke without full_response:")
-    response = nova_with_tools.invoke(prompt)
-    print(response)
+    # print("\n1. Invoke without full_response:")
+    # response = nova_with_tools.invoke(prompt)
+    # print(response)
 
-    print("\n2. Invoke with full_response:")
-    response = nova_with_tools.invoke(prompt, full_response=True)
-    print(response)
+    # print("\n2. Invoke with full_response:")
+    # response = nova_with_tools.invoke(prompt, full_response=True)
+    # print(response)
+
+    # print("\n3. Stream without full_response:")
+    # for chunk in nova_with_tools.stream(prompt):
+    #     print(chunk, end="")
+
+    # print("\n4. Stream with full_response:")
+    # for chunk in nova_with_tools.stream(prompt, full_response=True):
+    #     print(chunk)
+
+    # # Test without tools
+    # print("\n=== Testing without tools ===")
+
+    # print("\n1. Invoke without full_response:")
+    # response = nova_without_tools.invoke(prompt)
+    # print(response)
+
+    # print("\n2. Invoke with full_response:")
+    # response = nova_without_tools.invoke(prompt, full_response=True)
+    # print(response)
+
+    # print("\n3. Stream without full_response:")
+    # for chunk in nova_without_tools.stream(prompt):
+    #     print(chunk, end="")
+
+    # print("\n4. Stream with full_response:")
+    # for chunk in nova_without_tools.stream(prompt, full_response=True):
+    #     print(chunk, end="")
+
+    # # Test with structured output
+    # print("\n=== Testing with structured output ===")
+
+    # print("\n1. Invoke without full_response:")
+    # response = nova_with_structured_output.invoke(customer_review)
+    # print(response)
+
+    # print("\n2. Invoke with full_response:")
+    # response = nova_with_structured_output.invoke(customer_review, full_response=True)
+    # print(response)
 
     print("\n3. Stream without full_response:")
-    for chunk in nova_with_tools.stream(prompt):
-        print(chunk, end="")
+    for chunk in nova_with_structured_output.stream(customer_review):
+        print(chunk, end="\n\n")
 
-    print("\n4. Stream with full_response:")
-    for chunk in nova_with_tools.stream(prompt, full_response=True):
-        print(chunk)
-
-    # Test without tools
-    print("\n=== Testing without tools ===")
-
-    print("\n1. Invoke without full_response:")
-    response = nova_without_tools.invoke(prompt)
-    print(response)
-
-    print("\n2. Invoke with full_response:")
-    response = nova_without_tools.invoke(prompt, full_response=True)
-    print(response)
-
-    print("\n3. Stream without full_response:")
-    for chunk in nova_without_tools.stream(prompt):
-        print(chunk, end="")
-
-    print("\n4. Stream with full_response:")
-    for chunk in nova_without_tools.stream(prompt, full_response=False):
-        print(chunk, end="")
+    # print("\n4. Stream with full_response:")
+    # for chunk in nova_with_structured_output.stream(
+    #     customer_review, full_response=True
+    # ):
+    #     print(chunk, end="")
