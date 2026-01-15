@@ -10,6 +10,7 @@ This module contains tests for the base Bedrock model implementation, including:
 """
 
 import pytest
+from pydantic import BaseModel, Field
 
 from fence.models.base import Messages
 from fence.models.bedrock.base import (
@@ -21,6 +22,14 @@ from fence.models.bedrock.base import (
     BedrockToolInputSchema,
     BedrockToolSpec,
 )
+
+
+class CustomerReview(BaseModel):
+    """Sample Pydantic model for testing structured output."""
+
+    rating: int = Field(..., ge=0, le=5, description="The rating of the review (0-5).")
+    comment: str = Field(..., description="The comment of the review.")
+
 
 # Check if AWS credentials are available via profile
 try:
@@ -104,9 +113,70 @@ class MockBedrockModel(BedrockBase):
         :param stream: Whether to stream the response
         :return: Tool response in the appropriate format
         """
+        # Check if this is a structured output tool
+        is_structured_output = (
+            hasattr(self, "output_structure")
+            and self.output_structure
+            and isinstance(self.toolConfig, BedrockToolConfig)
+            and any(
+                tool.toolSpec.name == "analyze_information"
+                for tool in self.toolConfig.tools
+            )
+        )
+
+        if is_structured_output:
+            # Return structured output response
+            structured_data = {"rating": 5, "comment": "Great product!"}
+
+            if self.full_response:
+                if stream:
+                    return [
+                        {"messageStart": {"role": "assistant"}},
+                        {
+                            "contentBlockStart": {
+                                "start": {
+                                    "toolUse": {
+                                        "toolUseId": "123",
+                                        "name": "analyze_information",
+                                    }
+                                },
+                                "contentBlockIndex": 0,
+                            }
+                        },
+                        {
+                            "contentBlockDelta": {
+                                "delta": {"toolUse": {"input": structured_data}},
+                                "contentBlockIndex": 0,
+                            }
+                        },
+                        {"contentBlockStop": {"contentBlockIndex": 0}},
+                        {"messageStop": {"stopReason": "tool_use"}},
+                    ]
+                return {
+                    "output": {
+                        "message": {
+                            "content": [
+                                {
+                                    "toolUse": {
+                                        "toolUseId": "123",
+                                        "name": "analyze_information",
+                                        "input": structured_data,
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "usage": {"inputTokens": 10, "outputTokens": 20},
+                }
+
+            # Simple structured output response
+            if stream:
+                return [structured_data]
+            return "Analysis complete", structured_data
+
+        # Regular tool response (existing logic)
         if self.full_response:
             if stream:
-                # Streamed full response with tool call - returns chunks
                 return [
                     {"messageStart": {"role": "assistant"}},
                     {
@@ -121,7 +191,6 @@ class MockBedrockModel(BedrockBase):
                     },
                     {"messageStop": {"stopReason": "tool_call"}},
                 ]
-            # Synchronous full response with tool call
             return {
                 "output": {
                     "message": {
@@ -322,6 +391,42 @@ class TestBedrockBase:
                 max_tokens=None,
             ),
             toolConfig=sample_tool_config,
+            **common_params,
+        )
+
+    @pytest.fixture
+    def bedrock_base_with_structured_output(self, common_params):
+        """
+        Create a MockBedrockModel instance with structured output.
+
+        This fixture is used to test the behavior when the model is
+        configured with structured output.
+        """
+        return MockBedrockModel(
+            full_response=False,
+            inferenceConfig=BedrockInferenceConfig(
+                temperature=0,
+                max_tokens=None,
+            ),
+            output_structure=CustomerReview,
+            **common_params,
+        )
+
+    @pytest.fixture
+    def bedrock_base_with_structured_output_full_response(self, common_params):
+        """
+        Create a MockBedrockModel with structured output and full_response=True.
+
+        This fixture is used to test the behavior when both structured output
+        is configured and full API responses are requested.
+        """
+        return MockBedrockModel(
+            full_response=True,
+            inferenceConfig=BedrockInferenceConfig(
+                temperature=0,
+                max_tokens=None,
+            ),
+            output_structure=CustomerReview,
             **common_params,
         )
 
@@ -620,6 +725,149 @@ class TestBedrockBase:
         assert chunks[2]["messageStop"]["stopReason"] == "end_turn"
 
     # -------------------------------------------------------------------------
+    # Structured Output Tests
+    # -------------------------------------------------------------------------
+
+    def test_initialization_with_structured_output(
+        self, bedrock_base_with_structured_output
+    ):
+        """
+        Test that BedrockBase initializes correctly with structured output.
+
+        This test verifies:
+        1. output_structure is set correctly
+        2. toolConfig includes the analyze_information tool
+        3. toolChoice is set to force tool use
+        """
+        model = bedrock_base_with_structured_output
+
+        assert model.output_structure == CustomerReview
+        assert isinstance(model.toolConfig, BedrockToolConfig)
+        assert len(model.toolConfig.tools) == 1
+        assert model.toolConfig.tools[0].toolSpec.name == "analyze_information"
+        assert model.toolConfig.toolChoice == {"tool": {"name": "analyze_information"}}
+
+    def test_invoke_with_structured_output(self, bedrock_base_with_structured_output):
+        """
+        Test invocation with structured output configured.
+
+        This test verifies that when structured output is configured, the model
+        returns both completion text and structured data.
+        """
+        result = bedrock_base_with_structured_output.invoke(
+            "Analyze this review: Great product!"
+        )
+
+        assert isinstance(result, tuple)
+        completion, structured_output = result
+        assert completion == "Analysis complete"
+        assert isinstance(structured_output, dict)
+        assert structured_output["rating"] == 5
+        assert structured_output["comment"] == "Great product!"
+
+    def test_invoke_with_structured_output_full_response(
+        self, bedrock_base_with_structured_output_full_response
+    ):
+        """
+        Test invocation with structured output and full_response=True.
+
+        This test verifies that when both structured output is configured and
+        full_response=True, the model returns the complete API response object.
+        """
+        response = bedrock_base_with_structured_output_full_response.invoke(
+            "Analyze this review"
+        )
+
+        assert isinstance(response, dict)
+        assert "output" in response
+        assert "toolUse" in response["output"]["message"]["content"][0]
+        tool_use = response["output"]["message"]["content"][0]["toolUse"]
+        assert tool_use["name"] == "analyze_information"
+        assert tool_use["input"]["rating"] == 5
+        assert tool_use["input"]["comment"] == "Great product!"
+
+    def test_stream_with_structured_output(self, bedrock_base_with_structured_output):
+        """
+        Test streaming with structured output configured.
+
+        This test verifies that when structured output is configured and streaming
+        is used, the model returns structured data in the stream.
+        """
+        chunks = list(bedrock_base_with_structured_output.stream("Analyze this review"))
+
+        assert len(chunks) == 1
+        structured_output = chunks[0]
+        assert isinstance(structured_output, dict)
+        assert structured_output["rating"] == 5
+        assert structured_output["comment"] == "Great product!"
+
+    def test_stream_with_structured_output_full_response(
+        self, bedrock_base_with_structured_output_full_response
+    ):
+        """
+        Test streaming with structured output and full_response=True.
+
+        This test verifies that when both structured output is configured,
+        streaming is used, and full_response=True, the model returns a stream
+        of API event objects.
+        """
+        chunks = list(
+            bedrock_base_with_structured_output_full_response.stream(
+                "Analyze this review"
+            )
+        )
+
+        assert (
+            len(chunks) == 5
+        )  # messageStart, contentBlockStart, contentBlockDelta, contentBlockStop, messageStop
+        assert chunks[0]["messageStart"]["role"] == "assistant"
+        assert "toolUse" in chunks[1]["contentBlockStart"]["start"]
+        assert (
+            chunks[1]["contentBlockStart"]["start"]["toolUse"]["name"]
+            == "analyze_information"
+        )
+        assert (
+            chunks[2]["contentBlockDelta"]["delta"]["toolUse"]["input"]["rating"] == 5
+        )
+        assert chunks[4]["messageStop"]["stopReason"] == "tool_use"
+
+    def test_structured_output_validation_error(self, common_params):
+        """
+        Test that invalid output_structure raises appropriate error.
+
+        This test verifies that passing a non-Pydantic class as output_structure
+        raises a ValueError.
+        """
+        with pytest.raises(
+            ValueError, match="output_structure must be a Pydantic model class"
+        ):
+            MockBedrockModel(
+                output_structure=str,  # Invalid - not a BaseModel
+                **common_params,
+            )
+
+    def test_structured_output_with_existing_tools(
+        self, common_params, sample_tool_config
+    ):
+        """
+        Test that structured output works alongside existing tools.
+
+        This test verifies that when both regular tools and structured output
+        are configured, both are included in the toolConfig.
+        """
+        model = MockBedrockModel(
+            toolConfig=sample_tool_config,
+            output_structure=CustomerReview,
+            **common_params,
+        )
+
+        assert len(model.toolConfig.tools) == 2  # original tool + analyze_information
+        tool_names = [tool.toolSpec.name for tool in model.toolConfig.tools]
+        assert "top_song" in tool_names
+        assert "analyze_information" in tool_names
+        assert model.toolConfig.toolChoice == {"tool": {"name": "analyze_information"}}
+
+    # -------------------------------------------------------------------------
     # Real Bedrock Model Tests
     # -------------------------------------------------------------------------
 
@@ -750,3 +998,98 @@ class TestBedrockBase:
             for content in response["output"]["message"]["content"]
         )
         assert has_numbers, "Expected numbers 5 and 3 to be mentioned"
+
+    @pytest.mark.skipif(
+        not has_aws_credentials,
+        reason="AWS credentials not found in configured profiles",
+    )
+    def test_real_bedrock_with_structured_output(self):
+        """
+        Test using a real Bedrock model with structured output.
+        """
+        from fence.models.bedrock.claude import Claude35Sonnet
+
+        model = Claude35Sonnet(
+            source="test",
+            output_structure=CustomerReview,
+        )
+
+        result = model.invoke(
+            "Analyze this customer review: 'This product is amazing! I love it so much. 5 stars!'"
+        )
+
+        assert isinstance(result, dict)
+        assert "rating" in result
+        assert "comment" in result
+        assert 0 <= result["rating"] <= 5
+
+    @pytest.mark.skipif(
+        not has_aws_credentials,
+        reason="AWS credentials not found in configured profiles",
+    )
+    def test_real_bedrock_stream_with_structured_output(self):
+        """
+        Test streaming from a real Bedrock model with structured output.
+        """
+        from fence.models.bedrock.claude import Claude35Sonnet
+
+        model = Claude35Sonnet(
+            source="test",
+            output_structure=CustomerReview,
+        )
+
+        chunks = list(
+            model.stream(
+                "Analyze this review: 'Great product, works perfectly! 4 out of 5 stars.'"
+            )
+        )
+
+        # Should get at least one chunk with structured data
+        assert len(chunks) > 0
+
+        # Last chunk should be the structured output
+        structured_output = chunks[-1]
+        assert isinstance(structured_output, str)
+
+    @pytest.mark.skipif(
+        not has_aws_credentials,
+        reason="AWS credentials not found in configured profiles",
+    )
+    def test_real_bedrock_structured_output_full_response(self):
+        """
+        Test getting a full response from a real Bedrock model with structured output.
+        """
+        from fence.models.bedrock.claude import Claude35Sonnet
+
+        model = Claude35Sonnet(
+            source="test",
+            full_response=True,
+            output_structure=CustomerReview,
+        )
+
+        response = model.invoke(
+            "Rate this review: 'Terrible product, broke after one day. 1 star.'"
+        )
+
+        assert isinstance(response, dict)
+        assert "output" in response
+        assert "message" in response["output"]
+        assert "content" in response["output"]["message"]
+
+        # Should have tool use content
+        has_tool_use = any(
+            "toolUse" in content for content in response["output"]["message"]["content"]
+        )
+        assert has_tool_use, "Expected tool use in structured output response"
+
+        # Verify the tool use contains our structured data
+        for content in response["output"]["message"]["content"]:
+            if "toolUse" in content:
+                tool_use = content["toolUse"]
+                assert tool_use["name"] == "analyze_information"
+                assert "input" in tool_use
+                structured_data = tool_use["input"]
+                assert "rating" in structured_data
+                assert "comment" in structured_data
+                assert 0 <= structured_data["rating"] <= 5
+                break

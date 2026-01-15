@@ -9,6 +9,7 @@ This module tests:
 """
 
 import pytest
+from pydantic import BaseModel, Field
 
 from fence.models.bedrock.nova import (
     NovaPro,
@@ -17,6 +18,13 @@ from fence.models.bedrock.nova import (
     Nova2Lite,
     Nova2Lite256K,
 )
+
+
+class CustomerReview(BaseModel):
+    """Sample Pydantic model for testing structured output."""
+
+    rating: int = Field(..., ge=0, le=5, description="The rating of the review (0-5).")
+    comment: str = Field(..., description="The comment of the review.")
 
 
 class TestNovaProContextWindows:
@@ -135,3 +143,70 @@ class TestNova2Lite256KBackwardCompatibility:
         assert model.model_id == "amazon.nova-2-lite-v1:0:256k"
         assert model.model_name == "Nova 2 Lite (256k)"
 
+
+class TestNovaStructuredOutput:
+    """Test Nova models with structured output."""
+
+    def test_nova_pro_with_structured_output(self):
+        """Test NovaPro with structured output configuration."""
+        model = NovaPro(source="test", output_structure=CustomerReview)
+
+        assert model.output_structure == CustomerReview
+        assert model.toolConfig is not None
+        assert len(model.toolConfig.tools) == 1
+        assert model.toolConfig.tools[0].toolSpec.name == "analyze_information"
+        assert model.toolConfig.toolChoice == {"tool": {"name": "analyze_information"}}
+
+    def test_nova_lite_with_structured_output(self):
+        """Test NovaLite with structured output configuration."""
+        model = NovaLite(source="test", output_structure=CustomerReview)
+
+        assert model.output_structure == CustomerReview
+        assert model.toolConfig is not None
+        assert len(model.toolConfig.tools) == 1
+        assert model.toolConfig.tools[0].toolSpec.name == "analyze_information"
+
+    def test_nova_micro_with_structured_output(self):
+        """Test NovaMicro with structured output configuration."""
+        model = NovaMicro(source="test", output_structure=CustomerReview)
+
+        assert model.output_structure == CustomerReview
+        assert model.toolConfig is not None
+        assert len(model.toolConfig.tools) == 1
+        assert model.toolConfig.tools[0].toolSpec.name == "analyze_information"
+
+    def test_nova2_lite_with_structured_output(self):
+        """Test Nova2Lite with structured output configuration."""
+        model = Nova2Lite(source="test", output_structure=CustomerReview)
+
+        assert model.output_structure == CustomerReview
+        assert model.toolConfig is not None
+        assert len(model.toolConfig.tools) == 1
+        assert model.toolConfig.tools[0].toolSpec.name == "analyze_information"
+
+    def test_nova_with_structured_output_and_context_window(self):
+        """Test Nova models with both structured output and context window."""
+        model = NovaPro(
+            source="test", output_structure=CustomerReview, context_window="24k"
+        )
+
+        assert model.model_id == "amazon.nova-pro-v1:0:24k"
+        assert model.model_name == "Nova Pro (24k)"
+        assert model.output_structure == CustomerReview
+        assert model.toolConfig is not None
+
+    def test_nova_structured_output_validation_error(self):
+        """Test that invalid output_structure raises appropriate error."""
+        with pytest.raises(
+            ValueError, match="output_structure must be a Pydantic model class"
+        ):
+            NovaPro(source="test", output_structure=str)
+
+    def test_nova_without_structured_output(self):
+        """Test that Nova models work without structured output."""
+        model = NovaPro(source="test")
+
+        assert model.output_structure is None
+        assert model.toolConfig is None
+        assert model.model_id == "amazon.nova-pro-v1:0"
+        assert model.model_name == "Nova Pro"
