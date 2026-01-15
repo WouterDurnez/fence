@@ -5,10 +5,12 @@ are atomic LLM interactions. They transform input data into a prompt, send it to
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Type
+from pydantic import BaseModel
 
 from fence.models.base import LLM
-from fence.parsers import BaseParser
+from fence.models.bedrock.base import BedrockBase
+from fence.parsers import BaseParser, _PydanticParser
 from fence.templates import MessagesTemplate, StringTemplate
 from fence.utils.base import time_it
 
@@ -154,6 +156,7 @@ class Link(BaseLink):
         model: LLM = None,
         name: str = None,
         parser: BaseParser = None,
+        output_structure: Type[BaseModel] = None,
     ):
         """
         Initialize the Link object.
@@ -161,6 +164,8 @@ class Link(BaseLink):
         :param name: Name of the Link.
         :param model: An LLM model object.
         :param template: A PromptTemplate object.
+        :param parser: A parser object.
+        :param output_structure: A Pydantic model class defining the expected output structure.
         """
         self.template = template
         super().__init__(output_key=output_key, name=name)
@@ -169,7 +174,18 @@ class Link(BaseLink):
 
         # Get the input keys from the template
         self.input_keys = template.input_variables
-        self.parser = parser
+        self.output_structure = output_structure
+        # Logic for handling output structure
+        if output_structure is not None and parser is not None:
+            raise ValueError("Cannot specify both output_structure and parser.")
+        elif output_structure is not None:
+            if not isinstance(model, BedrockBase):
+                raise ValueError(
+                    "output_structure is only supported for Bedrock models."
+                )
+            self.parser = _PydanticParser(model=output_structure)
+        else:
+            self.parser = parser
 
     def __call__(self, **kwargs):
         """
@@ -218,12 +234,15 @@ class Link(BaseLink):
         model = input_dict.pop("model", self.model)
 
         # Call the LLM model
-        response = model.invoke(prompt=prompt)
+        response = model.invoke(prompt=prompt, output_structure=self.output_structure)
         logger.debug(f"Raw response: {response}")
 
         # Parse the response
         if self.parser is not None:
             response = self.parser.parse(response)
+            # Wrap the response in a dictionary if we have an output structure to ensure we can allow 'state' as a key
+            if self.output_structure is not None:
+                response = {"state": response}
             logger.debug(f"Parsed response: {response}")
 
         # Build the response dictionary #

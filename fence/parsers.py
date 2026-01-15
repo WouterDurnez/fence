@@ -6,7 +6,9 @@ transform LLM output (a string) into a more useful format (e.g. int, bool, dict)
 import logging
 import re
 import tomllib
+from typing import Type
 from abc import ABC, abstractmethod
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -236,3 +238,25 @@ class TOMLParser(BaseParser):
                 toml_dict[key] = value.strip()
 
         return toml_dict
+
+
+class _PydanticParser(BaseParser):
+    """
+    A class to parse a string containing a Pydantic model. Returns a dictionary.
+    """
+
+    def __init__(self, model: Type[BaseModel]):
+        """
+        Initialize the PydanticParser with the given model.
+        :param model: Pydantic model class
+        """
+        super().__init__()
+        self.model = model
+
+    def parse(self, input: dict):
+        """
+        Parse a dictionary into a Pydantic model.
+        :param input: dictionary containing the data
+        :return: model-adhering dictionary containing the data
+        """
+        return self.model(**input).model_dump()
