@@ -31,10 +31,10 @@ classifiers = [
     ]
 dependencies = [
     "boto3>=1.34.100",
-    "requests>=2.32.3",
+    "requests>=2.32.4",
     "numexpr>=2.10.1",
     "pydantic>=2.11.4",
-    "mcp>=1.9.4",
+    "mcp>=1.23.0",
 ]
 keywords = ["openai", "llm", "gpt", "ai", "nlp", "language", "model", "api", "anthropic", "claude", "wrapper", "fence"]
 requires = "python>=3.11"
