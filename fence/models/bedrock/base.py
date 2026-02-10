@@ -3,20 +3,358 @@ Base class for Bedrock foundation models
 """
 
 import logging
-import json
 from pprint import pformat
-from typing import Any, Iterator, Literal, Type
+import re
+from typing import Any, get_args, get_origin, Iterator, Literal, Type
 
 import boto3
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import AliasChoices, BaseModel, Field, ValidationError, ConfigDict
 from pydantic.alias_generators import to_camel
 
 from fence.models.base import LLM, InvokeMixin, MessagesMixin, StreamMixin
 from fence.templates.messages import Messages
 from fence.tools.base import BaseTool
-from fence.utils.optim import retry
 
 logger = logging.getLogger(__name__)
+
+
+###########################
+# Structured Output Mixin #
+###########################
+
+
+class StructuredOutputMixin:
+    """Mixin class for handling structured output with Pydantic models."""
+
+    def _prepare_json_schema(self, schema: dict, allow_refs: bool = False):
+        """
+        Prepare JSON schema for Bedrock by removing all 'title' keys and optionally substituting $refs with their resolved values.
+
+        :param schema: JSON schema to prepare
+        :param allow_refs: If True, keep $refs in the schema. If False (default), resolve all $refs inline.
+        """
+
+        def _remove_titles_from_schema(schema: dict):
+            if isinstance(schema, dict):
+                for key in list(schema.keys()):
+                    if key == "title":
+                        del schema[key]
+                    else:
+                        _remove_titles_from_schema(schema[key])
+
+        def _resolve_refs(schema: dict, defs: dict):
+            if isinstance(schema, dict):
+                for key, value in schema.items():
+                    if isinstance(value, dict) and "$ref" in value:
+                        ref = value["$ref"].split("/")[-1]
+                        schema[key] = defs[ref]
+                    elif isinstance(value, dict):
+                        _resolve_refs(value, defs)
+
+        # Recursively remove all 'title' keys from a JSON schema at all levels of nesting
+        _remove_titles_from_schema(schema)
+
+        if not allow_refs:
+            # Extract all $defs from the schema and replace them with their resolved values
+            defs = schema.pop("$defs", {})
+            # Recursively resolve all $refs in the $defs
+            _resolve_refs(defs, defs)
+            # Recursively resolve all $refs in the schema
+            _resolve_refs(schema, defs)
+
+        return schema
+
+    def _add_aliases_to_model(
+        self, model: type[BaseModel], processed: set = None
+    ) -> None:
+        """
+        Add validation aliases to a Pydantic model for Bedrock compatibility.
+        Adds aliases for PascalCase, camelCase, snake_case, and other variations.
+        This is necessary because Bedrock is not consistent in its case format.
+        """
+
+        def to_snake_case(name: str) -> str:
+            """Convert PascalCase or camelCase to snake_case"""
+            # Insert underscore before uppercase letters that follow lowercase letters
+            s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+            # Insert underscore before uppercase letters that follow lowercase or digits
+            s2 = re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1)
+            return s2.lower()
+
+        def to_camel_case(name: str) -> str:
+            """Convert snake_case or PascalCase to camelCase"""
+            if "_" in name:
+                # From snake_case
+                components = name.split("_")
+                return components[0].lower() + "".join(
+                    x.title() for x in components[1:]
+                )
+            else:
+                # From PascalCase or already camelCase
+                return name[0].lower() + name[1:] if name else name
+
+        def to_pascal_case(name: str) -> str:
+            """Convert snake_case or camelCase to PascalCase"""
+            if "_" in name:
+                # From snake_case
+                return "".join(x.title() for x in name.split("_"))
+            else:
+                # From camelCase or already PascalCase
+                return name[0].upper() + name[1:] if name else name
+
+        def extract_nested_models(field_type) -> list[type[BaseModel]]:
+            """Extract all nested BaseModel types from a field annotation."""
+            nested_models = []
+
+            # Check if the field type itself is a BaseModel
+            if isinstance(field_type, type) and issubclass(field_type, BaseModel):
+                nested_models.append(field_type)
+                return nested_models
+
+            # Check for generic types like list[Model], dict[str, Model], etc.
+            origin = get_origin(field_type)
+            if origin is not None:
+                args = get_args(field_type)
+                for arg in args:
+                    if isinstance(arg, type) and issubclass(arg, BaseModel):
+                        nested_models.append(arg)
+
+            return nested_models
+
+        if processed is None:
+            processed = set()
+
+        if model in processed:
+            return
+        processed.add(model)
+
+        # Set model config to populate by name (accept field name or alias)
+        # Get existing config as dict, update it, and reassign
+        config_dict = dict(model.model_config) if hasattr(model, "model_config") else {}
+        config_dict["populate_by_name"] = True
+        model.model_config = ConfigDict(**config_dict)
+
+        # Add validation aliases to each field
+        for field_name, field_info in model.model_fields.items():
+            # Generate all case variations as aliases
+            aliases = {
+                to_snake_case(field_name),
+                to_camel_case(field_name),
+                to_pascal_case(field_name),
+                field_name.lower(),
+                field_name.upper(),
+            }
+
+            # Remove the original field name from aliases (no need to alias to itself)
+            aliases.discard(field_name)
+
+            # Set validation_alias if we have any aliases
+            if aliases:
+                field_info.validation_alias = AliasChoices(field_name, *aliases)
+
+            # Recursively process nested models
+            for nested_model in extract_nested_models(field_info.annotation):
+                self._add_aliases_to_model(nested_model, processed)
+
+        model.model_rebuild(force=True)
+
+    def _setup_structured_output(
+        self,
+        output_structure: Type[BaseModel],
+        allow_refs_in_json_schema: bool = False,
+        enable_advanced_parsing: bool = True,
+    ) -> None:
+        """
+        Configure the model for structured output.
+
+        :param output_structure: Pydantic model class defining the output structure
+        :param allow_refs_in_json_schema: If True, keep $refs in the JSON schema. If False (default), resolve all $refs inline.
+        :param enable_advanced_parsing: If True (default), add validation aliases and enable schema-aware merging for multiple outputs.
+        """
+        if not issubclass(output_structure, BaseModel):
+            raise ValueError("output_structure must be a Pydantic model class")
+
+        try:
+            # Add aliases to the model for case-insensitive field matching
+            if enable_advanced_parsing:
+                self._add_aliases_to_model(output_structure)
+
+            # Convert the Pydantic model to a JSON schema
+            self.json_output_schema = output_structure.model_json_schema()
+            # Prepare the schema for Bedrock
+            self._prepare_json_schema(
+                self.json_output_schema, allow_refs=allow_refs_in_json_schema
+            )
+            logger.debug(f"JSON output schema: {pformat(self.json_output_schema)}")
+            self.output_structure = output_structure
+            logger.debug(f"Output structure: {self.output_structure}")
+        except Exception as e:
+            raise ValueError(f"Error parsing output structure: {e}")
+
+        # Add structured output tool to tool config
+        structured_tool = BedrockTool(
+            toolSpec=BedrockToolSpec(
+                name="analyze_information",
+                description="Analyze the provided information.",
+                inputSchema=BedrockToolInputSchema(json=self.json_output_schema),
+            )
+        )
+
+        if self.toolConfig:
+            self.toolConfig.tools.append(structured_tool)
+        else:
+            self.toolConfig = BedrockToolConfig(tools=[structured_tool])
+
+        # Force tool use
+        self.toolConfig.toolChoice = {"tool": {"name": "analyze_information"}}
+
+    def _get_field_types(self, model: Type[BaseModel]) -> dict[str, bool]:
+        """
+        Inspect a Pydantic model and determine which fields are list types.
+
+        :param model: Pydantic model class
+        :return: Dictionary mapping field names to whether they are list types
+        """
+        from typing import get_origin
+
+        field_is_list = {}
+        for field_name, field_info in model.model_fields.items():
+            annotation = field_info.annotation
+            origin = get_origin(annotation)
+            field_is_list[field_name] = origin is list or (
+                hasattr(origin, "__name__") and "list" in origin.__name__.lower()
+            )
+        return field_is_list
+
+    def _merge_field_value(
+        self, output: dict, key: str, value: any, field_is_list: dict[str, bool]
+    ) -> None:
+        """
+        Merge a field value into the output dictionary.
+
+        :param output: Output dictionary to merge into (modified in place)
+        :param key: Field name
+        :param value: New value to merge
+        :param field_is_list: Mapping of field names to whether they are list types
+        """
+        if field_is_list.get(key, False):
+            # Field should be a list according to the model
+            if isinstance(value, list):
+                output[key].extend(value)
+            else:
+                output[key].append(value)
+        # else: Field is a scalar, keep the first value (do nothing)
+
+    def _initialize_field_value(
+        self, output: dict, key: str, value: any, field_is_list: dict[str, bool]
+    ) -> None:
+        """
+        Initialize a field value in the output dictionary.
+
+        :param output: Output dictionary to initialize in (modified in place)
+        :param key: Field name
+        :param value: Initial value
+        :param field_is_list: Mapping of field names to whether they are list types
+        """
+        if field_is_list.get(key, False) and not isinstance(value, list):
+            # Model expects a list but we got a scalar, wrap it
+            output[key] = [value]
+        else:
+            output[key] = value
+
+    def _merge_tool_outputs(
+        self, tool_outputs: list[dict], field_is_list: dict[str, bool]
+    ) -> dict:
+        """
+        Merge multiple tool outputs into a single dictionary.
+
+        List fields are merged by extending/appending.
+        Scalar fields keep only the first value.
+
+        :param tool_outputs: List of tool output dictionaries
+        :param field_is_list: Mapping of field names to whether they are list types
+        :return: Merged output dictionary
+        """
+        output = {}
+
+        for item in tool_outputs:
+            if isinstance(item, dict):
+                for key, value in item.items():
+                    if key in output:
+                        self._merge_field_value(output, key, value, field_is_list)
+                    else:
+                        self._initialize_field_value(output, key, value, field_is_list)
+
+        return output
+
+    def _extract_structured_output(self, response_body: dict) -> dict:
+        """
+        Extract structured output from response body. If there are multiple outputs, they will be merged into a single dictionary.
+
+        :param response_body: Response body from Bedrock API
+        :return: Structured output as dictionary
+        """
+
+        logger.debug(f"Extracting structured output from: {response_body}")
+
+        content_items = response_body.get("content", [{}])
+        tool_uses = [tool_use for tool_use in content_items if "toolUse" in tool_use]
+        tool_use_count = len(tool_uses)
+
+        logger.debug(
+            f"Content items: {len(content_items)}, Tool uses found: {tool_use_count}"
+        )
+
+        if tool_use_count == 0:
+            raise ValueError("No tool use found in response")
+        elif tool_use_count == 1:
+            logger.debug("Single output found.")
+            output = content_items[0].get("toolUse", {}).get("input", {})
+        else:
+            logger.debug("Multiple outputs found.")
+            tool_outputs = [
+                tool_use.get("toolUse", {}).get("input", {})
+                for tool_use in content_items
+                if "toolUse" in tool_use
+            ]
+
+            if self.enable_advanced_parsing:
+                # Use schema-aware merging
+                field_types = self._get_field_types(self.output_structure)
+                output = self._merge_tool_outputs(tool_outputs, field_types)
+            else:
+                # Simple merging: just take the first output
+                logger.warning(
+                    "Advanced parsing is disabled. Using only the first tool output. "
+                    f"Ignoring {len(tool_outputs) - 1} additional outputs."
+                )
+                output = tool_outputs[0] if tool_outputs else {}
+
+        return output
+
+    def _validate_structured_output(self, output: dict) -> None:
+        """
+        Validate structured output against the expected schema.
+
+        :param output: Output dictionary to validate
+        :raises ValueError: If validation fails
+        """
+
+        try:
+            # Pydantic will use the validation aliases we set up
+            validated = self.output_structure.model_validate(output)
+            logger.debug(f"Validated structured output: {validated}")
+        except ValidationError as e:
+            import json
+
+            logger.error(f"Invalid output structure: {json.dumps(output, indent=2)}")
+            logger.error(f"Validation errors: {e}")
+            raise ValueError(
+                f"Invalid structured output from Bedrock. "
+                f"Expected schema: {self.output_structure.__name__}. "
+                f"Validation errors:\n{e}"
+            )
+
 
 ##########
 # Models #
@@ -151,7 +489,7 @@ class BedrockToolConfig(BaseModel):
 ############################################
 
 
-class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
+class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin, StructuredOutputMixin):
     """Base class for Bedrock foundation models"""
 
     inference_type = "bedrock"
@@ -181,7 +519,6 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         :param additionalModelRequestFields: Additional model request fields to pass to the Bedrock API
         :param output_structure: Pydantic model class defining the expected output structure
         :param full_response: Whether to return the full response from the Bedrock API
-        :param **kwargs: Additional keyword arguments
         """
         super().__init__(**kwargs)
         self.source = source
@@ -221,37 +558,14 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
 
         # Output structure
         self.output_structure = None
+        self.enable_advanced_parsing = kwargs.get("enable_advanced_parsing", True)
         if output_structure is not None:
-            if not isinstance(output_structure, type) or not issubclass(
-                output_structure, BaseModel
-            ):
-                raise ValueError("output_structure must be a Pydantic model class")
-
-            try:
-                # Convert the Pydantic model to a JSON schema
-                self.json_output_schema = output_structure.model_json_schema()
-                logger.debug(f"JSON output schema: {pformat(self.json_output_schema)}")
-                self.output_structure = output_structure
-            except Exception as e:
-                raise ValueError(f"Error parsing output structure: {e}")
-
-            # Add structured output tool to tool config
-            structured_tool = BedrockTool(
-                toolSpec=BedrockToolSpec(
-                    name="analyze_information",
-                    description="Analyze the provided information.",
-                    inputSchema=BedrockToolInputSchema(json=self.json_output_schema),
-                )
+            allow_refs_in_json_schema = kwargs.get("allow_refs_in_json_schema", False)
+            self._setup_structured_output(
+                output_structure,
+                allow_refs_in_json_schema,
+                self.enable_advanced_parsing,
             )
-
-            if self.toolConfig:
-                self.toolConfig.tools.append(structured_tool)
-
-            else:
-                self.toolConfig = BedrockToolConfig(tools=[structured_tool])
-
-            # Force tool use
-            self.toolConfig.toolChoice = {"tool": {"name": "analyze_information"}}
 
         # Additional model request fields
         self.additionalModelRequestFields = additionalModelRequestFields
@@ -282,6 +596,30 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         """
         if "full_response" in kwargs:
             self.full_response = kwargs["full_response"]
+
+        # Handle runtime output_structure override
+        output_structure = kwargs.pop("output_structure", None)
+        if output_structure is not None:
+            # Temporarily set output_structure for this invocation
+            original_output_structure = self.output_structure
+            original_tool_config = self.toolConfig
+
+            # Setup structured output for this call
+            self._setup_structured_output(
+                output_structure,
+                allow_refs_in_json_schema=False,
+                enable_advanced_parsing=self.enable_advanced_parsing,
+            )
+
+            try:
+                result = self._invoke(prompt=prompt, stream=False, **kwargs)
+            finally:
+                # Restore original state
+                self.output_structure = original_output_structure
+                self.toolConfig = original_tool_config
+
+            return result
+
         return self._invoke(prompt=prompt, stream=False, **kwargs)
 
     def stream(self, prompt: str | Messages, **kwargs) -> Iterator[str]:
@@ -294,7 +632,29 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
 
         if "full_response" in kwargs:
             self.full_response = kwargs["full_response"]
-        yield from self._invoke(prompt=prompt, stream=True, **kwargs)
+
+        # Handle runtime output_structure override
+        output_structure = kwargs.pop("output_structure", None)
+        if output_structure is not None:
+            # Temporarily set output_structure for this invocation
+            original_output_structure = self.output_structure
+            original_tool_config = self.toolConfig
+
+            # Setup structured output for this call
+            self._setup_structured_output(
+                output_structure,
+                allow_refs_in_json_schema=False,
+                enable_advanced_parsing=self.enable_advanced_parsing,
+            )
+
+            try:
+                yield from self._invoke(prompt=prompt, stream=True, **kwargs)
+            finally:
+                # Restore original state
+                self.output_structure = original_output_structure
+                self.toolConfig = original_tool_config
+        else:
+            yield from self._invoke(prompt=prompt, stream=True, **kwargs)
 
     def _invoke(self, prompt: str | Messages, stream: bool, **kwargs):
         """
@@ -371,10 +731,7 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
 
             # Validate structured output if present
             if self.output_structure is not None:
-                try:
-                    self.output_structure.model_validate(completion)
-                except ValidationError as e:
-                    raise ValueError(f"Invalid structured output: {e}")
+                self._validate_structured_output(completion)
 
             return completion
 
@@ -454,14 +811,7 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin):
         response_body = response.get("output", {}).get("message", {})
 
         if self.output_structure is not None:
-            output = (
-                response_body.get("content", [{}])[0]
-                .get("toolUse", {})
-                .get("input", {})
-            )
-            if isinstance(output, str):
-                output = json.loads(output)
-            return output
+            return self._extract_structured_output(response_body)
 
         completion = response_body.get("content", [{}])[0].get("text", "")
         return completion
