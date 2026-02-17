@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from fence.models.openai.gpt import GPT4o
+from fence.models.openai.gpt import GPT5, GPT4o
 from fence.templates.messages import Message, Messages
 
 # Check if OpenAI API key is present
@@ -100,3 +100,16 @@ def test_gpt4o_init():
     assert gpt.source == "test"
     assert gpt.model_id == "gpt-4o"
     assert gpt.model_name == "GPT 4o"
+    
+
+@pytest.mark.skipif(not has_openai_api_key, reason="OpenAI API key not found in environment")
+@patch.dict(os.environ, {'OPENAI_API_KEY': 'dummy_key'}, clear=True)
+def test_gpt5_init():
+    """
+    Test case for the __init__ method of the GPT5 class.
+    This test checks if the __init__ method correctly initializes a GPT5 object.
+    """
+    gpt = GPT5(source="test")
+    assert gpt.source == "test"
+    assert gpt.model_id == "gpt-5"
+    assert gpt.model_name == "GPT 5"
