@@ -771,7 +771,7 @@ class BedrockBase(LLM, MessagesMixin, StreamMixin, InvokeMixin, StructuredOutput
                 if "contentBlockStart" in event:
                     start = event["contentBlockStart"]["start"]
                     if "toolUse" in start:
-                        logger.debug(f"Tool use start: {start["toolUse"]["name"]}")
+                        logger.debug(f'Tool use start: {start["toolUse"]["name"]}')
 
                 # Handle content blocks - both text and tool calls
                 if "contentBlockDelta" in event:
