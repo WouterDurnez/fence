@@ -227,6 +227,18 @@ class GPT4omini(GPT):
         :param **kwargs: Additional keyword arguments
         """
         super().__init__(model_id="gpt-4o-mini", **kwargs)
+        
+        
+class GPT5(GPT):
+    """GPT-5 model"""
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a GPT-5 model
+        :param source: An indicator of where (e.g., which feature) the model is operating from.
+        :param **kwargs: Additional keyword arguments
+        """
+        super().__init__(model_id="gpt-5", **kwargs)
 
 
 if __name__ == "__main__":
