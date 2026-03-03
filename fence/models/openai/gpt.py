@@ -7,7 +7,7 @@ import os
 
 import requests
 
-__all__ = ["GPT", "GPT4o", "GPT4", "GPT4omini"]
+__all__ = ["GPT", "GPT4o", "GPT4", "GPT4omini", "GPT5"]
 
 import logging
 
@@ -137,6 +137,10 @@ class GPTBase(LLM, MessagesMixin):
             "messages": messages,
             "model": self.model_id,
         }
+
+        # Some OpenAI endpoints reject explicit nulls for optional params (e.g. max_tokens).
+        # Omit any parameters that are None.
+        request_body = {k: v for k, v in request_body.items() if v is not None}
 
         logger.debug(f"Request body: {request_body}")
 
