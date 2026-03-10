@@ -44,7 +44,7 @@ class OllamaEmbeddingBase(Embeddings):
 
         # Check if the endpoint is valid
         try:
-            requests.get(self.embedding_endpoint)
+            requests.get(self.embedding_endpoint, timeout=10)
         except requests.exceptions.ConnectionError:
             raise ValueError(
                 f"No Ollama service found at {self.endpoint}. Try installing it using `brew install ollama`."
@@ -68,19 +68,19 @@ class OllamaEmbeddingBase(Embeddings):
 
         try:
             response = requests.post(
-                url=self.embedding_endpoint, json=payload
+                url=self.embedding_endpoint, json=payload, timeout=60,
             )
 
         except Exception as e:
             raise ValueError(f"Error raised by Ollama service: {e}")
-        
-        if response.status_code != 200 and response.text.__contains__("not found"):
+
+        if response.status_code != 200 and "not found" in response.text:
             logger.warning(f"Model {self.model_id} not found in Ollama service - trying to pull it")
 
             self._pull_model(model_id=self.model_id)
 
             try:
-                response = requests.post(url=self.embedding_endpoint, json=payload)
+                response = requests.post(url=self.embedding_endpoint, json=payload, timeout=60)
             except Exception as e:
                 raise ValueError(f"Error raised by Ollama service: {e}")
             
@@ -97,7 +97,8 @@ class OllamaEmbeddingBase(Embeddings):
         # Send request
         try:
             response = requests.post(
-                url=self.pull_endpoint, json={"name": model_id}, stream=False
+                url=self.pull_endpoint, json={"name": model_id}, stream=False,
+                timeout=300,
             )
 
         except Exception as e:
@@ -113,7 +114,7 @@ class OllamaEmbeddingBase(Embeddings):
 
         # Send request
         try:
-            response = requests.get(url=self.tag_endpoint)
+            response = requests.get(url=self.tag_endpoint, timeout=10)
 
         except Exception as e:
             raise ValueError(f"Error raised by Ollama service: {e}")

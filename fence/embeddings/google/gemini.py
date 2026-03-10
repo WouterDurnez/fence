@@ -120,7 +120,8 @@ class GeminiEmbeddingsBase(Embeddings):
             response = requests.post(
                 self._get_embedding_endpoint(),
                 headers=headers,
-                json=data
+                json=data,
+                timeout=60,
             )
 
             # Check status code

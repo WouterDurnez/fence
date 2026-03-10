@@ -48,7 +48,7 @@ class OllamaBase(LLM, MessagesMixin):
 
         # Check if the endpoint is valid
         try:
-            requests.get(self.tag_endpoint)
+            requests.get(self.tag_endpoint, timeout=10)
         except requests.exceptions.ConnectionError:
             raise ValueError(
                 f"No Ollama service found at {self.endpoint}. Try installing it using `brew install ollama`."
@@ -150,13 +150,13 @@ class OllamaBase(LLM, MessagesMixin):
 
         # Send request
         try:
-            response = requests.post(url=self.chat_endpoint, json=payload)
+            response = requests.post(url=self.chat_endpoint, json=payload, timeout=120)
 
         except Exception as e:
             raise ValueError(f"Error raised by Ollama service: {e}")
 
         # Check if the response is valid
-        if response.status_code != 200 and response.text.__contains__("not found"):
+        if response.status_code != 200 and "not found" in response.text:
             logger.warning(
                 f"Model {self.model_id} not found in Ollama service - trying to pull it"
             )
@@ -164,7 +164,7 @@ class OllamaBase(LLM, MessagesMixin):
 
             # Retry the request
             try:
-                response = requests.post(url=self.chat_endpoint, json=payload)
+                response = requests.post(url=self.chat_endpoint, json=payload, timeout=120)
             except Exception as e:
                 raise ValueError(f"Error raised by Ollama service: {e}")
 
@@ -180,7 +180,8 @@ class OllamaBase(LLM, MessagesMixin):
         # Send request
         try:
             response = requests.post(
-                url=self.pull_endpoint, json={"name": model_id}, stream=False
+                url=self.pull_endpoint, json={"name": model_id}, stream=False,
+                timeout=300,
             )
 
         except Exception as e:
@@ -196,7 +197,7 @@ class OllamaBase(LLM, MessagesMixin):
 
         # Send request
         try:
-            response = requests.get(url=self.tag_endpoint)
+            response = requests.get(url=self.tag_endpoint, timeout=10)
 
         except Exception as e:
             raise ValueError(f"Error raised by Ollama service: {e}")

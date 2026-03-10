@@ -54,7 +54,7 @@ class MistralEmbeddingsBase(Embeddings):
         }
         
         try:
-            response = requests.post(self.embedding_endpoint, headers=headers, json=data)
+            response = requests.post(self.embedding_endpoint, headers=headers, json=data, timeout=60)
         
             # Check status code
             if response.status_code != 200:
