@@ -166,7 +166,6 @@ class StructuredOutputMixin:
     ) -> None:
         """
         Configure the model for structured output.
-
         :param output_structure: Pydantic model class defining the output structure
         :param allow_refs_in_json_schema: If True, keep $refs in the JSON schema. If False (default), resolve all $refs inline.
         :param enable_advanced_parsing: If True (default), add validation aliases and enable schema-aware merging for multiple outputs.
@@ -175,13 +174,10 @@ class StructuredOutputMixin:
             raise ValueError("output_structure must be a Pydantic model class")
 
         try:
-            # Add aliases to the model for case-insensitive field matching
             if enable_advanced_parsing:
                 self._add_aliases_to_model(output_structure)
 
-            # Convert the Pydantic model to a JSON schema
             self.json_output_schema = output_structure.model_json_schema()
-            # Prepare the schema for Bedrock
             self._prepare_json_schema(
                 self.json_output_schema, allow_refs=allow_refs_in_json_schema
             )
@@ -201,6 +197,12 @@ class StructuredOutputMixin:
         )
 
         if self.toolConfig:
+            # Remove any existing analyze_information tool before adding
+            self.toolConfig.tools = [
+                tool
+                for tool in self.toolConfig.tools
+                if tool.toolSpec.name != "analyze_information"
+            ]
             self.toolConfig.tools.append(structured_tool)
         else:
             self.toolConfig = BedrockToolConfig(tools=[structured_tool])
