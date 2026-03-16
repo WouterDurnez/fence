@@ -157,7 +157,8 @@ class MistralBase(LLM, MessagesMixin):
 
             # Send request to Mistral
             response = requests.post(
-                url=self.chat_endpoint, headers=headers, data=json.dumps(request_body)
+                url=self.chat_endpoint, headers=headers, data=json.dumps(request_body),
+                timeout=60,
             )
 
             # Check status code

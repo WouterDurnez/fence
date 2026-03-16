@@ -155,7 +155,8 @@ class GPTBase(LLM, MessagesMixin):
 
             # Send request to OpenAI
             response = requests.post(
-                url=self.url, headers=headers, data=json.dumps(request_body)
+                url=self.url, headers=headers, data=json.dumps(request_body),
+                timeout=60,
             )
 
             # Check status code

@@ -138,17 +138,14 @@ class GeminiBase(LLM):
             # send request to Google
             headers = {
                 "Content-Type": "application/json",
-            }
-
-            params = {
-                "key": self.api_key,
+                "x-goog-api-key": self.api_key,
             }
 
             response = requests.post(
                 url=self.endpoint.format(model_id=self.model_id),
                 headers=headers,
-                params=params,
                 data=json.dumps(request_body),
+                timeout=60,
             )
 
             if response.status_code != 200:

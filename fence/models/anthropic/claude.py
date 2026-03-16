@@ -160,7 +160,8 @@ class ClaudeBase(LLM, MessagesMixin):
 
             # Send request to Anthropic
             response = requests.post(
-                url=self.url, headers=headers, data=json.dumps(request_body)
+                url=self.url, headers=headers, data=json.dumps(request_body),
+                timeout=60,
             )
 
             # Check status code
