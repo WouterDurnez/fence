@@ -693,7 +693,7 @@ wheels = [
 
 [[package]]
 name = "fence-llm"
-version = "2.3.3"
+version = "2.3.4"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
